@@ -9,7 +9,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "csv-parser": "^3.0.0",
+    "csv-parser": "^3.2.1",
     "dotenv": "^16.4.0",
     "express": "^4.21.0",
     "express-rate-limit": "^8.3.2",
