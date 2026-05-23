@@ -20,6 +20,50 @@ function unsubHeaders(to) {
   return parts.join(', ');
 }
 
+// ── HTML → plain text (for text/plain MIME part) ──
+function htmlToText(html) {
+  if (!html) return '';
+  return String(html)
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<\/div>/gi, '\n')
+    .replace(/<a\b[^>]*\bhref=["']([^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi, (m, href, text) => {
+      const t = text.replace(/<[^>]*>/g, '').trim();
+      return href && href !== t ? t + ' (' + href + ')' : t;
+    })
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+// ── Retry/backoff for transient Gmail API errors (429 / 5xx) ──
+async function withRetry(fn, { retries = 3, base = 500 } = {}) {
+  let attempt = 0;
+  while (true) {
+    try {
+      return await fn();
+    } catch (e) {
+      const code = e && (e.code || e.status || (e.response && e.response.status));
+      const transient = code === 429 || code === '429' || (typeof code === 'number' && code >= 500);
+      if (!transient || attempt >= retries) throw e;
+      let delay = base * Math.pow(2, attempt);
+      const ra = e.response && e.response.headers && (e.response.headers['retry-after'] || e.response.headers['Retry-After']);
+      if (ra) {
+        const secs = parseInt(ra, 10);
+        if (!isNaN(secs)) delay = secs * 1000;
+      }
+      await new Promise(r => setTimeout(r, delay));
+      attempt++;
+    }
+  }
+}
+
 let smtpTransport = null;
 let oauthClient = null;
 
@@ -108,10 +152,10 @@ async function sendEmailGmailApi(tokens, to, subject, htmlBody) {
   const client = getOAuthClient(tokens);
   const gmail = google.gmail({ version: 'v1', auth: client });
   const raw = makeRawEmail(tokens.email || config.SMTP_USER, to, subject, htmlBody);
-  const res = await gmail.users.messages.send({
+  const res = await withRetry(() => gmail.users.messages.send({
     userId: 'me',
     requestBody: { raw }
-  });
+  }));
   return res.data;
 }
 
@@ -157,7 +201,7 @@ function makeRawEmail(from, to, subject, htmlBody) {
     '--' + boundary,
     'Content-Type: text/plain; charset="UTF-8"',
     '',
-    htmlBody.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&'),
+    htmlToText(htmlBody),
     '',
     '--' + boundary,
     'Content-Type: text/html; charset="UTF-8"',
@@ -207,5 +251,5 @@ module.exports = {
   getAuthUrl, getTokensFromCode, getUserInfo,
   sendNow, createDraft, sendEmailSmtp,
   testSmtp, testGmailApi, getOAuthClient,
-  verifyUnsubToken
+  verifyUnsubToken, htmlToText, withRetry
 };

@@ -713,6 +713,50 @@ app.get('/api/diagnostic', requireAuth, async (req, res) => {
   res.json({ results: r, passCount: pc, failCount: fc, warnCount: wc, timestamp: new Date().toLocaleString() });
 });
 
+// ══════════ DNS / SPF / DMARC PRE-SEND DIAGNOSTIC ══════════
+app.get('/api/diagnostic/dns', requireAuth, async (req, res) => {
+  const dns = require('dns/promises');
+  const uid = getUid(req);
+  let domain = (req.query.domain || '').toString().trim().toLowerCase();
+  if (!domain) {
+    const addr = (req.session.user && req.session.user.email) || config.SMTP_USER || '';
+    domain = addr.includes('@') ? addr.split('@')[1] : '';
+  }
+  if (!domain) return res.status(400).json({ error: 'No domain provided and no send address on file' });
+
+  const spf = { found: false, record: '' };
+  const dmarc = { found: false, record: '', policy: '' };
+  const warnings = [];
+
+  try {
+    const txt = await dns.resolveTxt(domain);
+    for (const chunks of txt) {
+      const rec = chunks.join('');
+      if (/v=spf1/i.test(rec)) { spf.found = true; spf.record = rec; break; }
+    }
+  } catch (_) { /* NXDOMAIN / no TXT */ }
+
+  try {
+    const txt = await dns.resolveTxt('_dmarc.' + domain);
+    for (const chunks of txt) {
+      const rec = chunks.join('');
+      if (/v=DMARC1/i.test(rec)) {
+        dmarc.found = true;
+        dmarc.record = rec;
+        const m = rec.match(/\bp\s*=\s*([a-z]+)/i);
+        dmarc.policy = m ? m[1].toLowerCase() : '';
+        break;
+      }
+    }
+  } catch (_) { /* NXDOMAIN / no TXT */ }
+
+  if (!spf.found) warnings.push('No SPF record found (v=spf1). Add one to improve deliverability.');
+  if (!dmarc.found) warnings.push('No DMARC record found at _dmarc.' + domain + '.');
+  else if (dmarc.policy === 'none') warnings.push('DMARC policy is p=none (monitoring only); consider quarantine or reject.');
+
+  res.json({ domain, spf, dmarc, warnings });
+});
+
 // ══════════ CHARTS DATA ══════════
 app.get('/api/charts', requireAuth, async (req, res) => {
   await db.getDb();

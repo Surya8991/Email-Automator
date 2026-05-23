@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "test": "vitest run"
   },
   "dependencies": {
     "csv-parser": "^3.0.0",
@@ -19,5 +20,8 @@
     "nodemailer": "^6.9.0",
     "sql.js": "^1.11.0",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.7"
   }
 }
