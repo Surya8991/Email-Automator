@@ -38,6 +38,8 @@ module.exports = {
   GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET || '',
   GOOGLE_REDIRECT_URI: process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3000/auth/google/callback',
 
+  APP_URL: (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, ''),
+
   TIMEZONE: process.env.TIMEZONE || 'Asia/Kolkata',
 
   SMTP_USER: process.env.SMTP_USER || '',

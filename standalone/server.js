@@ -44,6 +44,41 @@ function requireAuth(req, res, next) {
   next();
 }
 
+// ══════════ UNSUBSCRIBE (RFC 8058 List-Unsubscribe) ══════════
+async function handleUnsubscribe(req, res) {
+  const email = String(req.query.e || '').toLowerCase().trim();
+  const token = String(req.query.t || '');
+  if (!email || !emailSender.verifyUnsubToken(email, token)) {
+    return res.status(400).send('Invalid or expired unsubscribe link.');
+  }
+  await db.getDb();
+  if (!db.isBlocked(0, email)) db.addBlocklistEntry(0, email, 'email');
+  db.addAudit(0, 'UNSUBSCRIBE', email, req.ip);
+  return email;
+}
+
+// One-click (mail clients POST here per RFC 8058) — must return 200 with no interaction.
+app.post('/unsubscribe', async (req, res) => {
+  try {
+    const r = await handleUnsubscribe(req, res);
+    if (typeof r !== 'string') return; // error already sent
+    res.status(200).send('Unsubscribed.');
+  } catch (e) { res.status(500).send('Error processing unsubscribe.'); }
+});
+
+// Human-facing confirmation page.
+app.get('/unsubscribe', async (req, res) => {
+  try {
+    const r = await handleUnsubscribe(req, res);
+    if (typeof r !== 'string') return; // error already sent
+    res.set('Content-Type', 'text/html').send(
+      '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
+      '<title>Unsubscribed</title></head><body style="font-family:Arial,sans-serif;max-width:520px;margin:60px auto;padding:0 20px;text-align:center;color:#333">' +
+      '<h2>You\'re unsubscribed</h2><p>You will no longer receive emails. You can close this page.</p></body></html>'
+    );
+  } catch (e) { res.status(500).send('Error processing unsubscribe.'); }
+});
+
 app.post('/auth/send-otp', otpLimiter, async (req, res) => {
   try {
     await db.getDb();

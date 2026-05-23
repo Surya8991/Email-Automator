@@ -1,6 +1,24 @@
 const nodemailer = require('nodemailer');
 const { google } = require('googleapis');
+const crypto = require('crypto');
 const config = require('./config');
+
+// ── List-Unsubscribe (RFC 8058) ──
+function unsubToken(email) {
+  return crypto.createHmac('sha256', config.SESSION_SECRET)
+    .update(String(email).toLowerCase()).digest('hex').slice(0, 32);
+}
+
+function unsubUrl(email) {
+  const e = encodeURIComponent(String(email).toLowerCase());
+  return config.APP_URL + '/unsubscribe?e=' + e + '&t=' + unsubToken(email);
+}
+
+function unsubHeaders(to) {
+  const parts = ['<' + unsubUrl(to) + '>'];
+  if (config.SMTP_USER) parts.push('<mailto:' + config.SMTP_USER + '?subject=unsubscribe>');
+  return parts.join(', ');
+}
 
 let smtpTransport = null;
 let oauthClient = null;
@@ -62,7 +80,14 @@ async function sendEmailSmtp(to, subject, htmlBody, plainText) {
     to,
     subject,
     text: plainText,
-    html: htmlBody
+    html: htmlBody,
+    list: {
+      unsubscribe: [
+        { url: unsubUrl(to), comment: 'Unsubscribe' },
+        ...(config.SMTP_USER ? [{ url: 'mailto:' + config.SMTP_USER + '?subject=unsubscribe', comment: 'Unsubscribe' }] : [])
+      ]
+    },
+    headers: { 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' }
   });
 }
 
@@ -124,6 +149,8 @@ function makeRawEmail(from, to, subject, htmlBody) {
     'From: ' + from,
     'To: ' + to,
     'Subject: =?UTF-8?B?' + Buffer.from(subject).toString('base64') + '?=',
+    'List-Unsubscribe: ' + unsubHeaders(to),
+    'List-Unsubscribe-Post: List-Unsubscribe=One-Click',
     'MIME-Version: 1.0',
     'Content-Type: multipart/alternative; boundary="' + boundary + '"',
     '',
@@ -166,8 +193,19 @@ async function testGmailApi(tokens) {
   }
 }
 
+function verifyUnsubToken(email, token) {
+  if (!email || !token) return false;
+  const expected = unsubToken(email);
+  try {
+    return crypto.timingSafeEqual(Buffer.from(token), Buffer.from(expected));
+  } catch (_) {
+    return false;
+  }
+}
+
 module.exports = {
   getAuthUrl, getTokensFromCode, getUserInfo,
   sendNow, createDraft, sendEmailSmtp,
-  testSmtp, testGmailApi, getOAuthClient
+  testSmtp, testGmailApi, getOAuthClient,
+  verifyUnsubToken
 };

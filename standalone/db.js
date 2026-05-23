@@ -368,7 +368,9 @@ function removeBlocklistEntry(id, userId) {
 
 function isBlocked(userId, email) {
   if (!email || typeof email !== 'string') return false;
+  // Per-user list plus the global suppression list (user 0), so unsubscribes apply everywhere.
   const list = getBlocklist(userId);
+  if (userId && userId !== 0) list.push(...getBlocklist(0));
   const domain = email.split('@')[1] || '';
   return list.some(b => {
     if (b.type === 'domain') return domain.toLowerCase() === b.pattern.toLowerCase();
