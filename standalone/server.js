@@ -165,6 +165,7 @@ app.post('/api/contacts/add', requireAuth, async (req, res) => {
 
 app.post('/api/contacts/import', requireAuth, upload.single('file'), async (req, res) => {
   try {
+    if (!req.file) return res.json({ error: 'No file uploaded.' });
     await db.getDb();
     const uid = getUid(req), filePath = req.file.path, ext = path.extname(req.file.originalname).toLowerCase();
     let contacts = [];
@@ -488,7 +489,7 @@ app.post('/api/drafts/followup', requireAuth, async (req, res) => {
       try {
         const pData = te.getPersonalizationData(contact);
         pData.portfolio_link = db.getSetting('USER_PORTFOLIO_LINK', uid) || '';
-        const subject = te.personalizeMessage(tpl.subject, pData, true);
+        const subject = te.personalizeMessage(tpl.subject, pData, true).replace(/[\r\n]+/g, ' ').trim();
         const searchRes = await gmail.users.messages.list({ userId: 'me', q: 'to:' + contact.recruiter_email + ' subject:"' + subject + '" in:sent', maxResults: 1 });
         if (!searchRes.data.messages || !searchRes.data.messages.length) { noThread++; continue; }
         const threadId = (await gmail.users.messages.get({ userId: 'me', id: searchRes.data.messages[0].id })).data.threadId;

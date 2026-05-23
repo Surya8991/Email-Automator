@@ -1,3 +1,5 @@
+const crypto = require('crypto');
+
 module.exports = {
   PORT: process.env.PORT || 3000,
 
@@ -30,7 +32,7 @@ module.exports = {
     '<a href="https://www.linkedin.com/in/your-profile" style="color:#1a73e8;">LinkedIn</a>' +
     '</div>',
 
-  SESSION_SECRET: process.env.SESSION_SECRET || 'email-auto-secret-' + Date.now(),
+  SESSION_SECRET: process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex'),
 
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || '',
   GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET || '',

@@ -379,12 +379,6 @@ function isBlocked(userId, email) {
 
 // ── Backup ──
 function exportBackup() { return db ? Buffer.from(db.export()) : null; }
-function importBackup(buf) {
-  const SQL = require('sql.js');
-  // This needs async init but for restore we'll reinit
-  db = new (require('sql.js').Database || function(){})(buf);
-  saveDb();
-}
 
 // ── Local Drafts ──
 function addDraft(userId, contactId, toEmail, subject, htmlBody, plainBody) {
