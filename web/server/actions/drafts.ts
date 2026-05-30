@@ -27,3 +27,11 @@ export async function deleteDraftAction(id: number) {
   revalidatePath('/drafts')
   return { ok: true }
 }
+
+export async function sendAllAction() {
+  const u = await requireUser()
+  const r = await drafts.sendAllDrafts(u.id, 50)
+  revalidatePath('/drafts')
+  revalidatePath('/dashboard')
+  return { ok: true, ...r }
+}

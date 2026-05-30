@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import { eq } from 'drizzle-orm'
 import { db } from '@/server/db/client'
 import { sessions, users } from '@/server/db/schema'
+import { clientKey, rateLimit } from '@/lib/rate-limit'
 
 // Dev-only sign-in. Guarded by:
 //   1. NODE_ENV must NOT be 'production'
@@ -21,6 +22,11 @@ export async function POST(req: Request) {
   const allowed = process.env.NODE_ENV !== 'production' || process.env.ALLOW_DEV_SIGNIN === 'true'
   if (!allowed) {
     return NextResponse.json({ error: 'Disabled in production' }, { status: 403 })
+  }
+  // 10 attempts / minute per IP — generous for legit dev use, harsh enough
+  // to make brute-force discovery of allow-listed emails uninteresting.
+  if (!rateLimit(clientKey(req, 'dev-signin'), 10, 60_000)) {
+    return NextResponse.json({ error: 'Too many requests' }, { status: 429 })
   }
   const { email: rawEmail } = (await req.json().catch(() => ({}))) as { email?: string }
   const email = String(rawEmail ?? '').toLowerCase().trim()

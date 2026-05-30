@@ -99,3 +99,16 @@ export async function sendDraft(userId: string, draftId: number) {
 export async function deleteDraft(userId: string, draftId: number) {
   await db.delete(drafts).where(and(eq(drafts.id, draftId), eq(drafts.userId, userId)))
 }
+
+// Send every pending draft, one at a time. Each failure is counted but
+// doesn't abort the loop — best-effort, returns counters for the caller.
+export async function sendAllDrafts(userId: string, max = 50): Promise<{ sent: number; failed: number }> {
+  const pending = await db.select().from(drafts)
+    .where(and(eq(drafts.userId, userId), eq(drafts.status, 'draft'))).limit(max)
+  let sent = 0, failed = 0
+  for (const d of pending) {
+    try { await sendDraft(userId, d.id); sent++ }
+    catch { failed++ }
+  }
+  return { sent, failed }
+}

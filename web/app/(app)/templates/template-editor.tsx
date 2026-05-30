@@ -1,6 +1,7 @@
 'use client'
-import { useState, useTransition } from 'react'
+import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 import { CheckCircle2, Save, Sparkles, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,11 +11,15 @@ import { activateTemplateAction, saveTemplateAction } from '@/server/actions/tem
 import { aiDraftAction } from '@/server/actions/ai'
 import type { Template } from '@/server/db/schema'
 
+const VARS = ['name', 'company', 'role_name', 'email', 'location', 'platform'] as const
+
 const SAMPLE = { name: 'Jane Doe', company: 'Acme Corp', role_name: 'Senior Marketer', email: 'jane@acme.com', location: 'Remote', platform: 'LinkedIn' }
 
 export function TemplateEditor({ templates }: { templates: Template[] }) {
   const router = useRouter()
   const [pending, start] = useTransition()
+  const subjectRef = useRef<HTMLInputElement>(null)
+  const bodyRef = useRef<HTMLTextAreaElement>(null)
   const [pickedId, setPickedId] = useState<number | null>(templates[0]?.id ?? null)
   const [draft, setDraft] = useState<Partial<Template>>({
     key: templates[0]?.key ?? 'default',
@@ -22,6 +27,30 @@ export function TemplateEditor({ templates }: { templates: Template[] }) {
     subject: templates[0]?.subject ?? 'Hi {{name}} — interested in {{role_name}}',
     initialMsg: templates[0]?.initialMsg ?? '<p>Hi {{name}},</p><p>I came across your work at {{company}}…</p>',
   })
+
+  // Insert {{var}} at the cursor of whichever field was last focused. Keeps the
+  // focus in that field so the user can chain insertions without re-clicking.
+  function insertVar(v: string) {
+    const token = `{{${v}}}`
+    const subjectActive = document.activeElement === subjectRef.current
+    if (subjectActive && subjectRef.current) {
+      const el = subjectRef.current
+      const s = el.selectionStart ?? el.value.length
+      const e = el.selectionEnd ?? el.value.length
+      const next = el.value.slice(0, s) + token + el.value.slice(e)
+      setDraft({ ...draft, subject: next })
+      // Restore cursor position after React re-renders.
+      requestAnimationFrame(() => { el.focus(); el.setSelectionRange(s + token.length, s + token.length) })
+      return
+    }
+    const el = bodyRef.current
+    if (!el) return
+    const s = el.selectionStart ?? el.value.length
+    const e = el.selectionEnd ?? el.value.length
+    const next = el.value.slice(0, s) + token + el.value.slice(e)
+    setDraft({ ...draft, initialMsg: next })
+    requestAnimationFrame(() => { el.focus(); el.setSelectionRange(s + token.length, s + token.length) })
+  }
 
   function load(t: Template) {
     setPickedId(t.id)
@@ -53,30 +82,39 @@ export function TemplateEditor({ templates }: { templates: Template[] }) {
         </div>
         <div className="grid gap-1.5">
           <Label htmlFor="subject">Subject</Label>
-          <Input id="subject" value={draft.subject ?? ''} onChange={(e) => setDraft({ ...draft, subject: e.target.value })} />
+          <Input ref={subjectRef} id="subject" value={draft.subject ?? ''} onChange={(e) => setDraft({ ...draft, subject: e.target.value })} />
         </div>
         <div className="grid gap-1.5">
           <Label htmlFor="initialMsg">Body (HTML)</Label>
-          <textarea id="initialMsg" rows={14}
+          <textarea ref={bodyRef} id="initialMsg" rows={14}
             className="flex w-full rounded-md border bg-background px-3 py-2 font-mono text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
             value={draft.initialMsg ?? ''} onChange={(e) => setDraft({ ...draft, initialMsg: e.target.value })} />
+          <div className="flex flex-wrap items-center gap-1 text-xs">
+            <span className="text-muted-foreground">Insert:</span>
+            {VARS.map((v) => (
+              <button key={v} type="button" onClick={() => insertVar(v)}
+                className="rounded bg-muted px-1.5 py-0.5 font-mono hover:bg-accent">{`{{${v}}}`}</button>
+            ))}
+          </div>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button disabled={pending} onClick={() => start(async () => {
             const r = await saveTemplateAction(draft as never)
-            if ('error' in r && r.error) alert(r.error)
+            if ('error' in r && r.error) { toast.error(r.error); return }
+            toast.success(`Saved (v${(r as { version?: number }).version ?? '?'})`)
             router.refresh()
           })}><Save className="mr-1.5 h-4 w-4" /> Save</Button>
           {pickedId ? (
             <Button variant="outline" disabled={pending} onClick={() => start(async () => {
               await activateTemplateAction(pickedId)
+              toast.success('Template activated')
               router.refresh()
             })}>Activate</Button>
           ) : null}
           <Button variant="outline" disabled={pending} onClick={() => start(async () => {
             const r = await aiDraftAction({ goal: `Improve this outreach email for ${draft.label || 'a recruiter'}.`, existing: draft.initialMsg ?? '' })
-            if ('error' in r && r.error) { alert(r.error); return }
-            if ('html' in r && r.html) setDraft({ ...draft, initialMsg: r.html })
+            if ('error' in r && r.error) { toast.error(r.error); return }
+            if ('html' in r && r.html) { setDraft({ ...draft, initialMsg: r.html }); toast.success('AI rewrote the body') }
           })}><Sparkles className="mr-1.5 h-4 w-4" /> AI improve</Button>
         </div>
       </section>

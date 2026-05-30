@@ -1,5 +1,4 @@
 'use client'
-import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useState, useTransition } from 'react'
 import { Trash2, ChevronLeft, ChevronRight, Search, History, X, Tag } from 'lucide-react'
@@ -60,10 +59,42 @@ export function ContactsTable({ rows, page, pages, search, tag, allTags }: Props
 
       {rows.length === 0 ? (
         <div className="px-6 py-16 text-center text-sm text-muted-foreground">
-          No contacts yet. Add one above or import a CSV from <Link className="underline" href="/contacts/import">/contacts/import</Link>.
+          No contacts yet. Click <strong>Add contact</strong> above or use Import.
         </div>
       ) : (
-        <div className="overflow-x-auto">
+        <>
+        {/* Mobile: card list. Table is too wide on phones. */}
+        <ul className="divide-y md:hidden">
+          {rows.map((c) => (
+            <li key={c.id} className="space-y-1 px-4 py-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium">{c.recruiterName || c.recruiterEmail}</div>
+                  <div className="truncate text-xs font-mono text-muted-foreground">{c.recruiterEmail}</div>
+                </div>
+                <Button variant="ghost" size="icon" aria-label="Timeline" onClick={() => setTimelineFor(c)}>
+                  <History className="h-4 w-4" />
+                </Button>
+                <Button variant="ghost" size="icon" aria-label="Delete contact" disabled={pending}
+                  onClick={() => start(async () => { await deleteContactAction(c.id); router.refresh() })}>
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="text-xs text-muted-foreground">{[c.company, c.jobTitle].filter(Boolean).join(' · ') || '—'}</div>
+              {c.tags ? (
+                <div className="text-xs">
+                  {c.tags.split(',').filter(Boolean).map((t) => (
+                    <button key={t} onClick={() => go({ tag: t, page: '1' })}
+                      className="mr-1 rounded bg-muted px-1.5 py-0.5 hover:bg-accent">#{t}</button>
+                  ))}
+                </div>
+              ) : null}
+              <div className="text-xs text-muted-foreground">{c.emailStatus || 'Pending'}</div>
+            </li>
+          ))}
+        </ul>
+
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
@@ -114,6 +145,7 @@ export function ContactsTable({ rows, page, pages, search, tag, allTags }: Props
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {timelineFor ? <ContactTimeline contact={timelineFor} onClose={() => setTimelineFor(null)} /> : null}
