@@ -6,6 +6,7 @@ import { db } from '@/server/db/client'
 import {
   emailLog, events, campaignEnrollments, campaignSteps, contacts, settings, templates, users,
 } from '@/server/db/schema'
+import { lastSentTo } from './drafts'
 import { buildEmail } from './drafts'
 import { sendMail } from './mailer'
 import { instrumentHtml } from './tracking'
@@ -48,6 +49,33 @@ async function tickForUser(userId: string): Promise<{ sent: number; failed: numb
   let sent = 0, failed = 0, advanced = 0
   if (remaining <= 0) return { sent, failed, advanced }
 
+  // Read per-recipient throttle setting once per user-tick. 0 = disabled.
+  // Setting is a string number of days; we treat anything <= 0 as disabled.
+  const throttleRow = await db.select().from(settings)
+    .where(and(eq(settings.userId, userId), eq(settings.key, 'PER_RECIPIENT_THROTTLE_DAYS')))
+  const throttleDays = Math.max(0, Number(throttleRow[0]?.value ?? 0))
+
+  // Per-domain rate-limit. Format: "domain=N,domain=N" e.g. "gmail.com=50,outlook.com=30".
+  // Counts events.kind='sent' in the last 24h for each recipient domain,
+  // and skips queued rows whose recipient domain has hit its cap.
+  const domainCapRow = await db.select().from(settings)
+    .where(and(eq(settings.userId, userId), eq(settings.key, 'PER_DOMAIN_DAILY_CAP')))
+  const domainCaps = parseDomainCaps(domainCapRow[0]?.value ?? '')
+  // Pull "today's" send counts per domain — cheap query, single pass in JS.
+  const domainSentToday = new Map<string, number>()
+  if (domainCaps.size > 0) {
+    const sentRows = await db.select({ email: emailLog.email }).from(emailLog)
+      .where(and(
+        eq(emailLog.userId, userId),
+        eq(emailLog.status, 'Sent'),
+        sql`${emailLog.scheduledAt} >= ${startOfDay.getTime()}`,
+      ))
+    for (const r of sentRows) {
+      const d = (r.email.split('@')[1] ?? '').toLowerCase()
+      if (d) domainSentToday.set(d, (domainSentToday.get(d) ?? 0) + 1)
+    }
+  }
+
   // 1) Scheduled emails — send any whose time has come (5-min tolerance).
   const due = await db.select().from(emailLog)
     .where(and(eq(emailLog.userId, userId), eq(emailLog.status, 'Scheduled'), lte(emailLog.scheduledAt, now + 5 * 60_000)))
@@ -58,6 +86,33 @@ async function tickForUser(userId: string): Promise<{ sent: number; failed: numb
         await db.update(emailLog).set({ status: 'Failed', lastResult: 'Empty body' }).where(eq(emailLog.id, row.id))
         failed++; continue
       }
+      // Per-recipient throttle. If the user has set "max 1 per N days" and
+      // this recipient was already sent to within that window, mark this
+      // queued row Cancelled with a clear reason. Prevents accidental
+      // re-sends from overlapping campaigns / follow-ups.
+      if (throttleDays > 0) {
+        const last = await lastSentTo(userId, row.email, throttleDays)
+        if (last) {
+          await db.update(emailLog).set({
+            status: 'Cancelled',
+            lastResult: `Throttled: already sent within ${throttleDays}d on ${formatDate(last)}`,
+          }).where(eq(emailLog.id, row.id))
+          continue
+        }
+      }
+      // Per-domain daily cap. If the recipient's domain has a configured
+      // cap and we've already hit it today, defer (leave Scheduled, push
+      // by 1h). Logic differs from throttle: throttle Cancels; cap defers
+      // so it eventually sends on a less-busy day.
+      const recipientDomain = (row.email.split('@')[1] ?? '').toLowerCase()
+      const cap = domainCaps.get(recipientDomain)
+      if (cap !== undefined && (domainSentToday.get(recipientDomain) ?? 0) >= cap) {
+        await db.update(emailLog).set({
+          scheduledAt: now + 60 * 60_000,
+          lastResult: `Deferred 1h: daily cap of ${cap} hit for @${recipientDomain}`,
+        }).where(eq(emailLog.id, row.id))
+        continue
+      }
       await sendMail({ to: row.email, subject: row.subject, html: instrumentHtml(row.body, row.id) }, userId)
       await db.update(emailLog).set({
         status: 'Sent', attempts: row.attempts + 1, lastResult: formatDate(new Date()),
@@ -66,6 +121,9 @@ async function tickForUser(userId: string): Promise<{ sent: number; failed: numb
         userId, contactId: row.contactId ?? null, kind: 'sent',
         meta: JSON.stringify({ subject: row.subject, emailLogId: row.id }),
       })
+      // Bump the in-memory counter so subsequent rows in this batch
+      // respect the freshly-incremented count.
+      if (cap !== undefined) domainSentToday.set(recipientDomain, (domainSentToday.get(recipientDomain) ?? 0) + 1)
       sent++
     } catch (err) {
       const attempts = row.attempts + 1
@@ -129,6 +187,24 @@ async function tickForUser(userId: string): Promise<{ sent: number; failed: numb
   }
 
   return { sent, failed, advanced }
+}
+
+/**
+ * Parse a per-domain cap string into a Map. Input format is
+ * "domain=N, domain=N, …" (commas, semicolons, or newlines all work).
+ * Domain is lowercased; non-numeric caps are skipped. Empty → empty map.
+ */
+function parseDomainCaps(raw: string): Map<string, number> {
+  const out = new Map<string, number>()
+  if (!raw) return out
+  for (const pair of raw.split(/[,;\n]/)) {
+    const [d, n] = pair.split('=').map((s) => s.trim())
+    if (!d || !n) continue
+    const cap = Number(n)
+    if (!Number.isFinite(cap) || cap <= 0) continue
+    out.set(d.toLowerCase(), Math.floor(cap))
+  }
+  return out
 }
 
 export async function tickOnce(): Promise<TickStats> {

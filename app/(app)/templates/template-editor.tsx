@@ -45,7 +45,7 @@ const VAR_GROUPS = [
 
 const SAMPLE = { name: 'Jane Doe', company: 'Acme Corp', role_name: 'Senior Marketer', email: 'jane@acme.com', location: 'Remote', platform: 'LinkedIn' }
 
-export function TemplateEditor({ templates }: { templates: Template[] }) {
+export function TemplateEditor({ templates, customFieldKeys = [] }: { templates: Template[]; customFieldKeys?: string[] }) {
   const router = useRouter()
   const [pending, start] = useTransition()
   const subjectRef = useRef<HTMLInputElement>(null)
@@ -192,10 +192,10 @@ export function TemplateEditor({ templates }: { templates: Template[] }) {
           <textarea ref={bodyRef} id="initialMsg" rows={14}
             className="flex w-full rounded-md border bg-background px-3 py-2 font-mono text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
             value={draft.initialMsg ?? ''} onChange={(e) => setDraft({ ...draft, initialMsg: e.target.value })} />
-          {/* Clickable insertion palette. Two groups: per-recipient
-              variables (substituted on send) and HTML snippets (raw
-              markup inserted as-is). Click a chip → token lands at the
-              cursor of the most-recently-focused field. */}
+          {/* Clickable insertion palette. Groups: per-recipient variables
+              (substituted on send), HTML snippets (raw markup), and any
+              user-declared custom fields (Settings → Custom contact fields).
+              Click a chip → token lands at cursor of last-focused field. */}
           <div className="space-y-1.5 text-xs">
             {VAR_GROUPS.map((g) => (
               <div key={g.label} className="flex flex-wrap items-center gap-1">
@@ -212,6 +212,18 @@ export function TemplateEditor({ templates }: { templates: Template[] }) {
                 ))}
               </div>
             ))}
+            {customFieldKeys.length > 0 ? (
+              <div className="flex flex-wrap items-center gap-1">
+                <span className="min-w-[80px] text-muted-foreground">Custom:</span>
+                {customFieldKeys.map((k) => (
+                  <button key={k} type="button" onClick={() => insertVar(k)}
+                    title={`Custom field ${k} — set per-contact in Contacts`}
+                    className="rounded bg-primary/10 px-1.5 py-0.5 font-mono text-primary hover:bg-primary/20">
+                    {`{{${k}}}`}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
         </div>
         <div className="flex flex-wrap gap-2">

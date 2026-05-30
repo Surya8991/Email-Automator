@@ -94,7 +94,8 @@ export async function resetStatusAction(ids: number[] = []) {
 }
 
 // CSV/Excel import. Browser uploads a File via FormData; we parse server-side
-// and bulk-insert, skipping duplicates and blocklisted addresses.
+// and bulk-insert. Returns counters plus a per-row error report so the user
+// can see exactly which rows were rejected and why.
 export async function importContactsAction(fd: FormData) {
   const u = await requireUser()
   const file = fd.get('file')
@@ -102,7 +103,7 @@ export async function importContactsAction(fd: FormData) {
   if (file.size > 10 * 1024 * 1024) return { error: 'File too large (10 MB max)' }
 
   const name = file.name.toLowerCase()
-  let parsed: Array<{ recruiterEmail: string; recruiterName: string; company: string; jobTitle: string; sourceUrl: string; platform: string; notes: string }>
+  let parsed: { contacts: Array<{ recruiterEmail: string; recruiterName: string; company: string; jobTitle: string; sourceUrl: string; platform: string; notes: string }>; errors: Array<{ line: number; reason: string; sample?: string }> }
   try {
     if (name.endsWith('.csv')) {
       parsed = parseCsv(await file.text())
@@ -114,15 +115,33 @@ export async function importContactsAction(fd: FormData) {
   } catch (e) {
     return { error: 'Parse failed: ' + (e instanceof Error ? e.message : String(e)) }
   }
-  if (parsed.length === 0) return { error: 'No valid rows found (need an email column)' }
+  if (parsed.contacts.length === 0 && parsed.errors.length === 0) {
+    return { error: 'No valid rows found (need an email column with at least one row)' }
+  }
 
+  // Errors that survived parsing also survive the insert phase — only
+  // append "already exists" failures here.
+  const errors = [...parsed.errors]
   let imported = 0, duplicates = 0
-  for (const c of parsed) {
-    if (await svc.emailExists(u.id, c.recruiterEmail)) { duplicates++; continue }
+  for (const c of parsed.contacts) {
+    if (await svc.emailExists(u.id, c.recruiterEmail)) {
+      duplicates++
+      // Only report the first 50 duplicates verbatim so a 10k-row CSV
+      // with 9k existing contacts doesn't return a megabyte of errors.
+      if (errors.length < 200) errors.push({ line: 0, reason: `Already in your contacts: ${c.recruiterEmail}` })
+      continue
+    }
     await svc.addContact(u.id, c)
     imported++
   }
   revalidatePath('/contacts')
   revalidatePath('/dashboard')
-  return { ok: true, imported, duplicates, total: parsed.length }
+  return {
+    ok: true,
+    imported,
+    duplicates,
+    rejected: parsed.errors.length,
+    total: parsed.contacts.length + parsed.errors.length,
+    errors: errors.slice(0, 200), // cap response payload
+  }
 }

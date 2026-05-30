@@ -43,6 +43,7 @@ export default async function AuditPage() {
           <AuditTable rows={rows.map((r) => ({
             id: r.id, action: r.action, detail: r.detail, ip: r.ip,
             createdAt: formatDate(r.createdAt, tz),
+            ts: r.createdAt.getTime(),
           }))} />
         )}
       </CardContent></Card>

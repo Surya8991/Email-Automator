@@ -19,6 +19,8 @@ Last refreshed: 2026-05-31.
 
 - **CRUD** — add one-by-one or import in bulk.
 - **Search + filter** — search by name/company/email/role · tag dropdown · status dropdown (Pending / Draft created / Scheduled / Sent / Replied / Bounced / Cancelled). Filters compose; URL-persisted.
+- **CSV/Excel import with per-row error report** — bad rows aren't silently dropped: a collapsible panel lists every rejected row with line number + reason (missing email / invalid format / duplicate within file / already in your contacts). First 200 issues shown.
+- **Custom fields per contact** — keys declared in Settings (`region`, `tier`, `deal_stage`, etc.), values stored in `contacts.notes` as a JSON suffix (legacy plain-text notes still work). Insertable as `{{key}}` in templates, substituted at send time.
 - **One-click follow-up** — per-row "Schedule follow-up in N days" button. Pick a number, scheduler queues it.
 - **CSV/Excel import** — `.csv`, `.xlsx`, `.xls`. Header names are fuzz-matched. Download the [starter template](https://email-automator-three.vercel.app/api/csv-template) for the canonical columns + sample rows.
 - **CSV export** of all your contacts.
@@ -32,7 +34,7 @@ Last refreshed: 2026-05-31.
 
 - **20 starter templates** auto-seeded on first sign-in — 4 categories (Growth, Performance, SEO, Digital) × 5 tones (Formal, Friendly, Job-post, Referral, LinkedIn).
 - **Sidebar search + category filter** for picking among your templates.
-- **Clickable variable palette** — recipient fields (`{{name}}`, `{{company}}`, `{{role_name}}`, `{{email}}`, `{{location}}`, `{{platform}}`) plus HTML snippets (salutation, paragraph, bullet list, sign-off, divider). Click → token lands at cursor.
+- **Clickable variable palette** — recipient fields (`{{name}}`, `{{company}}`, `{{role_name}}`, `{{email}}`, `{{location}}`, `{{platform}}`) plus HTML snippets (salutation, paragraph, bullet list, sign-off, divider) plus any **user-declared custom fields** (Settings → Custom contact fields). Click → token lands at cursor.
 - **Live preview** — see how the email looks against a sample contact.
 - **Email-safe styled wrapper** — every outgoing email gets a polished, Outlook-safe HTML shell automatically (rounded card, system font, max 600px, hidden preheader).
 - **A/B subject lines** — set `subjectB`; the system deterministically splits 50/50 by contact id.
@@ -83,6 +85,7 @@ Last refreshed: 2026-05-31.
 - **Breakdown by template** (top 10, 30d) — sent count + open/click/reply rates.
 - **Breakdown by campaign** (top 10, 30d).
 - **Breakdown by tag** (top 10, 30d) — multi-tag contacts count for each.
+- **Send-time heatmap** (7 days × 24 hrs IST) — cell shade = send volume, hover shows open rate for that hour. Attributes opens back to the original send-hour, not the open-hour.
 
 ## Dashboard
 
@@ -107,7 +110,7 @@ Last refreshed: 2026-05-31.
 ## Audit log
 
 - **Last 500 events** with action / detail / IP / timestamp.
-- **Search + action filter** — substring across all columns + dropdown of distinct action types in the window.
+- **Search + action filter + date range** — substring across all columns, dropdown of distinct action types, From/To date inputs (inclusive at day granularity).
 - **CSV export** of the entire log.
 
 ## Blocklist
@@ -120,7 +123,7 @@ Last refreshed: 2026-05-31.
 
 ## Diagnostic
 
-- **One-click "Run checks"** — SMTP connect, AI key, Google OAuth config, DNS, SPF, DMARC.
+- **One-click "Run checks"** — SMTP connect, AI key, Google OAuth config, DNS, SPF, DMARC, MX records.
 - **Per-check Retry** button on any non-pass row.
 - **Mailbox provider DMARC** is treated as pass (gmail.com, outlook.com, yahoo.com, icloud.com, proton.me, etc.) — you don't own these domains so you can't change their policy.
 - **Send test email** to yourself.
@@ -128,7 +131,7 @@ Last refreshed: 2026-05-31.
 
 ## Settings
 
-- **General** — daily send limit, **timezone** (13-option dropdown, IST default), default role name, portfolio link, unsubscribe footer text + toggle, **emergency Pause Sends** kill-switch.
+- **General** — daily send limit, **timezone** (13-option dropdown, IST default), default role name, portfolio link, unsubscribe footer text + toggle, **emergency Pause Sends** kill-switch, **per-recipient throttle (days)**, **per-domain daily cap** (`gmail.com=50,outlook.com=30`), **custom contact field keys**.
 - **Email** — per-user SMTP (host, port, user, pass, From). Falls back to env if blank.
 - **AI** — per-user Groq API key + model.
 - **Auth** — current session info; sign out.
@@ -163,14 +166,8 @@ Last refreshed: 2026-05-31.
 
 ## Roadmap (not yet shipped)
 
-- **User-defined custom fields** — declare your own `{{vars}}` per contact (needs schema migration).
-- Per-recipient throttle (e.g. "max 1 email per contact per 30 days") — *partial: duplicate-send guard ships now*.
-- Per-domain rate limit (e.g. "max 50/day to @gmail.com").
-- Multiple email identities per user.
-- Campaign-level A/B (split contacts across two variant step sequences).
-- Send-time effectiveness heatmap (best hour to send).
-- CSV import error report (per-row fail reasons).
-- Searchable audit log with date-range filter.
-- MX record check on Diagnostic.
+- Multiple email identities per user (L).
+- Campaign-level A/B testing — split contacts across two variant step sequences (L).
+- Per-contact custom-field editor UI in the AddContact dialog (today you set them via the notes JSON suffix or the API).
 
 If you want one of these, file an issue or open a PR.

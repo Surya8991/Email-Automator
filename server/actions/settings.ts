@@ -25,6 +25,20 @@ const Schema = z.object({
   // anything for this user — schedules + campaigns just sit. Flip back
   // to 'false' to resume. The toggle is per-user, not global.
   SENDS_PAUSED: z.string().optional(),
+  // Per-recipient throttle in DAYS. 0 = disabled. When > 0, the worker
+  // tick cancels any queued row whose recipient was already sent to
+  // within that window. Prevents accidental re-sends from overlapping
+  // campaigns / follow-ups.
+  PER_RECIPIENT_THROTTLE_DAYS: z.string().regex(/^\d+$/).optional(),
+  // Per-domain daily send cap. Format: "gmail.com=50,outlook.com=30".
+  // Worker defers (not cancels) anything over the cap by 1 hour, so it
+  // eventually flushes on a quieter day. Empty string = no caps.
+  PER_DOMAIN_DAILY_CAP: z.string().max(2000).optional(),
+  // JSON array of user-declared custom-field keys, e.g.
+  // ["region","tier","deal_stage"]. Used to surface chips in the
+  // template editor. Values for each key live per-contact in
+  // contacts.notes as a JSON-suffix block (see lib/custom-fields.ts).
+  CUSTOM_FIELD_KEYS: z.string().max(1000).optional(),
 })
 
 export async function saveSettingsAction(input: Record<string, string | undefined>) {

@@ -1,6 +1,16 @@
 'use client'
 import { useState, useTransition } from 'react'
 import { Save, Pause, Play } from 'lucide-react'
+
+// Parse the JSON-encoded CUSTOM_FIELD_KEYS setting back into a plain
+// array for the comma-separated text field. Silently treats malformed
+// JSON as empty so a broken setting doesn't lock the user out of editing.
+function parseKeys(raw: string): string[] {
+  try {
+    const v = JSON.parse(raw || '[]')
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
+  } catch { return [] }
+}
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -33,6 +43,9 @@ export function SettingsForm({ initial }: { initial: Record<string, string> }) {
     UNSUBSCRIBE_TEXT: initial.UNSUBSCRIBE_TEXT ?? '',
     UNSUBSCRIBE_ENABLED: initial.UNSUBSCRIBE_ENABLED ?? 'false',
     SENDS_PAUSED: initial.SENDS_PAUSED ?? 'false',
+    PER_RECIPIENT_THROTTLE_DAYS: initial.PER_RECIPIENT_THROTTLE_DAYS ?? '0',
+    PER_DOMAIN_DAILY_CAP: initial.PER_DOMAIN_DAILY_CAP ?? '',
+    CUSTOM_FIELD_KEYS: initial.CUSTOM_FIELD_KEYS ?? '[]',
   })
   const [pending, start] = useTransition()
   const [msg, setMsg] = useState<string | null>(null)
@@ -48,6 +61,43 @@ export function SettingsForm({ initial }: { initial: Record<string, string> }) {
         <Label htmlFor="DAILY_SEND_LIMIT">Daily send limit</Label>
         <Input id="DAILY_SEND_LIMIT" type="number" min={1} max={1000} value={s.DAILY_SEND_LIMIT} onChange={(e) => set('DAILY_SEND_LIMIT')(e.target.value)} />
         <p className="text-xs text-muted-foreground">Hard cap per day. Worker honors this per-user.</p>
+      </div>
+      <div className="grid gap-1.5">
+        <Label htmlFor="PER_RECIPIENT_THROTTLE_DAYS">Per-recipient throttle (days)</Label>
+        <Input id="PER_RECIPIENT_THROTTLE_DAYS" type="number" min={0} max={365}
+          value={s.PER_RECIPIENT_THROTTLE_DAYS}
+          onChange={(e) => set('PER_RECIPIENT_THROTTLE_DAYS')(e.target.value)} />
+        <p className="text-xs text-muted-foreground">
+          Worker cancels any queued send to a recipient you already emailed within this window. <strong>0</strong> = disabled.
+          Useful as a safety net against overlapping campaigns + follow-ups.
+        </p>
+      </div>
+      <div className="grid gap-1.5 md:col-span-2">
+        <Label htmlFor="CUSTOM_FIELD_KEYS">Custom contact fields</Label>
+        <Input id="CUSTOM_FIELD_KEYS"
+          value={parseKeys(s.CUSTOM_FIELD_KEYS).join(', ')}
+          onChange={(e) => set('CUSTOM_FIELD_KEYS')(JSON.stringify(
+            e.target.value.split(',').map((k) => k.trim().toLowerCase()).filter((k) => /^[a-z][a-z0-9_]*$/.test(k))
+          ))}
+          placeholder="region, tier, deal_stage" />
+        <p className="text-xs text-muted-foreground">
+          Comma-separated keys (lowercase, snake_case). Stored per-contact in <code>contacts.notes</code>
+          (JSON-suffix; readable freeform notes still work). Insertable as <code>{'{{region}}'}</code> chips in
+          the template editor and substituted at send time.
+        </p>
+      </div>
+      <div className="grid gap-1.5 md:col-span-2">
+        <Label htmlFor="PER_DOMAIN_DAILY_CAP">Per-domain daily cap</Label>
+        <Input id="PER_DOMAIN_DAILY_CAP"
+          value={s.PER_DOMAIN_DAILY_CAP}
+          onChange={(e) => set('PER_DOMAIN_DAILY_CAP')(e.target.value)}
+          placeholder="gmail.com=50, outlook.com=30, yahoo.com=20" />
+        <p className="text-xs text-muted-foreground">
+          Comma-separated <code>domain=N</code> pairs. When the day's count to any listed
+          domain hits its cap, the worker <strong>defers</strong> (not cancels) further
+          queued rows for that domain by 1 hour. Helps avoid being flagged as a bulk-sender by
+          a single provider. Leave blank for no caps.
+        </p>
       </div>
       <div className="grid gap-1.5">
         <Label htmlFor="TIMEZONE">Timezone</Label>

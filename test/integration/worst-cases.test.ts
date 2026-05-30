@@ -119,7 +119,15 @@ describe('M1: importer caps row count', () => {
   })
   it('accepts a small CSV', () => {
     const r = svc.importer.parseCsv('Name,Email\nJane,jane@x.co\nBob,bob@x.co')
-    expect(r).toHaveLength(2)
+    expect(r.contacts).toHaveLength(2)
+    expect(r.errors).toHaveLength(0)
+  })
+  it('reports per-row errors with line numbers', () => {
+    const r = svc.importer.parseCsv('Name,Email\nJane,not-an-email\nBob,bob@x.co\nDup,bob@x.co\nNoMail,')
+    expect(r.contacts).toHaveLength(1)
+    expect(r.errors.length).toBeGreaterThanOrEqual(2)
+    expect(r.errors[0]?.line).toBe(2)
+    expect(r.errors.find((e) => /Duplicate within file/.test(e.reason))).toBeDefined()
   })
 })
 

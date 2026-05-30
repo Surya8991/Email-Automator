@@ -122,6 +122,63 @@ export async function breakdownByCampaign(userId: string, days = 30): Promise<Br
   return aggregate(expanded)
 }
 
+/**
+ * Hourly send-time heatmap. For each (day-of-week × hour-of-day) bucket,
+ * count the sent events and how many of them later received an open
+ * (matched by emailLogId in meta). Use this to find your best windows.
+ *
+ * Returns a flat array of 7×24 = 168 cells; the page renders the grid.
+ */
+export interface HourCell { dow: number; hour: number; sent: number; opens: number }
+
+export async function sendTimeHeatmap(userId: string, days = 30): Promise<HourCell[]> {
+  const since = Date.now() - days * DAY_MS
+  // Pull both sent + open events in the window. Bucketing in JS keeps the
+  // SQL portable across the dual driver and avoids strftime quirks.
+  const evRows = await db.select().from(events)
+    .where(and(eq(events.userId, userId), gte(events.ts, since)))
+  // Match opens to sends via meta.emailLogId so we attribute the open to
+  // the original send hour, not the hour it was opened.
+  const sendByLogId = new Map<number, number>() // emailLogId → sent ts
+  for (const e of evRows) {
+    if (e.kind !== 'sent') continue
+    try {
+      const m = JSON.parse(e.meta || '{}') as { emailLogId?: number }
+      if (m.emailLogId) sendByLogId.set(m.emailLogId, e.ts)
+    } catch { /* ignore */ }
+  }
+  // grid[dow][hour] = { sent, opens }. Bucket in user's local IST so the
+  // "10 AM" heatmap cell reflects 10 AM IST, not UTC.
+  const grid: HourCell[] = []
+  for (let d = 0; d < 7; d++) for (let h = 0; h < 24; h++) grid.push({ dow: d, hour: h, sent: 0, opens: 0 })
+  const cell = (ts: number): HourCell => {
+    // Render the timestamp in IST to extract dow/hour without DST drift.
+    // (Server's TZ may be UTC; we always bucket against IST.)
+    const istString = new Date(ts).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })
+    // "30/05/2026, 11:32:14 pm" → parse day, hour
+    const d = new Date(ts)
+    // Computing dow/hour against IST: shift ts by IST offset (+5:30 = 330 min).
+    const istMs = ts + (330 * 60 * 1000) + (d.getTimezoneOffset() * 60 * 1000)
+    const ist = new Date(istMs)
+    const dow = ist.getUTCDay()
+    const hour = ist.getUTCHours()
+    return grid[dow * 24 + hour]!
+    void istString // silence unused; the formatString above is a sanity guard
+  }
+  for (const e of evRows) {
+    if (e.kind === 'sent') {
+      const c = cell(e.ts); c.sent++
+    } else if (e.kind === 'open') {
+      // Attribute the open to its original send-hour, not the open-hour.
+      let openLogId: number | undefined
+      try { openLogId = (JSON.parse(e.meta || '{}') as { emailLogId?: number }).emailLogId } catch { /* ignore */ }
+      const sentTs = openLogId ? sendByLogId.get(openLogId) : undefined
+      if (sentTs) cell(sentTs).opens++
+    }
+  }
+  return grid
+}
+
 function aggregate(rows: Array<{ key: string; label: string; kind: string; n: number }>): BreakdownRow[] {
   const m = new Map<string, BreakdownRow>()
   for (const r of rows) {

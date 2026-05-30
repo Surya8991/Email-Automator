@@ -6,11 +6,20 @@ import { useMemo, useState } from 'react'
 import { Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 
-interface Row { id: number; action: string; createdAt: string; detail: string; ip: string }
+interface Row {
+  id: number; action: string; createdAt: string; detail: string; ip: string
+  // Raw timestamp passed through for date-range filtering. The displayed
+  // string (createdAt) is pre-formatted in the user's TZ on the server.
+  ts: number
+}
 
 export function AuditTable({ rows }: { rows: Row[] }) {
   const [q, setQ] = useState('')
   const [action, setAction] = useState('')
+  // Date range — both bounds optional, both inclusive at day granularity.
+  // Stored as YYYY-MM-DD strings (the <input type="date"> contract).
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState('')
 
   // Distinct action types in the current window, for the filter dropdown.
   // Stable list as long as the server-rendered rows are stable.
@@ -19,15 +28,21 @@ export function AuditTable({ rows }: { rows: Row[] }) {
     [rows])
 
   const filtered = useMemo(() => {
+    // Parse the date bounds once per render. fromMs is start-of-day; toMs
+    // is end-of-day so the to-date is inclusive (a 2026-05-31 entry shows
+    // when to=2026-05-31).
+    const fromMs = fromDate ? new Date(fromDate + 'T00:00:00').getTime() : 0
+    const toMs = toDate ? new Date(toDate + 'T23:59:59.999').getTime() : Infinity
     return rows.filter((r) => {
       if (action && r.action !== action) return false
+      if (r.ts < fromMs || r.ts > toMs) return false
       if (q.trim()) {
         const n = q.toLowerCase()
         if (![r.action, r.detail, r.ip, r.createdAt].some((v) => v.toLowerCase().includes(n))) return false
       }
       return true
     })
-  }, [rows, action, q])
+  }, [rows, action, q, fromDate, toDate])
 
   return (
     <>
@@ -43,6 +58,17 @@ export function AuditTable({ rows }: { rows: Row[] }) {
             <option value="">All actions</option>
             {actions.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
+        ) : null}
+        <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)}
+          className="h-9 w-auto" title="From date" />
+        <span className="text-xs text-muted-foreground">→</span>
+        <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)}
+          className="h-9 w-auto" title="To date" />
+        {fromDate || toDate ? (
+          <button type="button" onClick={() => { setFromDate(''); setToDate('') }}
+            className="text-xs text-muted-foreground underline hover:text-foreground">
+            clear dates
+          </button>
         ) : null}
         <span className="ml-auto text-xs text-muted-foreground">
           {filtered.length === rows.length ? `${rows.length} entries` : `${filtered.length} of ${rows.length}`}

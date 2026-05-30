@@ -16,6 +16,18 @@ export interface ImportedContact {
   notes: string
 }
 
+/** One row that the importer rejected — line number is 1-based for human display. */
+export interface ImportError { line: number; reason: string; sample?: string }
+
+/**
+ * What every parser returns. The action surfaces both halves so the user
+ * sees "X imported, Y duplicates, Z rejected" with row-level reasons.
+ */
+export interface ParseResult {
+  contacts: ImportedContact[]
+  errors: ImportError[]
+}
+
 const Headers = z.object({}).passthrough()
 
 function findCol(headerMap: Record<string, number>, ...needles: string[]): number {
@@ -25,7 +37,7 @@ function findCol(headerMap: Record<string, number>, ...needles: string[]): numbe
   return -1
 }
 
-function rowsToContacts(rows: unknown[][]): ImportedContact[] {
+function rowsToContacts(rows: unknown[][]): ParseResult {
   // Find the first row in the first 5 that looks like a header.
   let headerIdx = 0
   for (let i = 0; i < Math.min(5, rows.length); i++) {
@@ -45,14 +57,35 @@ function rowsToContacts(rows: unknown[][]): ImportedContact[] {
     platform: findCol(map, 'platform'),
     notes:    findCol(map, 'notes', 'note'),
   }
+  if (c.email < 0) {
+    return { contacts: [], errors: [{ line: headerIdx + 1, reason: 'No "Email" column detected in the header row' }] }
+  }
   const out: ImportedContact[] = []
+  const errors: ImportError[] = []
+  // Tracks emails we've already accepted in this batch to flag in-file
+  // duplicates before they hit the DB uniqueness check. Lowercased.
+  const seenInBatch = new Set<string>()
   for (let i = headerIdx + 1; i < rows.length; i++) {
     const r = rows[i]
-    if (!r || r.length === 0) continue
-    const email = c.email >= 0 ? String(r[c.email] ?? '').trim() : ''
-    if (!email || !EMAIL.test(email)) continue
+    if (!r || r.length === 0 || r.every((cell) => String(cell ?? '').trim() === '')) continue // truly empty row, silent
+    const rawEmail = String(r[c.email] ?? '').trim()
+    const sample = rawEmail || (r.map((cell) => String(cell ?? '').trim()).find(Boolean) ?? '').slice(0, 60)
+    if (!rawEmail) {
+      errors.push({ line: i + 1, reason: 'Missing email', sample })
+      continue
+    }
+    if (!EMAIL.test(rawEmail)) {
+      errors.push({ line: i + 1, reason: `Invalid email format: "${rawEmail}"`, sample })
+      continue
+    }
+    const lcEmail = rawEmail.toLowerCase()
+    if (seenInBatch.has(lcEmail)) {
+      errors.push({ line: i + 1, reason: `Duplicate within file: ${rawEmail}`, sample })
+      continue
+    }
+    seenInBatch.add(lcEmail)
     out.push({
-      recruiterEmail: email,
+      recruiterEmail: rawEmail,
       recruiterName: c.name >= 0 ? String(r[c.name] ?? '').trim() : '',
       company:       c.company >= 0 ? String(r[c.company] ?? '').trim() : '',
       jobTitle:      c.role >= 0 ? String(r[c.role] ?? '').trim() : '',
@@ -62,16 +95,16 @@ function rowsToContacts(rows: unknown[][]): ImportedContact[] {
                      c.notes >= 0 ? String(r[c.notes] ?? '').trim() : '',
     })
   }
-  return out
+  return { contacts: out, errors }
 }
 
 // Hard cap on input row count so a malicious / accidental 1GB CSV can't OOM
 // the server. 100k is well past any reasonable outreach workflow.
 const MAX_ROWS = 100_000
 
-export function parseCsv(text: string): ImportedContact[] {
+export function parseCsv(text: string): ParseResult {
   const lines = text.split(/\r?\n/).filter((l) => l.trim())
-  if (lines.length < 2) return []
+  if (lines.length < 2) return { contacts: [], errors: [] }
   if (lines.length > MAX_ROWS) throw new Error(`CSV too large (${lines.length} rows, max ${MAX_ROWS})`)
   const rows = lines.map((l) => {
     // Simple CSV split: handles quoted fields with commas inside.
@@ -95,13 +128,13 @@ export function parseCsv(text: string): ImportedContact[] {
   return rowsToContacts(rows)
 }
 
-export function parseXlsx(buf: ArrayBuffer): ImportedContact[] {
+export function parseXlsx(buf: ArrayBuffer): ParseResult {
   const wb = XLSX.read(buf, { type: 'array' })
   const sheetName =
     wb.SheetNames.find((n) => /contacts/i.test(n)) ??
     wb.SheetNames.find((n) => /tracker/i.test(n)) ??
     wb.SheetNames[0]
-  if (!sheetName) return []
+  if (!sheetName) return { contacts: [], errors: [] }
   const ws = wb.Sheets[sheetName]!
   const rows = XLSX.utils.sheet_to_json(ws, { header: 1 }) as unknown[][]
   if (rows.length > MAX_ROWS) throw new Error(`Sheet too large (${rows.length} rows, max ${MAX_ROWS})`)

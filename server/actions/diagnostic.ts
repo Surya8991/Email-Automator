@@ -45,6 +45,24 @@ export async function runDiagnosticsAction(): Promise<{ results: DiagResult[] }>
     const domain = sender.split('@')[1]!.toLowerCase()
     const isProvider = PROVIDER_DOMAINS.has(domain)
 
+    // MX records — if there are none, mail to this domain bounces. This
+    // is THE most foundational deliverability check: without an MX,
+    // SPF/DMARC posture doesn't matter because the domain can't receive
+    // (and Gmail uses can-it-receive as a signal for outbound trust too).
+    try {
+      const mx = await dns.resolveMx(domain)
+      if (mx.length === 0) warn('MX', `No MX records on ${domain} — mail to this domain will bounce`)
+      else {
+        const sorted = mx.sort((a, b) => a.priority - b.priority)
+        const primary = sorted[0]!
+        pass('MX', `${mx.length} record(s); primary ${primary.exchange} (priority ${primary.priority})`)
+      }
+    } catch (e) {
+      // ENODATA / ENOTFOUND etc. — DNS resolver couldn't get an MX answer.
+      const msg = e instanceof Error ? (e as NodeJS.ErrnoException).code ?? e.message : 'lookup failed'
+      warn('MX', `Lookup failed for ${domain}: ${msg}`)
+    }
+
     try {
       const txts = await dns.resolveTxt(domain)
       const flat = txts.map((t) => t.join('')).join(' | ')

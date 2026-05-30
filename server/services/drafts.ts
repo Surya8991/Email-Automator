@@ -4,6 +4,7 @@ import { drafts, contacts, emailLog, events, type Contact, type Template } from 
 import { personalize } from '@/lib/escape'
 import { wrapEmailHtml } from '@/lib/email-template'
 import { formatDate } from '@/lib/utils'
+import { readCustomFields } from '@/lib/custom-fields'
 import { sendMail } from './mailer'
 import { emit } from '@/server/sse'
 import { instrumentHtml } from './tracking'
@@ -14,7 +15,12 @@ import { instrumentHtml } from './tracking'
  * 50/50 hash on the contact id, so the same recipient never sees both).
  */
 export function buildEmail(template: Template, contact: Contact, signature = '') {
+  // Custom fields from the contact's notes JSON block, lowercased. Stomp
+  // is "built-in wins" — a custom field named "name" can't override the
+  // recipient name (would be confusing).
+  const custom = readCustomFields(contact.notes)
   const data: Record<string, string> = {
+    ...custom,
     email: contact.recruiterEmail,
     name: contact.recruiterName,
     company: contact.company,

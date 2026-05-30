@@ -1,15 +1,17 @@
 import { requireUser } from '@/auth'
-import { dailySeries, kpis, breakdownByTemplate, breakdownByTag, breakdownByCampaign } from '@/server/services/analytics'
+import { dailySeries, kpis, breakdownByTemplate, breakdownByTag, breakdownByCampaign, sendTimeHeatmap } from '@/server/services/analytics'
+import { Heatmap } from './heatmap'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Chart } from './chart'
 
 export default async function AnalyticsPage() {
   const u = await requireUser()
-  const [k, series, byTpl, byTag, byCamp] = await Promise.all([
+  const [k, series, byTpl, byTag, byCamp, heatmap] = await Promise.all([
     kpis(u.id), dailySeries(u.id, 14),
     breakdownByTemplate(u.id, 30),
     breakdownByTag(u.id, 30),
     breakdownByCampaign(u.id, 30),
+    sendTimeHeatmap(u.id, 30),
   ])
   // Pivot rows into one row per day with one column per kind for Recharts.
   type DayRow = { day: string; sent: number; open: number; click: number; reply: number; bounce: number; [k: string]: string | number }
@@ -40,6 +42,11 @@ export default async function AnalyticsPage() {
         <BreakdownCard title="By campaign" rows={byCamp} />
         <BreakdownCard title="By tag" rows={byTag} />
       </div>
+
+      <Card>
+        <CardHeader><CardTitle>Send-time effectiveness (30d)</CardTitle></CardHeader>
+        <CardContent><Heatmap cells={heatmap} /></CardContent>
+      </Card>
     </div>
   )
 }
