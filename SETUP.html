@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Email Automator — your personal setup checklist</title>
+  <style>
+    :root {
+      --bg: #0b0f17; --fg: #e6edf3; --muted: #9aa4b2; --line: #1e2632;
+      --card: #111827; --card-h: #1a2230; --accent: #6366f1; --ok: #10b981;
+      --warn: #f59e0b; --err: #ef4444; --code: #1f2937;
+    }
+    @media (prefers-color-scheme: light) {
+      :root { --bg:#fafaf9; --fg:#111827; --muted:#6b7280; --line:#e5e7eb;
+              --card:#ffffff; --card-h:#f9fafb; --code:#f3f4f6; }
+    }
+    * { box-sizing: border-box }
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+           background: var(--bg); color: var(--fg); line-height: 1.55; }
+    .wrap { max-width: 880px; margin: 0 auto; padding: 32px 20px 80px }
+    header { padding-bottom: 24px; border-bottom: 1px solid var(--line); margin-bottom: 24px }
+    h1 { margin: 0 0 6px; font-size: 30px; letter-spacing: -0.01em }
+    h2 { margin: 32px 0 8px; font-size: 19px; letter-spacing: -0.005em }
+    h3 { margin: 18px 0 6px; font-size: 15px; color: var(--fg) }
+    p, li { color: var(--fg); }
+    .muted { color: var(--muted) }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace }
+    code { background: var(--code); padding: 1px 6px; border-radius: 4px; font-size: 0.92em }
+    pre { background: var(--code); padding: 14px 16px; border-radius: 8px; overflow-x: auto; font-size: 13px;
+          border: 1px solid var(--line) }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+            padding: 18px 22px; margin: 14px 0 }
+    .step-num { display: inline-flex; align-items: center; justify-content: center;
+                width: 26px; height: 26px; border-radius: 50%; background: var(--accent);
+                color: #fff; font-weight: 600; font-size: 13px; margin-right: 10px;
+                vertical-align: middle }
+    a { color: var(--accent); text-decoration: none }
+    a:hover { text-decoration: underline }
+    .pill { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 999px;
+            margin-left: 8px; vertical-align: middle }
+    .pill.required { background: #ef4444; color: white }
+    .pill.optional { background: #6b7280; color: white }
+    .pill.ok { background: var(--ok); color: white }
+    .checklist { list-style: none; padding-left: 0 }
+    .checklist li { padding: 8px 0; border-bottom: 1px solid var(--line); display: flex; gap: 10px; align-items: flex-start }
+    .checklist li:last-child { border: 0 }
+    .checklist input[type=checkbox] { margin-top: 5px; transform: scale(1.2); accent-color: var(--accent); cursor: pointer }
+    .checklist label { cursor: pointer; flex: 1 }
+    .warn { background: #f59e0b20; border-left: 3px solid var(--warn); padding: 10px 14px; border-radius: 4px; margin: 10px 0 }
+    .danger { background: #ef444420; border-left: 3px solid var(--err); padding: 10px 14px; border-radius: 4px; margin: 10px 0 }
+    .ok { background: #10b98120; border-left: 3px solid var(--ok); padding: 10px 14px; border-radius: 4px; margin: 10px 0 }
+    .toc { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 16px 22px }
+    .toc ol { margin: 0; padding-left: 22px }
+    .toc li { padding: 4px 0 }
+    .env-table { width: 100%; border-collapse: collapse; font-size: 13px }
+    .env-table th, .env-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line) }
+    .env-table th { color: var(--muted); font-weight: 500; text-transform: uppercase; font-size: 11px; letter-spacing: 0.04em }
+    .env-table td:first-child { font-family: ui-monospace, monospace; font-size: 12px }
+    .copy-btn { float: right; font-size: 11px; padding: 3px 8px; background: var(--card-h);
+                color: var(--muted); border: 1px solid var(--line); border-radius: 4px;
+                cursor: pointer; font-family: inherit }
+    .copy-btn:hover { color: var(--fg); background: var(--card) }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>📬 Email Automator — your setup checklist</h1>
+  <p class="muted">A one-page walkthrough of everything <em>you</em> need to do to ship this on Vercel.
+  Tick the boxes as you go — your browser remembers them across page loads.</p>
+</header>
+
+<div class="toc">
+  <strong>What's in this page</strong>
+  <ol>
+    <li><a href="#prereq">Prereqs</a> (5 min)</li>
+    <li><a href="#secret">Generate AUTH_SECRET + CRON_SECRET</a> (1 min)</li>
+    <li><a href="#smtp">Gmail App Password for SMTP</a> (3 min) — required</li>
+    <li><a href="#turso">Create the Turso database</a> (5 min) — required for Vercel</li>
+    <li><a href="#groq">Get a Groq API key</a> (2 min) — optional</li>
+    <li><a href="#google">Set up Google OAuth</a> (5 min) — optional</li>
+    <li><a href="#vercel">Deploy to Vercel</a> (10 min)</li>
+    <li><a href="#post">Post-deploy checklist</a></li>
+    <li><a href="#self-host">Alternative: self-host on Linux</a></li>
+  </ol>
+</div>
+
+<h2 id="prereq"><span class="step-num">1</span> Prereqs</h2>
+<ul class="checklist">
+  <li><input type="checkbox" id="p1" /><label for="p1">Node.js 20 or later installed (<code>node -v</code>)</label></li>
+  <li><input type="checkbox" id="p2" /><label for="p2">Git installed; you have the repo cloned and ran <code>cd web && npm install --legacy-peer-deps</code></label></li>
+  <li><input type="checkbox" id="p3" /><label for="p3">A Gmail account with 2-Factor Authentication on</label></li>
+  <li><input type="checkbox" id="p4" /><label for="p4">A Vercel account (free tier is fine) — <a href="https://vercel.com" target="_blank">sign up</a></label></li>
+</ul>
+
+<h2 id="secret"><span class="step-num">2</span> Generate AUTH_SECRET + CRON_SECRET</h2>
+<p>You need two long random strings. Run this twice on your laptop:</p>
+<pre>node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"</pre>
+<p>Save both somewhere temporary — you'll paste them into Vercel later.</p>
+<ul class="checklist">
+  <li><input type="checkbox" id="s1" /><label for="s1">Generated AUTH_SECRET (64 hex chars)</label></li>
+  <li><input type="checkbox" id="s2" /><label for="s2">Generated CRON_SECRET (64 hex chars)</label></li>
+</ul>
+
+<h2 id="smtp"><span class="step-num">3</span> Gmail App Password for SMTP <span class="pill required">required</span></h2>
+<p>Magic-link login and every outgoing email goes through SMTP. For Gmail:</p>
+<ol>
+  <li>Visit <a href="https://myaccount.google.com/apppasswords" target="_blank">myaccount.google.com/apppasswords</a></li>
+  <li>App: <em>Mail</em>, Device: <em>Other (Email Automator)</em> → Generate</li>
+  <li>Copy the 16-character password (no spaces). Save it temporarily.</li>
+</ol>
+<div class="warn">⚠️ App Passwords require 2-Factor Authentication on your Google account. Enable 2FA first if it's not on.</div>
+<ul class="checklist">
+  <li><input type="checkbox" id="m1" /><label for="m1">Have a Gmail App Password (16 chars)</label></li>
+</ul>
+
+<h2 id="turso"><span class="step-num">4</span> Create the Turso database <span class="pill required">required for Vercel</span></h2>
+<p>Vercel is serverless — the local SQLite file won't persist. Turso gives you a hosted SQLite-compatible DB. The app's dual driver detects the URL and uses Turso automatically — no code changes needed.</p>
+
+<h3>4a. Install the Turso CLI</h3>
+<pre># macOS / Linux
+curl -sSfL https://get.tur.so/install.sh | bash
+
+# Windows (PowerShell)
+irm get.tur.so/install.ps1 | iex</pre>
+
+<h3>4b. Create the DB and grab the URL + token</h3>
+<pre>turso auth signup        # one-time
+turso db create email-automator
+turso db show email-automator --url            # → libsql://email-automator-&lt;org&gt;.turso.io
+turso db tokens create email-automator         # → eyJ…   (this is TURSO_AUTH_TOKEN)</pre>
+
+<h3>4c. Apply migrations to the new DB (one-time, from your laptop)</h3>
+<pre>cd web
+DATABASE_URL=libsql://email-automator-&lt;org&gt;.turso.io \
+TURSO_AUTH_TOKEN=eyJ… \
+npm run db:migrate</pre>
+
+<ul class="checklist">
+  <li><input type="checkbox" id="t1" /><label for="t1">Created Turso DB; saved URL + token</label></li>
+  <li><input type="checkbox" id="t2" /><label for="t2"><code>npm run db:migrate</code> against Turso URL succeeded</label></li>
+</ul>
+
+<h2 id="groq"><span class="step-num">5</span> Get a Groq API key <span class="pill optional">optional</span></h2>
+<p>Powers the <em>AI Improve</em> button in the template editor. Skip if you don't want that feature. Free tier covers light usage.</p>
+<ol>
+  <li><a href="https://console.groq.com" target="_blank">console.groq.com</a> → API Keys → Create</li>
+  <li>Save the <code>gsk_…</code> key</li>
+</ol>
+<div class="ok">💡 Tip: you can also set this <strong>per-user</strong> from <code>Settings → AI</code> inside the running app, so you don't have to set the env var globally.</div>
+<ul class="checklist">
+  <li><input type="checkbox" id="g1" /><label for="g1">Have a Groq API key (or skipping)</label></li>
+</ul>
+
+<h2 id="google"><span class="step-num">6</span> Set up Google OAuth <span class="pill optional">optional</span></h2>
+<p>Adds a "Continue with Google" button on the login page. Magic link still works either way.</p>
+<ol>
+  <li>Open <a href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud → Credentials</a></li>
+  <li>Create OAuth Client ID → <em>Web application</em></li>
+  <li><strong>Authorized redirect URI</strong>: <code>https://your-vercel-url.vercel.app/api/auth/callback/google</code></li>
+  <li>Copy the Client ID + Client Secret — they go in Vercel env vars below</li>
+</ol>
+<ul class="checklist">
+  <li><input type="checkbox" id="goo1" /><label for="goo1">OAuth client created; have ID + Secret (or skipping)</label></li>
+</ul>
+
+<h2 id="vercel"><span class="step-num">7</span> Deploy to Vercel</h2>
+
+<h3>7a. Push your repo to GitHub (if not already)</h3>
+<pre>git remote -v          # confirm origin points at your fork
+git push origin main</pre>
+
+<h3>7b. Import the project in Vercel</h3>
+<ol>
+  <li><a href="https://vercel.com/new" target="_blank">vercel.com/new</a> → Import Git Repository → pick this repo</li>
+  <li><strong>Root Directory: <code>web</code></strong> (important — the Next app lives under <code>web/</code>, not the repo root)</li>
+  <li>Framework Preset: Next.js (auto-detected)</li>
+  <li>Don't click Deploy yet — set env vars first</li>
+</ol>
+
+<h3>7c. Paste these env vars in Vercel → Settings → Environment Variables</h3>
+<button class="copy-btn" onclick="navigator.clipboard.writeText(document.getElementById('env-snippet').textContent); this.textContent='copied!'; setTimeout(()=>this.textContent='copy',2000)">copy</button>
+<pre id="env-snippet"># ── required ─────────────────────────────────────────────
+AUTH_SECRET=&lt;the first secret from step 2&gt;
+APP_URL=https://your-app.vercel.app
+NEXTAUTH_URL=https://your-app.vercel.app
+DATABASE_URL=libsql://email-automator-&lt;org&gt;.turso.io
+TURSO_AUTH_TOKEN=&lt;from step 4b&gt;
+CRON_SECRET=&lt;the second secret from step 2&gt;
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=you@gmail.com
+SMTP_PASS=&lt;the Gmail App Password from step 3&gt;
+EMAIL_FROM=Your Name &lt;you@gmail.com&gt;
+ADMIN_EMAILS=you@gmail.com
+
+# ── optional ─────────────────────────────────────────────
+GOOGLE_CLIENT_ID=&lt;from step 6, or leave empty&gt;
+GOOGLE_CLIENT_SECRET=&lt;from step 6, or leave empty&gt;
+GROQ_API_KEY=&lt;from step 5, or leave empty — can set per-user later&gt;
+GROQ_MODEL=llama-3.3-70b-versatile
+DAILY_SEND_LIMIT=50
+TIMEZONE=Asia/Kolkata</pre>
+
+<div class="danger">🚨 <strong>Do NOT set <code>ALLOW_DEV_SIGNIN=true</code> in production.</strong> It bypasses authentication for any email on <code>DEV_BYPASS_EMAILS</code>.</div>
+
+<h3>7d. Deploy</h3>
+<p>Click <strong>Deploy</strong>. ~2 minutes. The first visit hits <code>app/(app)/layout.tsx</code> which auto-seeds 20 starter templates on your first sign-in.</p>
+
+<ul class="checklist">
+  <li><input type="checkbox" id="v1" /><label for="v1">Repo imported with Root Directory = <code>web</code></label></li>
+  <li><input type="checkbox" id="v2" /><label for="v2">All env vars from 7c pasted in Vercel</label></li>
+  <li><input type="checkbox" id="v3" /><label for="v3">Build succeeded; site is live at https://your-app.vercel.app</label></li>
+  <li><input type="checkbox" id="v4" /><label for="v4">Updated <code>APP_URL</code> + <code>NEXTAUTH_URL</code> + Google OAuth redirect URI with the real Vercel URL</label></li>
+</ul>
+
+<h2 id="post"><span class="step-num">8</span> Post-deploy checklist</h2>
+<ul class="checklist">
+  <li><input type="checkbox" id="p51" /><label for="p51">Visit <code>/login</code> → sign in via magic link (check Gmail inbox)</label></li>
+  <li><input type="checkbox" id="p52" /><label for="p52"><code>/diagnostic</code> → "Run checks" → SMTP / Groq / SPF / DMARC all green or sensible warns</label></li>
+  <li><input type="checkbox" id="p53" /><label for="p53"><code>/diagnostic</code> → "Send test to me" → email arrives within 10 s</label></li>
+  <li><input type="checkbox" id="p54" /><label for="p54">Add yourself as a contact, activate a template, create + send 1 draft to yourself</label></li>
+  <li><input type="checkbox" id="p55" /><label for="p55">Open that email → check <code>/analytics</code> shows 1 sent + (after a moment) 1 open</label></li>
+  <li><input type="checkbox" id="p56" /><label for="p56">Edit <code>public/.well-known/security.txt</code> — replace the placeholder email with yours, push</label></li>
+  <li><input type="checkbox" id="p57" /><label for="p57">Confirm Vercel Cron is running: Vercel dashboard → your project → Crons → <code>/api/cron/tick</code> should show recent invocations after a minute</label></li>
+  <li><input type="checkbox" id="p58" /><label for="p58">If you have a custom domain: update <code>APP_URL</code>, <code>NEXTAUTH_URL</code>, and the Google OAuth redirect URI to use it</label></li>
+</ul>
+
+<h2 id="self-host"><span class="step-num">9</span> Alternative: self-host on Linux</h2>
+<p>If you'd rather not use Vercel, you can run on any Linux box with Node 20+. SQLite file persists locally.</p>
+<pre>cd web
+cp .env.example .env       # edit everything; leave DATABASE_URL as ./data/tracker.db
+npm install --legacy-peer-deps
+npm run build
+npm run db:migrate
+npm install -g pm2
+pm2 start npm --name email-automator-web    -- start
+pm2 start npm --name email-automator-worker -- run worker
+pm2 save && pm2 startup</pre>
+<p>Then point your nginx/Caddy at <code>localhost:3000</code>. Back up <code>./data/</code> with rsync/restic.</p>
+
+<hr style="border:none;border-top:1px solid var(--line);margin:40px 0">
+<p class="muted" style="text-align:center;font-size:13px">
+  Stuck? Open the running app and visit <code>/guide</code> for the full manual.<br>
+  Repo: <a href="https://github.com/Surya8991/Email-Automator" target="_blank">github.com/Surya8991/Email-Automator</a>
+</p>
+
+</div>
+
+<script>
+  // Persist every checkbox tick to localStorage so the checklist survives
+  // page reloads. Pure client-side, no tracking.
+  document.querySelectorAll('input[type=checkbox]').forEach((cb) => {
+    const k = 'ea-setup:' + cb.id
+    cb.checked = localStorage.getItem(k) === '1'
+    cb.addEventListener('change', () => localStorage.setItem(k, cb.checked ? '1' : '0'))
+  })
+</script>
+</body>
+</html>

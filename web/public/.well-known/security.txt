@@ -1,6 +1,10 @@
-# Email Automator security disclosure
+# Email Automator — security disclosure policy
 # https://www.rfc-editor.org/rfc/rfc9116
-Contact: mailto:security@example.com
+#
+# ⚠️  EDIT BEFORE PRODUCTION. The Contact: address below is a placeholder.
+# Replace it with a real inbox you monitor, otherwise responsible-disclosure
+# reports will land in a dead inbox.
+Contact: mailto:CHANGE_ME@your-domain.example
 Preferred-Languages: en
 Policy: https://github.com/Surya8991/Email-Automator/blob/main/web/README.md#security
 Expires: 2027-12-31T23:59:59Z

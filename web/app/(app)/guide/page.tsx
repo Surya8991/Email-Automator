@@ -216,6 +216,7 @@ Bob Smith,Globex,CTO,bob@globex.com,,,,
               ['GET /api/track/click?eid=&u=&t=', 'open (HMAC)', '302 redirect + records click event'],
               ['GET /unsubscribe?e=&t=', 'open (HMAC)', 'Confirmation page; adds to global blocklist'],
               ['POST /unsubscribe?e=&t=', 'open (HMAC)', 'RFC 8058 one-click unsubscribe'],
+              ['GET /api/cron/tick', 'CRON_SECRET', 'Worker tick — sends scheduled emails, advances campaign enrollments. Vercel cron hits this every minute; Authorization: Bearer ${CRON_SECRET} required (or ?secret=).'],
             ].map(([path, auth, what]) => (
               <tr key={path} className="border-t"><td className="p-1">{path}</td><td className="p-1 text-muted-foreground">{auth}</td><td className="p-1 font-sans text-muted-foreground">{what}</td></tr>
             ))}
@@ -304,13 +305,17 @@ pm2 save`}</pre>
 
         <h3 className="text-sm font-semibold mt-3">Vercel</h3>
         <p className="text-sm">
-          The UI runs on Vercel, but Vercel is serverless — the SQLite file <strong>won't persist</strong> between deploys.
+          The UI runs on Vercel out of the box. <Code>server/db/client.ts</Code> is a dual driver — it
+          uses better-sqlite3 for local file URLs and @libsql/client for <Code>libsql://</Code> /
+          <Code>https://</Code> / <Code>file:</Code> URLs. <strong>No code swap needed.</strong>
         </p>
-        <ul className="list-disc pl-6 text-sm space-y-1">
-          <li><strong>Turso</strong> — libSQL-flavored SQLite. Swap <Code>better-sqlite3</Code> for <Code>@libsql/client</Code>; set <Code>DATABASE_URL=libsql://…</Code>.</li>
-          <li><strong>Vercel Postgres / Neon</strong> — switch schema to <Code>pgTable</Code>; use Drizzle's pg adapter.</li>
-        </ul>
-        <p className="text-sm">For the worker, use Vercel Cron — trigger <Code>/api/cron/tick</Code> every minute.</p>
+        <ol className="list-decimal pl-6 text-sm space-y-1">
+          <li>Create a Turso DB and grab the URL + auth token (CLI in DEPLOYMENT.md).</li>
+          <li>Run <Code>DATABASE_URL=libsql://… TURSO_AUTH_TOKEN=… npm run db:migrate</Code> from your laptop once.</li>
+          <li>Set those two env vars + <Code>CRON_SECRET</Code> + the SMTP/auth vars in Vercel.</li>
+          <li><Code>vercel --prod</Code>. The included <Code>vercel.json</Code> wires the 1-minute cron to <Code>/api/cron/tick</Code>.</li>
+        </ol>
+        <p className="text-sm">Alternative: <strong>Vercel Postgres / Neon</strong> — heavier swap; change schema to <Code>pgTable</Code> and use Drizzle's pg adapter. Only worth it if Postgres is already in your stack.</p>
 
         <h3 className="text-sm font-semibold mt-3">Docker</h3>
         <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs font-mono">{`docker build -t email-automator .

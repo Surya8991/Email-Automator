@@ -19,6 +19,15 @@ tag `v1-pre-rewrite`.
 
 ---
 
+## 🚀 Deploying somewhere?
+
+Open **[`SETUP.html`](SETUP.html)** in your browser — a one-page interactive
+checklist that walks you through everything you need to do (Gmail App
+Password, Turso DB, Vercel env vars, deploy, post-deploy verification).
+Ticks persist in localStorage so you can come back to it.
+
+---
+
 ## TL;DR — run v2 in 60 seconds
 
 ```bash
