@@ -1,0 +1,28 @@
+node_modules
+.next
+out
+dist
+build
+
+# env / secrets
+.env
+.env.*.local
+
+# DB / data
+*.db
+*.db-journal
+data/
+
+# logs
+*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+*.pid
+
+# test artifacts
+playwright-report
+test-results
+coverage

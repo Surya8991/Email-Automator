@@ -2,21 +2,42 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
 
 jobs:
-  test:
+  legacy:
+    name: standalone (Express)
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: standalone
+    defaults: { run: { working-directory: standalone } }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with:
-          node-version: 20
+        with: { node-version: 20, cache: npm, cache-dependency-path: standalone/package-lock.json }
       - run: npm ci
       - run: npm test
-      - name: Security audit (non-blocking)
-        run: npm audit --audit-level=high
+      - run: npm audit --audit-level=high
+        continue-on-error: true
+
+  web:
+    name: web (Next.js)
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: web } }
+    env:
+      AUTH_SECRET: test-secret-must-be-at-least-16-chars-long
+      DATABASE_URL: ./data/test.db
+      SMTP_USER: ci@example.com
+      SMTP_PASS: x
+      EMAIL_FROM: ci@example.com
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm, cache-dependency-path: web/package-lock.json }
+      - run: npm install
+      - run: npm run typecheck
+      - run: npm run lint --if-present
+        continue-on-error: true
+      - run: npm test
+      - run: npx playwright install --with-deps chromium
+      - run: npm run e2e -- --reporter=line
         continue-on-error: true
