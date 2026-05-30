@@ -31,7 +31,7 @@ export function AdminTable({ rows }: { rows: Row[] }) {
   return (
     <>
       {err ? <p className="border-b bg-destructive/10 px-4 py-2 text-sm text-destructive">{err}</p> : null}
-      <div className="flex flex-wrap items-center gap-2 border-b bg-muted/20 px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2 border-b bg-muted/30 px-4 py-3">
         <div className="relative max-w-sm flex-1">
           <Search className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input value={q} onChange={(e) => setQ(e.target.value)}

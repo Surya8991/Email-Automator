@@ -79,7 +79,7 @@ export function DraftsClient({ rows }: { rows: Draft[] }) {
       </div>
 
       {rows.length > 0 ? (
-        <div className="border-b px-4 py-2 flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3 border-b bg-muted/30 px-4 py-3">
           <div className="relative max-w-sm flex-1">
             <Search className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input

@@ -95,7 +95,7 @@ export function ScheduleClient({ queue, queueCount }: { queue: QueueRow[]; queue
             type="button"
             onClick={() => { setDate(p.date); setTime(p.time) }}
             title={p.hint}
-            className="rounded-md border bg-background px-2 py-1 hover:bg-accent"
+            className="rounded-md border bg-background px-2 py-1 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
           >
             {p.label}
           </button>

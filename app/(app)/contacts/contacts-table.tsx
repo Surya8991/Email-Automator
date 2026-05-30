@@ -76,21 +76,24 @@ export function ContactsTable({
         </select>
         {companies.length > 0 ? (
           <select value={company} onChange={(e) => go({ company: e.target.value, page: '1' })}
-            className="h-9 rounded-md border bg-background px-2 text-sm max-w-[160px]">
+            className="h-9 rounded-md border bg-background px-2 text-sm max-w-[120px] sm:max-w-[160px]"
+            aria-label="Filter by company">
             <option value="">All companies</option>
             {companies.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         ) : null}
         {locations.length > 0 ? (
           <select value={location} onChange={(e) => go({ location: e.target.value, page: '1' })}
-            className="h-9 rounded-md border bg-background px-2 text-sm max-w-[140px]">
+            className="h-9 rounded-md border bg-background px-2 text-sm max-w-[110px] sm:max-w-[140px]"
+            aria-label="Filter by location">
             <option value="">All locations</option>
             {locations.map((l) => <option key={l} value={l}>{l}</option>)}
           </select>
         ) : null}
         {platforms.length > 0 ? (
           <select value={platform} onChange={(e) => go({ platform: e.target.value, page: '1' })}
-            className="h-9 rounded-md border bg-background px-2 text-sm max-w-[140px]">
+            className="h-9 rounded-md border bg-background px-2 text-sm max-w-[110px] sm:max-w-[140px]"
+            aria-label="Filter by platform">
             <option value="">All platforms</option>
             {platforms.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
@@ -101,7 +104,8 @@ export function ContactsTable({
           </Button>
         ) : null}
         {selected.size > 0 ? (
-          <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/40 px-2 py-1 text-sm">
+          <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/40 px-2 py-1 text-sm"
+            role="region" aria-live="polite" aria-label={`${selected.size} contacts selected`}>
             <span className="px-1 font-medium">{selected.size} selected</span>
             <Button variant="default" size="sm" disabled={pending} onClick={() => {
               const ids = Array.from(selected)
