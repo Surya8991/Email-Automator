@@ -16,7 +16,13 @@ import * as schema from './schema'
 // CommonJS (how Next.js bundles this) provides it as a global; pure ESM
 // (how tsx loads our CLI scripts via "type": "module") doesn't.
 // createRequire gives us sync require in both worlds.
-const require = createRequire(import.meta.url)
+//
+// turbopackIgnore tells Next 16's Turbopack NOT to try to statically trace
+// what's behind the require() at build time — we pick the driver at runtime
+// based on DATABASE_URL, and Turbopack would otherwise bundle BOTH drivers
+// into every server function, bloating the deploy and breaking Vercel
+// serverless because better-sqlite3 is a native module.
+const require = createRequire(/* turbopackIgnore: true */ import.meta.url)
 
 const url = process.env.DATABASE_URL ?? './data/tracker.db'
 // Anything that looks like a URL (libsql://, https://, file:) goes through
