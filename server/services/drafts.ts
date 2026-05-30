@@ -2,6 +2,7 @@ import { and, desc, eq, sql } from 'drizzle-orm'
 import { db } from '@/server/db/client'
 import { drafts, contacts, emailLog, events, type Contact, type Template } from '@/server/db/schema'
 import { personalize } from '@/lib/escape'
+import { wrapEmailHtml } from '@/lib/email-template'
 import { sendMail } from './mailer'
 import { emit } from '@/server/sse'
 import { instrumentHtml } from './tracking'
@@ -22,11 +23,22 @@ export function buildEmail(template: Template, contact: Contact, signature = '')
   }
   const useB = template.subjectB && template.subjectB.trim() && (contact.id % 2 === 1)
   const rawSubject = useB ? template.subjectB : template.subject
+  const subject = personalize(rawSubject, data, 'subject')
+  const bodyHtml = personalize(template.initialMsg, data, 'html')
+  // Wrap in the polished email shell so every template — old or new —
+  // renders with consistent typography, spacing, and a clean card layout.
+  // Signature is rendered inside the wrapper, divider above it.
+  const fullHtml = wrapEmailHtml(bodyHtml, {
+    signature,
+    // Preheader = subject line by default; gives a non-empty inbox preview
+    // without leaking body content the first 100 chars would.
+    preheader: subject,
+  })
   return {
     to: contact.recruiterEmail,
-    subject: personalize(rawSubject, data, 'subject'),
+    subject,
     subjectVariant: useB ? 'B' as const : 'A' as const,
-    html: personalize(template.initialMsg, data, 'html') + signature,
+    html: fullHtml,
     text: personalize(template.initialMsg, data, 'text'),
   }
 }

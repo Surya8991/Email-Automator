@@ -1,10 +1,10 @@
 import { redirect } from 'next/navigation'
 import { auth, signIn } from '@/auth'
-import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { env } from '@/lib/env'
 import { DevSignInButton } from './dev-signin'
+import { SubmitButton } from './submit-button'
 import { ThemeToggle } from '@/components/theme-toggle'
 import {
   Workflow, BarChart3, Sparkles, Send, ShieldCheck, FileText, Clock,
@@ -86,6 +86,27 @@ export default async function LoginPage() {
             <p className="mt-1 text-sm text-muted-foreground">Sign in to your workspace.</p>
           </div>
 
+          {/* Google = primary action. One click, no inbox round-trip,
+              also the only path that grants Gmail API scopes for the
+              reply / bounce / signature features. */}
+          {googleOk ? (
+            <form action={async () => { 'use server'; await signIn('google', { redirectTo: '/dashboard' }) }}>
+              <SubmitButton
+                variant="outline"
+                className="h-11 w-full justify-center gap-3 border-zinc-300 bg-white text-zinc-900 shadow-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+                pendingChildren="Redirecting to Google…"
+              >
+                <GoogleIcon className="h-5 w-5" />
+                <span className="text-[15px] font-medium">Continue with Google</span>
+              </SubmitButton>
+              <p className="mt-2 text-center text-[11px] text-muted-foreground">
+                Fastest path. Also unlocks Gmail signature / reply / bounce detection.
+              </p>
+            </form>
+          ) : null}
+
+          {googleOk && emailOk ? <Divider label="or" /> : null}
+
           {emailOk ? (
             <form action={async (fd) => {
               'use server'
@@ -100,25 +121,18 @@ export default async function LoginPage() {
                 <Label htmlFor="email">Email</Label>
                 <Input id="email" name="email" type="email" placeholder="you@example.com" required autoComplete="email" />
               </div>
-              <Button type="submit" className="w-full">Send magic link</Button>
+              <SubmitButton className="h-11 w-full" pendingChildren="Sending link…">
+                Send magic link
+              </SubmitButton>
               <p className="text-xs text-muted-foreground">We'll email you a one-click sign-in link.</p>
             </form>
           ) : (
-            <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
-              <strong>Magic-link disabled.</strong> Set <code>SMTP_USER</code> and <code>SMTP_PASS</code> in <code>.env</code> to enable.
-            </div>
+            !googleOk ? (
+              <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+                <strong>No sign-in providers configured.</strong> Set <code>GOOGLE_CLIENT_ID</code> / <code>SECRET</code> or <code>SMTP_USER</code> / <code>PASS</code> in <code>.env</code>.
+              </div>
+            ) : null
           )}
-
-          {googleOk ? (
-            <>
-              <Divider label="or" />
-              <form action={async () => { 'use server'; await signIn('google', { redirectTo: '/dashboard' }) }}>
-                <Button type="submit" variant="outline" className="w-full">
-                  <GoogleIcon /> Continue with Google
-                </Button>
-              </form>
-            </>
-          ) : null}
 
           {devBypass.length > 0 ? (
             <>
@@ -151,9 +165,11 @@ function Divider({ label }: { label: string }) {
   )
 }
 
-function GoogleIcon() {
+// Official Google "G" logo per Google's branding guidelines. Four-color
+// SVG, scales cleanly. Class is applied by caller for sizing.
+function GoogleIcon({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 48 48" className="mr-2 h-4 w-4" aria-hidden>
+    <svg viewBox="0 0 48 48" className={className ?? 'mr-2 h-4 w-4'} aria-hidden>
       <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3 0 5.8 1.1 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20c10.5 0 19.5-7.7 19.5-20 0-1.2-.1-2.4-.4-3.5z"/>
       <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16 19 12 24 12c3 0 5.8 1.1 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.5 6.3 14.7z"/>
       <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5c-2 1.5-4.5 2.3-7.2 2.3-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.5 16.1 44 24 44z"/>
