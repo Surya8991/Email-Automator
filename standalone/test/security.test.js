@@ -129,12 +129,21 @@ describe('CSP enabled', () => {
 });
 
 describe('scheduler.backoffMs', () => {
-  it('grows exponentially and caps at 30 minutes', () => {
+  it('always falls inside the documented jitter window per attempt', () => {
     const { backoffMs } = require('../scheduler');
-    const a = backoffMs(1);
-    const b = backoffMs(2);
-    const c = backoffMs(10); // would be huge without the cap
-    expect(b).toBeGreaterThan(a * 0.5); // jittered but trending up
-    expect(c).toBeLessThanOrEqual(30 * 60 * 1000 * 1.25); // hard cap + jitter
+    const base = 60 * 1000; // matches config.RETRY_DELAY_MS
+    const CAP = 30 * 60 * 1000;
+    // Sample each attempt many times — assertion is on the WHOLE distribution,
+    // not on any one Math.random() draw, so the test cannot flake.
+    for (const attempt of [1, 2, 3, 5, 10]) {
+      const expectedCenter = Math.min(CAP, base * Math.pow(2, attempt - 1));
+      const lo = Math.max(1000, Math.floor(expectedCenter * 0.75));
+      const hi = Math.ceil(expectedCenter * 1.25);
+      for (let i = 0; i < 50; i++) {
+        const v = backoffMs(attempt);
+        expect(v).toBeGreaterThanOrEqual(lo);
+        expect(v).toBeLessThanOrEqual(hi);
+      }
+    }
   });
 });

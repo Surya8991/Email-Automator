@@ -2,6 +2,7 @@ import NextAuth from 'next-auth'
 import Google from 'next-auth/providers/google'
 import Nodemailer from 'next-auth/providers/nodemailer'
 import { DrizzleAdapter } from '@auth/drizzle-adapter'
+import { redirect } from 'next/navigation'
 import { db } from './server/db/client'
 import { adminEmails, env } from './lib/env'
 
@@ -52,17 +53,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   pages: { signIn: '/login' },
 })
 
-/** Throws if the request is unauthenticated. Use in every Server Action. */
+// Redirects to /login when the request is unauthenticated. We use redirect()
+// rather than throw because Next.js App Router runs layouts and pages in
+// parallel during streaming — a throw in the page would render a 500 even
+// though the layout has already issued its own redirect.
 export async function requireUser() {
   const session = await auth()
-  if (!session?.user || !(session.user as { id?: string }).id) {
-    throw new Error('Unauthorized')
-  }
+  const id = (session?.user as { id?: string } | undefined)?.id
+  if (!session?.user || !id) redirect('/login')
   return session.user as { id: string; email: string; name?: string; image?: string; isAdmin?: boolean }
 }
 
 export async function requireAdmin() {
   const u = await requireUser()
-  if (!u.isAdmin) throw new Error('Forbidden')
+  if (!u.isAdmin) redirect('/dashboard')
   return u
 }

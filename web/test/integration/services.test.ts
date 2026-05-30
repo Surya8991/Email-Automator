@@ -1,0 +1,121 @@
+/**
+ * End-to-end exercise of the contacts + templates + drafts services against
+ * a real in-memory SQLite. We bypass Auth.js (which requires a request context)
+ * by calling the underlying service functions directly with explicit userIds —
+ * the actions layer is a thin Zod + revalidatePath wrapper on top of these.
+ */
+import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
+import Database from 'better-sqlite3'
+import { drizzle } from 'drizzle-orm/better-sqlite3'
+import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
+import { eq } from 'drizzle-orm'
+import path from 'node:path'
+import * as schema from '@/server/db/schema'
+
+// We intercept the @/server/db/client import so the services use this DB.
+const sqlite = new Database(':memory:')
+sqlite.pragma('foreign_keys = ON')
+const db = drizzle(sqlite, { schema })
+
+vi.mock('@/server/db/client', () => ({ db, schema }))
+vi.mock('@/server/services/mailer', () => ({
+  sendMail: vi.fn(async () => ({ messageId: 'test' })),
+}))
+vi.mock('@/server/sse', () => ({ emit: vi.fn(), register: vi.fn(() => () => {}) }))
+
+// Imports below MUST come AFTER vi.mock — services bind to the mocked DB.
+let services: typeof import('@/server/services/contacts') & {
+  templates: typeof import('@/server/services/templates')
+  drafts: typeof import('@/server/services/drafts')
+}
+
+beforeAll(async () => {
+  migrate(db, { migrationsFolder: path.join(process.cwd(), 'server/db/migrations') })
+  const [contactsSvc, templatesSvc, draftsSvc] = await Promise.all([
+    import('@/server/services/contacts'),
+    import('@/server/services/templates'),
+    import('@/server/services/drafts'),
+  ])
+  services = { ...contactsSvc, templates: templatesSvc, drafts: draftsSvc }
+})
+
+beforeEach(() => {
+  sqlite.prepare('DELETE FROM drafts').run()
+  sqlite.prepare('DELETE FROM contacts').run()
+  sqlite.prepare('DELETE FROM templates').run()
+  sqlite.prepare('DELETE FROM users').run()
+})
+
+async function newUser() {
+  const id = crypto.randomUUID()
+  await db.insert(schema.users).values({ id, email: `${id}@test.co` })
+  return id
+}
+
+describe('contacts service', () => {
+  it('addContact + listContacts + emailExists round-trip', async () => {
+    const u = await newUser()
+    await services.addContact(u, { recruiterEmail: 'a@x.co', recruiterName: 'A', company: 'A Co' })
+    await services.addContact(u, { recruiterEmail: 'b@x.co', recruiterName: 'B', company: 'B Co' })
+    const list = await services.listContacts(u, { page: 1, pageSize: 10 })
+    expect(list.total).toBe(2)
+    expect(list.rows.map(r => r.recruiterEmail).sort()).toEqual(['a@x.co', 'b@x.co'])
+    expect(await services.emailExists(u, 'A@X.CO')).toBe(true) // case-insensitive
+    expect(await services.emailExists(u, 'nope@x.co')).toBe(false)
+  })
+
+  it('search narrows by name/company/email/title', async () => {
+    const u = await newUser()
+    await services.addContact(u, { recruiterEmail: 'jane@acme.com', recruiterName: 'Jane', company: 'Acme' })
+    await services.addContact(u, { recruiterEmail: 'bob@globex.com', recruiterName: 'Bob', company: 'Globex' })
+    const r = await services.listContacts(u, { search: 'globex' })
+    expect(r.rows.map(c => c.recruiterEmail)).toEqual(['bob@globex.com'])
+  })
+
+  it('deleteContact does NOT touch another user\'s rows', async () => {
+    const u1 = await newUser()
+    const u2 = await newUser()
+    await services.addContact(u1, { recruiterEmail: 'a@x.co' })
+    await services.addContact(u2, { recruiterEmail: 'a@x.co' })
+    const u1Rows = await db.select().from(schema.contacts).where(eq(schema.contacts.userId, u1))
+    const id = u1Rows[0]!.id
+    // u2 deletes u1's id → no-op (WHERE id=? AND user_id=u2)
+    await services.deleteContact(u2, id)
+    expect(await services.listContacts(u1)).toMatchObject({ total: 1 })
+    expect(await services.listContacts(u2)).toMatchObject({ total: 1 })
+    await services.deleteContact(u1, id)
+    expect(await services.listContacts(u1)).toMatchObject({ total: 0 })
+  })
+})
+
+describe('templates → drafts pipeline', () => {
+  it('activate template + createDraftsBulk + sendDraft + status flow', async () => {
+    const u = await newUser()
+    const t = await services.templates.upsertTemplate(u, 'k1', {
+      label: 'Initial', subject: 'Hi {{name}}', initialMsg: '<p>Hi {{name}} at {{company}}</p>',
+    })
+    await services.templates.activate(u, t.id)
+
+    await services.addContact(u, { recruiterEmail: 'c1@x.co', recruiterName: 'C1', company: 'X' })
+    await services.addContact(u, { recruiterEmail: 'c2@x.co', recruiterName: 'C2', company: 'Y' })
+
+    const active = await services.templates.getActive(u)
+    expect(active?.id).toBe(t.id)
+
+    const r = await services.drafts.createDraftsBulk(u, active!, 10)
+    expect(r.processed).toBe(2)
+
+    const { rows } = await services.drafts.listDrafts(u)
+    expect(rows.map(d => d.toEmail).sort()).toEqual(['c1@x.co', 'c2@x.co'])
+    // listDrafts is desc-by-id, so rows[0] is the most recently inserted draft.
+    const byEmail = Object.fromEntries(rows.map(r => [r.toEmail, r])) as Record<string, typeof rows[number]>
+    expect(byEmail['c1@x.co']!.subject).toBe('Hi C1')
+    expect(byEmail['c2@x.co']!.subject).toBe('Hi C2')
+
+    await services.drafts.sendDraft(u, byEmail['c1@x.co']!.id)
+    const evts = await db.select().from(schema.events).where(eq(schema.events.userId, u))
+    expect(evts[0]?.kind).toBe('sent')
+  })
+})
+
+declare const vi: typeof import('vitest')['vi']

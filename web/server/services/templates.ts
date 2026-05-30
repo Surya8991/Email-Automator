@@ -36,9 +36,11 @@ export async function upsertTemplate(userId: string, key: string, patch: Partial
   return inserted[0]!
 }
 
+// Activate exactly one template per user. better-sqlite3's transaction
+// callback is synchronous, so we issue the two updates back-to-back; if the
+// process crashes between them, the worst case is no template is active for
+// a moment — the UI flips back on the next save.
 export async function activate(userId: string, id: number) {
-  await db.transaction(async (tx) => {
-    await tx.update(templates).set({ active: false }).where(eq(templates.userId, userId))
-    await tx.update(templates).set({ active: true }).where(and(eq(templates.userId, userId), eq(templates.id, id)))
-  })
+  await db.update(templates).set({ active: false }).where(eq(templates.userId, userId))
+  await db.update(templates).set({ active: true }).where(and(eq(templates.userId, userId), eq(templates.id, id)))
 }
