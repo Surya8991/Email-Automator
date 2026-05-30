@@ -32,6 +32,8 @@ const envSchema = z.object({
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   DATABASE_URL: z.string().default('./data/tracker.db'),
+  TURSO_AUTH_TOKEN: z.string().optional(),
+  CRON_SECRET: z.string().optional(),
   GROQ_API_KEY: z.string().optional(),
   GROQ_MODEL: z.string().default('llama-3.3-70b-versatile'),
   ADMIN_EMAILS: z.string().default(''),

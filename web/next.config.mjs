@@ -6,7 +6,7 @@ const nextConfig = {
   },
   // better-sqlite3 is a native module — keep it on the server side and don't
   // try to bundle it.
-  serverExternalPackages: ['better-sqlite3'],
+  serverExternalPackages: ['better-sqlite3', '@libsql/client'],
   async headers() {
     // Dev needs 'unsafe-eval' for Next.js Fast Refresh (the React Refresh
     // runtime calls eval to hot-swap modules). Without it the entire app

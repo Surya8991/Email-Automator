@@ -1,29 +1,50 @@
-import Database from 'better-sqlite3'
-import { drizzle } from 'drizzle-orm/better-sqlite3'
+// Dual-driver Drizzle client. Picks the right driver from DATABASE_URL shape:
+//   - libsql:// or http(s)://  →  @libsql/client (works on Vercel; Turso DBs)
+//   - anything else            →  better-sqlite3 (local file or :memory: for tests)
+//
+// Both branches expose the same query API surface, so service code is
+// driver-agnostic. We don't use db.transaction() anywhere (better-sqlite3 is
+// sync there, libSQL is async) — atomic ops use single CASE-WHEN UPDATEs
+// or rely on UNIQUE constraints + try/catch.
 import path from 'node:path'
 import fs from 'node:fs'
+import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core'
 import * as schema from './schema'
 
 const url = process.env.DATABASE_URL ?? './data/tracker.db'
-// `:memory:` is a sentinel that better-sqlite3 routes to an in-process DB —
-// we must NOT join it with cwd.
-const inMemory = url === ':memory:'
-const dbPath = inMemory ? ':memory:' : (path.isAbsolute(url) ? url : path.join(process.cwd(), url))
+// Anything that looks like a URL (libsql://, https://, file:) goes through
+// the libSQL driver — that's the modern Turso wire format. Bare paths
+// (./data/tracker.db, /var/lib/...) go through better-sqlite3.
+const isLibsql = /^(libsql:|https?:|file:)/i.test(url)
 
-if (!inMemory) {
-  // Ensure directory exists — better-sqlite3 doesn't create parents.
-  fs.mkdirSync(path.dirname(dbPath), { recursive: true })
+// Build the driver synchronously at module-load time. We use require() so
+// Webpack can statically include only the driver we need at build time when
+// `serverExternalPackages` is configured in next.config.
+let db: BaseSQLiteDatabase<'sync' | 'async', unknown, typeof schema>
+
+if (isLibsql) {
+  // ─── libSQL / Turso ────────────────────────────────────────────────
+  const { createClient } = require('@libsql/client') as typeof import('@libsql/client')
+  const { drizzle } = require('drizzle-orm/libsql') as typeof import('drizzle-orm/libsql')
+  const client = createClient({
+    url,
+    authToken: process.env.TURSO_AUTH_TOKEN,
+  })
+  db = drizzle(client, { schema }) as unknown as typeof db
+} else {
+  // ─── better-sqlite3 (local file or :memory:) ───────────────────────
+  const inMemory = url === ':memory:'
+  const dbPath = inMemory ? ':memory:' : (path.isAbsolute(url) ? url : path.join(process.cwd(), url))
+  if (!inMemory) fs.mkdirSync(path.dirname(dbPath), { recursive: true })
+
+  const Database = require('better-sqlite3') as typeof import('better-sqlite3')
+  const { drizzle } = require('drizzle-orm/better-sqlite3') as typeof import('drizzle-orm/better-sqlite3')
+  const sqlite = new Database(dbPath)
+  sqlite.pragma('journal_mode = WAL')   // no-op on :memory:; harmless
+  sqlite.pragma('synchronous = NORMAL')
+  sqlite.pragma('foreign_keys = ON')
+  db = drizzle(sqlite, { schema }) as unknown as typeof db
 }
 
-// WAL gives us concurrent readers + a single writer with no blocking on the
-// reader side. NORMAL sync drops fsync per-tx in exchange for crash-tolerance
-// only at the last few ms of writes — fine for this workload. (WAL is a no-op
-// on :memory: but the pragma call is harmless.)
-const sqlite = new Database(dbPath)
-sqlite.pragma('journal_mode = WAL')
-sqlite.pragma('synchronous = NORMAL')
-sqlite.pragma('foreign_keys = ON')
-
-export const db = drizzle(sqlite, { schema })
+export { db, schema }
 export type DB = typeof db
-export { schema }

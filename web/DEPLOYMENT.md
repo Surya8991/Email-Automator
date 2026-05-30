@@ -52,38 +52,40 @@ or run `npm run worker` inside the main container under tini/s6/etc.
 
 ## 3. Vercel
 
-Works for the UI, but Vercel is serverless — **the SQLite file does not
-persist**. You need a hosted DB and a cron-triggered worker.
+The UI runs as Lambdas. SQLite files don't persist between invocations, so
+you need a hosted DB and a cron-triggered worker — **both are wired**.
 
-### Database
+### Database — Turso (zero code changes needed)
 
-Pick one:
+`server/db/client.ts` auto-detects the driver from `DATABASE_URL`:
+- relative or absolute path → better-sqlite3 (local dev)
+- `libsql://…` or `https://…` → @libsql/client (Vercel)
 
-**Turso (recommended)** — libSQL, near drop-in for SQLite:
+Same schema, same migrations, same SQL — Turso is wire-compatible with SQLite.
 
-```bash
-npm i @libsql/client
-```
+1. Create the Turso DB once from your laptop:
+   ```bash
+   curl -sSfL https://get.tur.so/install.sh | bash
+   turso auth signup
+   turso db create email-automator
+   turso db show email-automator --url      # → libsql://email-automator-<org>.turso.io
+   turso db tokens create email-automator   # → eyJ…
+   ```
+2. Apply migrations to the new Turso DB:
+   ```bash
+   DATABASE_URL=libsql://email-automator-<org>.turso.io \
+   TURSO_AUTH_TOKEN=eyJ… \
+   npm run db:migrate
+   ```
+3. (Optional) Seed starter templates after you sign in once via Vercel:
+   ```bash
+   DATABASE_URL=libsql://… TURSO_AUTH_TOKEN=… \
+   npm run seed:templates -- you@example.com
+   ```
 
-Swap `server/db/client.ts`:
-
-```ts
-import { createClient } from '@libsql/client'
-import { drizzle } from 'drizzle-orm/libsql'
-
-const client = createClient({ url: process.env.DATABASE_URL!, authToken: process.env.TURSO_AUTH_TOKEN })
-export const db = drizzle(client, { schema })
-```
-
-Set:
-
-```
-DATABASE_URL=libsql://<your-db>.turso.io
-TURSO_AUTH_TOKEN=<token>
-```
-
-**Vercel Postgres / Neon** — change schema to `pgTable` + use Drizzle's pg
-adapter. Heavier migration; only do this if you already have a Postgres in your stack.
+**Alternative: Vercel Postgres / Neon** — heavier swap; change `sqliteTable`
+to `pgTable` in `server/db/schema.ts` and use Drizzle's pg adapter. Only
+worth it if Postgres is already part of your stack.
 
 ### Worker → Vercel Cron
 
