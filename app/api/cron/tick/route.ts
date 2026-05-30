@@ -4,9 +4,11 @@ import { tickOnce } from '@/server/services/scheduler-tick'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-// Vercel cron target — runs every minute via vercel.json. Same one-pass tick
-// the worker process uses. Protect with CRON_SECRET; Vercel sets the
-// Authorization: Bearer header automatically when configured.
+// Cron target — runs the same one-pass tick as the worker process.
+// On the Hobby plan, Vercel cron is rate-limited to once/day, so we drive
+// this from GitHub Actions (.github/workflows/cron-tick.yml) every 5 minutes
+// instead. The Action sends `Authorization: Bearer $CRON_SECRET`.
+// Without CRON_SECRET set, this route is open — guard it in any prod deploy.
 async function unauthorized(req: Request): Promise<boolean> {
   const secret = process.env.CRON_SECRET
   if (!secret) return false // no secret configured → open (don't enable in prod without one)
