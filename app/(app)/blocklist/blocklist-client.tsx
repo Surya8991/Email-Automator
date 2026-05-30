@@ -1,10 +1,11 @@
 'use client'
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Trash2 } from 'lucide-react'
+import { Trash2, Upload } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { addBlocklistAction, removeBlocklistAction } from '@/server/actions/blocklist'
+import { addBlocklistAction, removeBlocklistAction, bulkAddBlocklistAction } from '@/server/actions/blocklist'
 import { useFormatDate } from '@/components/timezone-provider'
 
 interface Row { id: number; userId: string | null; pattern: string; type: string; createdAt: Date }
@@ -16,6 +17,8 @@ export function BlocklistClient({ rows }: { rows: Row[] }) {
   const [type, setType] = useState<'email' | 'domain'>('email')
   const [pending, start] = useTransition()
   const [err, setErr] = useState<string | null>(null)
+  const [bulkOpen, setBulkOpen] = useState(false)
+  const [bulkText, setBulkText] = useState('')
 
   return (
     <div>
@@ -32,8 +35,34 @@ export function BlocklistClient({ rows }: { rows: Row[] }) {
           if ('error' in r && r.error) { setErr(r.error); return }
           setPattern(''); router.refresh()
         })}>Block</Button>
+        <Button variant="outline" disabled={pending} onClick={() => setBulkOpen((x) => !x)}>
+          <Upload className="mr-1.5 h-4 w-4" /> Bulk add
+        </Button>
         {err ? <p className="text-sm text-destructive">{err}</p> : null}
       </div>
+      {bulkOpen ? (
+        <div className="border-b bg-muted/30 p-3 space-y-2">
+          <p className="text-xs text-muted-foreground">
+            Paste emails or domains, one per line (or comma-separated).
+            Anything with <code>@</code> is treated as an email; everything
+            else as a domain.
+          </p>
+          <textarea
+            value={bulkText} onChange={(e) => setBulkText(e.target.value)}
+            rows={6}
+            placeholder={'spam@example.com\nbadcompany.com\nclickbait.io'}
+            className="w-full rounded-md border bg-background px-3 py-2 font-mono text-xs"
+          />
+          <div className="flex gap-2">
+            <Button size="sm" disabled={pending || !bulkText.trim()} onClick={() => start(async () => {
+              const r = await bulkAddBlocklistAction(bulkText)
+              toast.success(`Added ${r.added}${r.skipped ? ` · ${r.skipped} skipped` : ''}`)
+              setBulkText(''); setBulkOpen(false); router.refresh()
+            })}>Add list</Button>
+            <Button size="sm" variant="ghost" onClick={() => { setBulkOpen(false); setBulkText('') }}>Cancel</Button>
+          </div>
+        </div>
+      ) : null}
       {rows.length === 0 ? (
         <div className="px-6 py-12 text-center text-sm text-muted-foreground">No blocked patterns yet.</div>
       ) : (

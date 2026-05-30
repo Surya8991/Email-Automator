@@ -39,7 +39,7 @@ export function ContactsToolbar() {
       <Button variant="ghost" size="sm" asChild>
         <a href="/api/contacts/export" download><Download className="mr-1.5 h-4 w-4" /> Export</a>
       </Button>
-      <Button variant="ghost" size="sm" asChild>
+      <Button variant="ghost" size="sm" asChild title="Download a starter CSV with the right column headers + 5 realistic sample rows">
         <a href="/api/csv-template" download><FileText className="mr-1.5 h-4 w-4" /> Sample CSV</a>
       </Button>
       <Button variant="ghost" size="sm" disabled={pending}

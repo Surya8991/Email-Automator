@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { requireUser } from '@/auth'
-import { getCampaign } from '@/server/services/campaigns'
+import { getCampaign, getStepStats } from '@/server/services/campaigns'
 import { listTemplates } from '@/server/services/templates'
 import { listTags } from '@/server/services/contacts'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -14,7 +14,9 @@ export default async function CampaignDetailPage(props: { params: Promise<{ id: 
   if (!Number.isFinite(cid)) notFound()
   const data = await getCampaign(u.id, cid)
   if (!data) notFound()
-  const [tpls, tags] = await Promise.all([listTemplates(u.id), listTags(u.id)])
+  const [tpls, tags, stepStats] = await Promise.all([
+    listTemplates(u.id), listTags(u.id), getStepStats(u.id, cid),
+  ])
 
   return (
     <div className="space-y-6">
@@ -41,6 +43,7 @@ export default async function CampaignDetailPage(props: { params: Promise<{ id: 
         enrollments={data.enrollments}
         templates={tpls.map((t) => ({ id: t.id, label: t.label || t.key }))}
         tags={tags}
+        stepStats={stepStats}
       />
     </div>
   )

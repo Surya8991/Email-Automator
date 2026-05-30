@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { eq, inArray, and } from 'drizzle-orm'
 import { requireUser } from '@/auth'
 import { db } from '@/server/db/client'
-import { contacts } from '@/server/db/schema'
+import { contacts, blocklist } from '@/server/db/schema'
 import * as svc from '@/server/services/contacts'
 import { parseCsv, parseXlsx } from '@/server/services/importer'
 
@@ -42,6 +42,39 @@ export async function deleteContactsBulkAction(ids: number[]) {
   await svc.deleteContactsBulk(u.id, ids)
   revalidatePath('/contacts')
   return { ok: true, deleted: ids.length }
+}
+
+// Bulk-tag the selected contacts. `add` and `remove` are comma-separated.
+export async function bulkTagAction(ids: number[], add: string, remove: string) {
+  const u = await requireUser()
+  if (ids.length === 0) return { error: 'No contacts selected' }
+  const addList = add.split(',').map((s) => s.trim()).filter(Boolean)
+  const remList = remove.split(',').map((s) => s.trim()).filter(Boolean)
+  const r = await svc.bulkTag(u.id, ids, addList, remList)
+  revalidatePath('/contacts')
+  return { ok: true, ...r }
+}
+
+// Add every selected contact's email to the per-user blocklist, then
+// delete them from contacts. One-step "this person should never hear
+// from me again" flow.
+export async function bulkBlockAction(ids: number[]) {
+  const u = await requireUser()
+  if (ids.length === 0) return { error: 'No contacts selected' }
+  const rows = await db.select({ email: contacts.recruiterEmail }).from(contacts)
+    .where(and(eq(contacts.userId, u.id), inArray(contacts.id, ids)))
+  let blocked = 0
+  for (const r of rows) {
+    if (!r.email) continue
+    try {
+      await db.insert(blocklist).values({ userId: u.id, pattern: r.email.toLowerCase(), type: 'email' })
+      blocked++
+    } catch { /* unique-conflict ok — already blocked */ }
+  }
+  await svc.deleteContactsBulk(u.id, ids)
+  revalidatePath('/contacts')
+  revalidatePath('/blocklist')
+  return { ok: true, blocked, deleted: rows.length }
 }
 
 // Reset the email_status on a set of contacts (so the next "Create drafts"

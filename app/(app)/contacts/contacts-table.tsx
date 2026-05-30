@@ -1,11 +1,14 @@
 'use client'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useState, useTransition } from 'react'
-import { Trash2, ChevronLeft, ChevronRight, Search, History, X, Tag } from 'lucide-react'
+import { Trash2, ChevronLeft, ChevronRight, Search, History, X, Tag, Ban, RotateCcw, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type { Contact } from '@/server/db/schema'
-import { deleteContactAction, deleteContactsBulkAction } from '@/server/actions/contacts'
+import {
+  deleteContactAction, deleteContactsBulkAction,
+  bulkTagAction, bulkBlockAction, resetStatusAction,
+} from '@/server/actions/contacts'
 import { ContactTimeline } from './contact-timeline'
 
 interface Props { rows: Contact[]; page: number; pages: number; search: string; tag: string; allTags: string[] }
@@ -48,12 +51,58 @@ export function ContactsTable({ rows, page, pages, search, tag, allTags }: Props
           </Button>
         ) : null}
         {selected.size > 0 ? (
-          <Button variant="destructive" size="sm" disabled={pending} onClick={() => {
-            const ids = Array.from(selected)
-            start(async () => { await deleteContactsBulkAction(ids); setSelected(new Set()); router.refresh() })
-          }}>
-            <Trash2 className="mr-1.5 h-4 w-4" /> Delete {selected.size}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/40 px-2 py-1 text-sm">
+            <span className="px-1 font-medium">{selected.size} selected</span>
+            <Button variant="ghost" size="sm" disabled={pending} onClick={() => {
+              const t = prompt('Tags to add (comma-separated):')?.trim()
+              if (!t) return
+              const ids = Array.from(selected)
+              start(async () => {
+                const r = await bulkTagAction(ids, t, '')
+                setSelected(new Set())
+                router.refresh()
+                if ('updated' in r) alert(`Tagged ${r.updated}`)
+              })
+            }}>
+              <Plus className="mr-1 h-3.5 w-3.5" /> Add tag
+            </Button>
+            <Button variant="ghost" size="sm" disabled={pending} onClick={() => {
+              const t = prompt('Tags to remove (comma-separated):')?.trim()
+              if (!t) return
+              const ids = Array.from(selected)
+              start(async () => {
+                await bulkTagAction(ids, '', t); setSelected(new Set()); router.refresh()
+              })
+            }}>
+              <X className="mr-1 h-3.5 w-3.5" /> Remove tag
+            </Button>
+            <Button variant="ghost" size="sm" disabled={pending} onClick={() => {
+              if (!confirm(`Reset email-status on ${selected.size} contact(s)? They'll be eligible for a new draft.`)) return
+              const ids = Array.from(selected)
+              start(async () => { await resetStatusAction(ids); setSelected(new Set()); router.refresh() })
+            }}>
+              <RotateCcw className="mr-1 h-3.5 w-3.5" /> Reset status
+            </Button>
+            <Button variant="ghost" size="sm" disabled={pending} onClick={() => {
+              if (!confirm(`Block ${selected.size} email(s) AND remove them from contacts? This adds them to your blocklist.`)) return
+              const ids = Array.from(selected)
+              start(async () => {
+                const r = await bulkBlockAction(ids)
+                setSelected(new Set()); router.refresh()
+                if ('blocked' in r) alert(`Blocked ${r.blocked}, removed ${r.deleted}`)
+              })
+            }}>
+              <Ban className="mr-1 h-3.5 w-3.5" /> Block
+            </Button>
+            <Button variant="destructive" size="sm" disabled={pending} onClick={() => {
+              if (!confirm(`Delete ${selected.size} contact(s) permanently?`)) return
+              const ids = Array.from(selected)
+              start(async () => { await deleteContactsBulkAction(ids); setSelected(new Set()); router.refresh() })
+            }}>
+              <Trash2 className="mr-1 h-3.5 w-3.5" /> Delete
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>Clear</Button>
+          </div>
         ) : null}
       </div>
 
@@ -98,7 +147,19 @@ export function ContactsTable({ rows, page, pages, search, tag, allTags }: Props
           <table className="w-full text-sm">
             <thead className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="w-10 px-3 py-2"></th>
+                <th className="w-10 px-3 py-2">
+                  {/* Select-all toggle. Selects the visible page only — not
+                      across pages — to avoid surprise deletes on a full
+                      multi-page set the user can't currently see. */}
+                  <input type="checkbox" aria-label="Select all on this page"
+                    checked={rows.length > 0 && rows.every((c) => selected.has(c.id))}
+                    onChange={(e) => {
+                      const n = new Set(selected)
+                      if (e.target.checked) for (const c of rows) n.add(c.id)
+                      else for (const c of rows) n.delete(c.id)
+                      setSelected(n)
+                    }} />
+                </th>
                 <th className="px-3 py-2">Name</th>
                 <th className="px-3 py-2">Company</th>
                 <th className="px-3 py-2">Role</th>

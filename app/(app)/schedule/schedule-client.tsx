@@ -23,6 +23,36 @@ function tomorrow930() {
   return { date: d.toISOString().slice(0, 10), time: '09:30' }
 }
 
+// Recurring schedule presets — pick a future date that matches the
+// pattern starting from `from` (typically today). All return YYYY-MM-DD.
+function nextWeekday(from: Date): string {
+  const d = new Date(from); d.setDate(d.getDate() + 1)
+  // Skip Sat (6) / Sun (0) until Mon-Fri
+  while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1)
+  return d.toISOString().slice(0, 10)
+}
+function nextMonday(from: Date): string {
+  const d = new Date(from); d.setDate(d.getDate() + 1)
+  while (d.getDay() !== 1) d.setDate(d.getDate() + 1)
+  return d.toISOString().slice(0, 10)
+}
+function inDays(from: Date, n: number): string {
+  const d = new Date(from); d.setDate(d.getDate() + n)
+  return d.toISOString().slice(0, 10)
+}
+
+interface Preset { label: string; date: string; time: string; hint: string }
+function buildPresets(): Preset[] {
+  const now = new Date()
+  return [
+    { label: 'Tomorrow 9:30 AM', date: inDays(now, 1), time: '09:30', hint: 'Standard outreach window' },
+    { label: 'Next weekday 10:00 AM', date: nextWeekday(now), time: '10:00', hint: 'Skips weekends' },
+    { label: 'Next Monday 9:00 AM', date: nextMonday(now), time: '09:00', hint: 'Start of week' },
+    { label: 'In 3 days, 11:00 AM', date: inDays(now, 3), time: '11:00', hint: 'Give yourself buffer' },
+    { label: 'Tonight 7:00 PM', date: inDays(now, 0), time: '19:00', hint: 'Post-work hours' },
+  ]
+}
+
 export function ScheduleClient({ queue, queueCount }: { queue: QueueRow[]; queueCount: number }) {
   const formatDate = useFormatDate()
   const tz = useTimezone()
@@ -40,8 +70,24 @@ export function ScheduleClient({ queue, queueCount }: { queue: QueueRow[]; queue
   const [preview, setPreview] = useState<PreviewResp | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
 
+  const presets = buildPresets()
+
   return (
     <div>
+      <div className="flex flex-wrap items-center gap-2 border-b bg-muted/30 px-4 py-2 text-xs">
+        <span className="font-medium text-muted-foreground">Presets:</span>
+        {presets.map((p) => (
+          <button
+            key={p.label}
+            type="button"
+            onClick={() => { setDate(p.date); setTime(p.time) }}
+            title={p.hint}
+            className="rounded-md border bg-background px-2 py-1 hover:bg-accent"
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
       <div className="flex flex-wrap items-end gap-3 border-b p-4">
         <div className="grid gap-1.5">
           <Label htmlFor="date">Start date</Label>

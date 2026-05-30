@@ -5,6 +5,7 @@ import { eq, sql } from 'drizzle-orm'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { AdminTable } from './admin-table'
 import { adminEmails } from '@/lib/env'
+import { getUserSuspensions } from '@/server/actions/admin'
 
 async function userStats(uid: string) {
   const cRows = await db.select({ n: sql<number>`COUNT(*)` }).from(contacts).where(eq(contacts.userId, uid))
@@ -20,11 +21,13 @@ async function userStats(uid: string) {
 export default async function AdminPage() {
   const me = await requireAdmin()
   const all = await db.select().from(users)
+  const suspensions = await getUserSuspensions(all.map((u) => u.id))
   const rows = await Promise.all(all.map(async (u) => ({
     id: u.id, email: u.email, name: u.name ?? '',
     createdAt: u.createdAt.toISOString(),
     isAdmin: adminEmails.includes((u.email ?? '').toLowerCase()),
     isMe: u.id === me.id,
+    suspended: suspensions[u.id] ?? false,
     ...(await userStats(u.id)),
   })))
 

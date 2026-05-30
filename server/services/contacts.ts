@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, like, or, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, inArray, like, or, sql } from 'drizzle-orm'
 import { db } from '@/server/db/client'
 import { contacts } from '@/server/db/schema'
 
@@ -92,6 +92,36 @@ export async function deleteContact(userId: string, id: number) {
 
 export async function deleteContactsBulk(userId: string, ids: number[]) {
   for (const id of ids) await deleteContact(userId, id)
+}
+
+// Merge `add` and remove `remove` tags from each selected contact. Both
+// arrays are normalized (lowercased, deduped) before being applied. We
+// re-read each row instead of a single CASE because the dual-driver layer
+// makes set arithmetic in SQL awkward and the N here is bounded by what
+// the user could have selected on one page (<= 200).
+export async function bulkTag(
+  userId: string,
+  ids: number[],
+  add: string[] = [],
+  remove: string[] = [],
+) {
+  const addN = new Set(normalizeTags(add.join(',')).split(',').filter(Boolean))
+  const remN = new Set(normalizeTags(remove.join(',')).split(',').filter(Boolean))
+  if (addN.size === 0 && remN.size === 0) return { updated: 0 }
+  const rows = await db.select({ id: contacts.id, tags: contacts.tags }).from(contacts)
+    .where(and(eq(contacts.userId, userId), inArray(contacts.id, ids)))
+  let updated = 0
+  for (const r of rows) {
+    const current = new Set((r.tags || '').split(',').filter(Boolean))
+    for (const t of addN) current.add(t)
+    for (const t of remN) current.delete(t)
+    const next = Array.from(current).sort().join(',')
+    if (next !== (r.tags || '')) {
+      await db.update(contacts).set({ tags: next }).where(eq(contacts.id, r.id))
+      updated++
+    }
+  }
+  return { updated }
 }
 
 export async function recentContacts(userId: string, n: number) {

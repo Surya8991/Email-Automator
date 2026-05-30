@@ -24,3 +24,20 @@ export async function removeBlocklistAction(id: number) {
   revalidatePath('/blocklist')
   return { ok: true }
 }
+
+// Bulk import — paste a newline/comma-separated list. Anything containing
+// "@" is treated as an email, otherwise as a domain. Skips duplicates and
+// empty lines silently; returns counters.
+export async function bulkAddBlocklistAction(text: string): Promise<{ ok: boolean; added: number; skipped: number }> {
+  const u = await requireUser()
+  const items = text.split(/[\s,]+/).map((s) => s.trim().toLowerCase()).filter(Boolean)
+  let added = 0, skipped = 0
+  for (const raw of items) {
+    if (raw.length < 3 || raw.length > 120) { skipped++; continue }
+    const type = raw.includes('@') ? 'email' : 'domain'
+    try { await svc.addEntry(u.id, raw, type); added++ }
+    catch { skipped++ }
+  }
+  revalidatePath('/blocklist')
+  return { ok: true, added, skipped }
+}

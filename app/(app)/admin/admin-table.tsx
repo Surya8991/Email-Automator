@@ -1,14 +1,14 @@
 'use client'
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Trash2, Shield, User } from 'lucide-react'
+import { Trash2, Shield, User, Pause, Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { deleteUserAction } from '@/server/actions/admin'
+import { deleteUserAction, suspendUserAction } from '@/server/actions/admin'
 import { useFormatDate } from '@/components/timezone-provider'
 
 interface Row {
   id: string; email: string; name: string; createdAt: string
-  isAdmin: boolean; isMe: boolean
+  isAdmin: boolean; isMe: boolean; suspended: boolean
   contacts: number; drafts: number; events: number
 }
 
@@ -52,18 +52,34 @@ export function AdminTable({ rows }: { rows: Row[] }) {
                 {r.isMe || r.isAdmin ? (
                   <span className="text-xs text-muted-foreground">read-only</span>
                 ) : (
-                  <Button variant="ghost" size="icon" aria-label="Delete user" disabled={pending}
-                    onClick={() => {
-                      if (!confirm(`Delete ${r.email}? Their contacts/templates/drafts/sessions/events all go too.`)) return
-                      start(async () => {
+                  <span className="inline-flex items-center gap-1">
+                    {r.suspended ? <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] text-amber-600">suspended</span> : null}
+                    <Button
+                      variant="ghost" size="icon"
+                      aria-label={r.suspended ? 'Resume sends' : 'Suspend sends'}
+                      title={r.suspended ? 'Resume — worker will send for them again' : 'Suspend — worker stops sending for them'}
+                      disabled={pending}
+                      onClick={() => start(async () => {
                         setErr(null)
-                        const res = await deleteUserAction(r.id)
+                        const res = await suspendUserAction(r.id, !r.suspended)
                         if ('error' in res && res.error) setErr(res.error)
                         router.refresh()
-                      })
-                    }}>
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                      })}>
+                      {r.suspended ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
+                    </Button>
+                    <Button variant="ghost" size="icon" aria-label="Delete user" disabled={pending}
+                      onClick={() => {
+                        if (!confirm(`Delete ${r.email}? Their contacts/templates/drafts/sessions/events all go too.`)) return
+                        start(async () => {
+                          setErr(null)
+                          const res = await deleteUserAction(r.id)
+                          if ('error' in res && res.error) setErr(res.error)
+                          router.refresh()
+                        })
+                      }}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </span>
                 )}
               </td>
             </tr>

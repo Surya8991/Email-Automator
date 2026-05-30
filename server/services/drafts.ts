@@ -113,6 +113,24 @@ export async function deleteDraft(userId: string, draftId: number) {
   await db.delete(drafts).where(and(eq(drafts.id, draftId), eq(drafts.userId, userId)))
 }
 
+/**
+ * Update a pending draft's subject and body. Lets the user fix typos or
+ * personalize per-recipient before sending — previously they had to
+ * delete + recreate from a template change.
+ */
+export async function updateDraft(
+  userId: string, draftId: number,
+  fields: { subject?: string; htmlBody?: string; plainBody?: string },
+) {
+  const patch: { subject?: string; htmlBody?: string; plainBody?: string } = {}
+  if (fields.subject !== undefined) patch.subject = fields.subject.slice(0, 500)
+  if (fields.htmlBody !== undefined) patch.htmlBody = fields.htmlBody
+  if (fields.plainBody !== undefined) patch.plainBody = fields.plainBody
+  if (Object.keys(patch).length === 0) return
+  await db.update(drafts).set(patch)
+    .where(and(eq(drafts.id, draftId), eq(drafts.userId, userId), eq(drafts.status, 'draft')))
+}
+
 // Send every pending draft, one at a time. Each failure is counted but
 // doesn't abort the loop — best-effort, returns counters for the caller.
 export async function sendAllDrafts(userId: string, max = 50): Promise<{ sent: number; failed: number }> {

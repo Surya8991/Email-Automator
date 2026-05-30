@@ -14,15 +14,20 @@ import { useFormatDate } from '@/components/timezone-provider'
 
 interface Step { id: number; campaignId: number; order: number; templateId: number | null; delayHours: number; stopOnReply: boolean }
 interface Enrollment { id: number; contactId: number; currentStep: number; nextRunAt: number; status: string }
+interface StepStat {
+  stepOrder: number; templateId: number | null
+  sent: number; opened: number; clicked: number; replied: number; advanced: number
+}
 interface Props {
   campaign: { id: number; name: string; status: string }
   steps: Step[]
   enrollments: Enrollment[]
   templates: Array<{ id: number; label: string }>
   tags: string[]
+  stepStats: StepStat[]
 }
 
-export function CampaignDetail({ campaign, steps, enrollments, templates, tags }: Props) {
+export function CampaignDetail({ campaign, steps, enrollments, templates, tags, stepStats }: Props) {
   const formatDate = useFormatDate()
   const router = useRouter()
   const [pending, start] = useTransition()
@@ -148,6 +153,45 @@ export function CampaignDetail({ campaign, steps, enrollments, templates, tags }
               router.refresh()
             })}><UserPlus className="mr-1.5 h-4 w-4" /> Enroll</Button>
           </div>
+
+          {/* Per-step performance — counts sent/open/click/reply per step
+              from the events table, plus the share of enrollments that
+              advanced past this step. Rates are computed off sent so an
+              un-fired step shows zeros instead of dividing by zero. */}
+          {stepStats.length > 0 ? (
+            <div className="mb-4">
+              <h3 className="mb-2 text-sm font-medium text-muted-foreground">Step performance</h3>
+              <table className="w-full text-sm">
+                <thead className="text-left text-xs uppercase text-muted-foreground">
+                  <tr>
+                    <th className="p-1">Step</th>
+                    <th className="p-1">Template</th>
+                    <th className="p-1 text-right">Sent</th>
+                    <th className="p-1 text-right">Opens</th>
+                    <th className="p-1 text-right">Clicks</th>
+                    <th className="p-1 text-right">Replies</th>
+                    <th className="p-1 text-right">Advanced</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stepStats.map((s) => {
+                    const pct = (n: number) => s.sent > 0 ? ` (${Math.round((n / s.sent) * 100)}%)` : ''
+                    return (
+                      <tr key={s.stepOrder} className="border-t">
+                        <td className="p-1 font-medium">#{s.stepOrder + 1}</td>
+                        <td className="p-1 text-xs text-muted-foreground">{tplName(s.templateId)}</td>
+                        <td className="p-1 text-right tabular-nums">{s.sent}</td>
+                        <td className="p-1 text-right tabular-nums">{s.opened}<span className="text-xs text-muted-foreground">{pct(s.opened)}</span></td>
+                        <td className="p-1 text-right tabular-nums">{s.clicked}<span className="text-xs text-muted-foreground">{pct(s.clicked)}</span></td>
+                        <td className="p-1 text-right tabular-nums">{s.replied}<span className="text-xs text-muted-foreground">{pct(s.replied)}</span></td>
+                        <td className="p-1 text-right tabular-nums">{s.advanced}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
 
           <div>
             <h3 className="mb-2 text-sm font-medium text-muted-foreground">Active enrollments ({enrollments.filter(e => e.status === 'active').length}/{enrollments.length})</h3>

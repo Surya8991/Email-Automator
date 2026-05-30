@@ -48,6 +48,18 @@ The local dev cookie is set by `POST /api/dev-signin {email}` when
    bypasses Auth.js entirely; it exists for local smoke tests only.
 7. **Don't add `crons` to `vercel.json`.** Hobby plan rejects sub-daily cadence;
    GitHub Actions (`.github/workflows/cron-tick.yml`) drives the tick every 5 min.
+8. **All visible timestamps go through `formatDate()`** ([lib/utils.ts](lib/utils.ts)).
+   Client components use `useFormatDate()` from
+   [components/timezone-provider.tsx](components/timezone-provider.tsx) so the
+   user's TZ from `settings.TIMEZONE` applies. Server-rendered pages call
+   `formatDate(d, tz)` with `tz` fetched from `getSetting(u.id, 'TIMEZONE')`.
+   Default = `Asia/Kolkata`. Never call `.toLocaleString()` directly.
+9. **Email body composition uses `wrapEmailHtml()`** from
+   [lib/email-template.ts](lib/email-template.ts). It's table-based, inline
+   styled, Outlook-safe. Don't ship raw template HTML straight to nodemailer.
+10. **Per-user kill-switch** — `settings.SENDS_PAUSED=true` makes the worker
+    skip a user. Honored in `scheduler-tick.ts`. Used by both the user-facing
+    "Pause sends" toggle and the admin "Suspend user" toggle.
 
 ## Architecture
 

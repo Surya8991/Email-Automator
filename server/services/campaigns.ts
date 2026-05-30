@@ -2,7 +2,7 @@ import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm'
 import { db } from '@/server/db/client'
 import {
   campaigns, campaignSteps, campaignEnrollments,
-  contacts, type Campaign, type Contact,
+  contacts, events, type Campaign, type Contact,
 } from '@/server/db/schema'
 import { userOwnsTemplate } from './templates'
 
@@ -39,6 +39,57 @@ export async function setStatus(userId: string, id: number, status: 'draft' | 'a
 
 export async function deleteCampaign(userId: string, id: number) {
   await db.delete(campaigns).where(and(eq(campaigns.id, id), eq(campaigns.userId, userId)))
+}
+
+// ─── Step-level performance ───────────────────────────────────────────
+export interface StepStats {
+  stepOrder: number; templateId: number | null
+  sent: number; opened: number; clicked: number; replied: number; advanced: number
+}
+
+/**
+ * For each step in a campaign, count the events we recorded against its
+ * template + sent in the relevant time window. We don't store step_id on
+ * events directly, so we approximate by (campaign_id in meta, step_index)
+ * which scheduler-tick already writes. "advanced" = number of enrollments
+ * that progressed past this step.
+ */
+export async function getStepStats(userId: string, campaignId: number): Promise<StepStats[]> {
+  const steps = await db.select().from(campaignSteps)
+    .where(eq(campaignSteps.campaignId, campaignId)).orderBy(asc(campaignSteps.order))
+  if (steps.length === 0) return []
+
+  // Pull every event for this user where meta references this campaign.
+  // The set is bounded by activity on this single campaign, so loading +
+  // grouping in JS is cheaper than a SQL JSON-path query the dual-driver
+  // would have trouble with.
+  const evRows = await db.select().from(events)
+    .where(and(eq(events.userId, userId), sql`${events.meta} LIKE ${'%"campaignId":' + campaignId + '%'}`))
+
+  const counts = new Map<number, { sent: number; opened: number; clicked: number; replied: number }>()
+  for (const s of steps) counts.set(s.order, { sent: 0, opened: 0, clicked: 0, replied: 0 })
+
+  for (const e of evRows) {
+    let meta: { step?: number; campaignId?: number } = {}
+    try { meta = JSON.parse(e.meta || '{}') } catch { continue }
+    const step = typeof meta.step === 'number' ? meta.step : null
+    if (step === null) continue
+    const b = counts.get(step); if (!b) continue
+    if (e.kind === 'sent') b.sent++
+    else if (e.kind === 'open') b.opened++
+    else if (e.kind === 'click') b.clicked++
+    else if (e.kind === 'reply') b.replied++
+  }
+
+  // Advanced = enrollments whose currentStep > this step's order (or completed).
+  const enrolledRows = await db.select({ currentStep: campaignEnrollments.currentStep, status: campaignEnrollments.status })
+    .from(campaignEnrollments).where(eq(campaignEnrollments.campaignId, campaignId))
+
+  return steps.map((s) => {
+    const c = counts.get(s.order)!
+    const advanced = enrolledRows.filter((e) => e.currentStep > s.order || e.status === 'completed').length
+    return { stepOrder: s.order, templateId: s.templateId, ...c, advanced }
+  })
 }
 
 // ─── Step ops ─────────────────────────────────────────────────────────

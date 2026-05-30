@@ -29,3 +29,28 @@ export async function activateTemplateAction(id: number) {
   revalidatePath('/templates')
   return { ok: true }
 }
+
+// Clone a template into a new row with " (copy)" suffix on label. Useful
+// when you want to A/B-test a subject without losing the original — copy,
+// tweak, activate the copy.
+export async function cloneTemplateAction(id: number) {
+  const u = await requireUser()
+  const all = await svc.listTemplates(u.id)
+  const src = all.find((t) => t.id === id)
+  if (!src) return { error: 'Template not found' }
+  // Find a unique key — append -copy, -copy-2, … until free.
+  const existingKeys = new Set(all.map((t) => t.key))
+  let suffix = 1, newKey = `${src.key}-copy`
+  while (existingKeys.has(newKey)) { suffix++; newKey = `${src.key}-copy-${suffix}` }
+  const created = await svc.upsertTemplate(u.id, newKey, {
+    label: (src.label || src.key) + ' (copy)',
+    category: src.category,
+    subject: src.subject,
+    initialMsg: src.initialMsg,
+    follow1Msg: src.follow1Msg,
+    lastFollowMsg: src.lastFollowMsg,
+    active: false,
+  })
+  revalidatePath('/templates')
+  return { ok: true, id: created.id, key: newKey }
+}

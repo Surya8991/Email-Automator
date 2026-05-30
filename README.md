@@ -4,9 +4,13 @@ A self-hosted email outreach tool. Templates with variables, multi-step
 campaigns, open/click tracking, AI-assisted writing (Groq), per-user
 multi-tenant isolation, full audit log, JSON API + webhooks.
 
-**Stack:** Next.js 15 (App Router) · TypeScript strict · Tailwind +
-shadcn-style UI · Drizzle ORM on SQLite (better-sqlite3 local / Turso on
-Vercel) · Auth.js (magic link + Google) · Groq (Llama 3.3) · Pino logging.
+**Stack:** Next.js 16 (App Router, Turbopack) · React 19 · TypeScript strict
+· Tailwind + shadcn-style UI · Drizzle ORM on SQLite (better-sqlite3 local /
+Turso on Vercel) · Auth.js v5 (Google + magic link) · Groq (Llama 3.3) · Pino
+structured logging.
+
+📖 **[Complete feature list →](FEATURES.md)**
+🤖 **[Working with AI agents on this repo →](AGENTS.md)**
 
 ---
 

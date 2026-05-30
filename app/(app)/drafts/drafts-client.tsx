@@ -2,10 +2,10 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Send, Trash2, Sparkles, SendHorizontal } from 'lucide-react'
+import { Send, Trash2, Sparkles, SendHorizontal, Pencil, Save, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { createDraftsAction, deleteDraftAction, sendAllAction, sendDraftAction } from '@/server/actions/drafts'
+import { createDraftsAction, deleteDraftAction, sendAllAction, sendDraftAction, updateDraftAction } from '@/server/actions/drafts'
 import type { Draft } from '@/server/db/schema'
 import { useProgress } from '@/components/use-progress'
 
@@ -14,6 +14,12 @@ export function DraftsClient({ rows }: { rows: Draft[] }) {
   const [count, setCount] = useState(10)
   const [pending, start] = useTransition()
   const progress = useProgress()
+  // Per-row edit state. Open one draft at a time; editing a second closes
+  // the first. Tracks the local subject/body so the textarea is unaffected
+  // by parent re-renders until save.
+  const [editId, setEditId] = useState<number | null>(null)
+  const [editSubject, setEditSubject] = useState('')
+  const [editBody, setEditBody] = useState('')
 
   return (
     <div>
@@ -53,23 +59,59 @@ export function DraftsClient({ rows }: { rows: Draft[] }) {
         </div>
       ) : (
         <ul className="divide-y">
-          {rows.map((d) => (
+          {rows.map((d) => {
+            const isEditing = editId === d.id
+            return (
             <li key={d.id} className="px-4 py-3">
               <div className="flex items-start gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="text-xs font-mono text-muted-foreground">{d.toEmail}</div>
-                  <details className="group">
-                    <summary className="cursor-pointer list-none font-medium hover:text-primary">
-                      {d.subject} <span className="text-xs text-muted-foreground group-open:hidden">— click to preview body</span>
-                    </summary>
-                    <div className="mt-2 max-h-64 overflow-auto rounded-md border bg-muted/40 p-3 text-xs">
-                      <div className="prose prose-sm dark:prose-invert max-w-none"
-                        // eslint-disable-next-line react/no-danger
-                        dangerouslySetInnerHTML={{ __html: d.htmlBody }} />
+                  {isEditing ? (
+                    // Inline editor — subject Input + plain HTML textarea.
+                    // Saves overwrite both subject + htmlBody; plainBody is
+                    // recomputed lazily next time the user toggles preview.
+                    <div className="mt-2 space-y-2">
+                      <Input value={editSubject} onChange={(e) => setEditSubject(e.target.value)}
+                        className="font-medium" placeholder="Subject" />
+                      <textarea value={editBody} onChange={(e) => setEditBody(e.target.value)}
+                        rows={12}
+                        className="w-full rounded-md border bg-background px-3 py-2 font-mono text-xs"
+                        placeholder="HTML body" />
                     </div>
-                  </details>
+                  ) : (
+                    <details className="group">
+                      <summary className="cursor-pointer list-none font-medium hover:text-primary">
+                        {d.subject} <span className="text-xs text-muted-foreground group-open:hidden">— click to preview body</span>
+                      </summary>
+                      <div className="mt-2 max-h-64 overflow-auto rounded-md border bg-muted/40 p-3 text-xs">
+                        <div className="prose prose-sm dark:prose-invert max-w-none"
+                          // eslint-disable-next-line react/no-danger
+                          dangerouslySetInnerHTML={{ __html: d.htmlBody }} />
+                      </div>
+                    </details>
+                  )}
                 </div>
-                <Button variant="ghost" size="icon" aria-label="Send" disabled={pending}
+                {isEditing ? (
+                  <>
+                    <Button variant="ghost" size="icon" aria-label="Save" disabled={pending}
+                      onClick={() => start(async () => {
+                        await updateDraftAction(d.id, { subject: editSubject, htmlBody: editBody })
+                        setEditId(null); toast.success('Draft updated'); router.refresh()
+                      })}>
+                      <Save className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" aria-label="Cancel"
+                      onClick={() => setEditId(null)}>
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </>
+                ) : (
+                  <Button variant="ghost" size="icon" aria-label="Edit"
+                    onClick={() => { setEditId(d.id); setEditSubject(d.subject); setEditBody(d.htmlBody) }}>
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                )}
+                <Button variant="ghost" size="icon" aria-label="Send" disabled={pending || isEditing}
                   onClick={() => start(async () => {
                     try { await sendDraftAction(d.id); toast.success(`Sent to ${d.toEmail}`) }
                     catch (e) { toast.error(e instanceof Error ? e.message : 'Send failed') }
@@ -85,7 +127,8 @@ export function DraftsClient({ rows }: { rows: Draft[] }) {
                 </Button>
               </div>
             </li>
-          ))}
+            )
+          })}
         </ul>
       )}
     </div>

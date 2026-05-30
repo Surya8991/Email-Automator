@@ -28,6 +28,25 @@ export async function deleteDraftAction(id: number) {
   return { ok: true }
 }
 
+export async function updateDraftAction(id: number, fields: { subject?: string; htmlBody?: string }) {
+  const u = await requireUser()
+  await drafts.updateDraft(u.id, id, fields)
+  revalidatePath('/drafts')
+  return { ok: true }
+}
+
+// Retry just the drafts that previously failed (status === 'failed-send').
+// MVP: we don't track per-draft failure state separately yet, so this
+// re-fires anything pending in the queue — same as sendAll. Kept as its
+// own action so the UI button can be wired without changing semantics
+// later when we add a "failed" sub-state.
+export async function retryFailedAction() {
+  const u = await requireUser()
+  const r = await drafts.sendAllDrafts(u.id, 50)
+  revalidatePath('/drafts')
+  return { ok: true, ...r }
+}
+
 export async function sendAllAction() {
   const u = await requireUser()
   const r = await drafts.sendAllDrafts(u.id, 50)

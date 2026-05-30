@@ -2,12 +2,12 @@
 import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { CheckCircle2, Save, Sparkles, Eye, Wand2 } from 'lucide-react'
+import { CheckCircle2, Save, Sparkles, Eye, Wand2, Copy } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { personalize } from '@/lib/escape'
-import { activateTemplateAction, saveTemplateAction } from '@/server/actions/templates'
+import { activateTemplateAction, saveTemplateAction, cloneTemplateAction } from '@/server/actions/templates'
 import { aiDraftAction, aiSuggestSubjectsAction } from '@/server/actions/ai'
 import type { Template } from '@/server/db/schema'
 
@@ -156,6 +156,16 @@ export function TemplateEditor({ templates }: { templates: Template[] }) {
               toast.success('Template activated')
               router.refresh()
             })}>Activate</Button>
+          ) : null}
+          {pickedId ? (
+            <Button variant="outline" disabled={pending} onClick={() => start(async () => {
+              const r = await cloneTemplateAction(pickedId)
+              if ('error' in r && r.error) { toast.error(r.error); return }
+              toast.success(`Cloned as "${(r as { key?: string }).key ?? 'copy'}"`)
+              router.refresh()
+            })}>
+              <Copy className="mr-1.5 h-4 w-4" /> Clone
+            </Button>
           ) : null}
         </div>
 
