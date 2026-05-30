@@ -8,6 +8,7 @@ import { detectBounces, detectReplies, fetchGmailSignature } from '@/server/serv
 import { setSetting } from '@/server/services/settings'
 import { dispatchAsync } from '@/server/services/webhooks'
 import { logger } from '@/lib/logger'
+import { formatDate } from '@/lib/utils'
 
 const log = logger.child({ component: 'gmail-action' })
 
@@ -45,7 +46,7 @@ export async function checkRepliesAction() {
     for (const c of sample) {
       if (!repliedEmails.has(c.recruiterEmail.toLowerCase())) continue
       await db.update(contacts).set({
-        emailStatus: `Replied! (${new Date().toLocaleString()})`,
+        emailStatus: `Replied! (${formatDate(new Date())})`,
       }).where(eq(contacts.id, c.id))
       await db.insert(events).values({
         userId: u.id, contactId: c.id, kind: 'reply',

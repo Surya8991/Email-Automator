@@ -3,6 +3,7 @@ import { db } from '@/server/db/client'
 import { drafts, contacts, emailLog, events, type Contact, type Template } from '@/server/db/schema'
 import { personalize } from '@/lib/escape'
 import { wrapEmailHtml } from '@/lib/email-template'
+import { formatDate } from '@/lib/utils'
 import { sendMail } from './mailer'
 import { emit } from '@/server/sse'
 import { instrumentHtml } from './tracking'
@@ -71,7 +72,7 @@ export async function createDraftsBulk(userId: string, template: Template, max: 
       toEmail: email.to, subject: email.subject,
       htmlBody: email.html, plainBody: email.text ?? '',
     })
-    await db.update(contacts).set({ emailStatus: `Draft Created (${new Date().toLocaleString()})` })
+    await db.update(contacts).set({ emailStatus: `Draft Created (${formatDate(new Date())})` })
       .where(eq(contacts.id, contact.id))
     processed += 1
     emit(userId, { type: 'draft_progress', processed, total: ready.length, email: email.to })
@@ -91,7 +92,7 @@ export async function sendDraft(userId: string, draftId: number) {
     scheduleId: `send_${Date.now()}_${draft.id}`,
     email: draft.toEmail, subject: draft.subject, body: draft.htmlBody,
     scheduledAt: Date.now(), status: 'Sent', attempts: 1,
-    lastResult: new Date().toLocaleString(),
+    lastResult: formatDate(new Date()),
   }).returning({ id: emailLog.id })
   const logId = inserted[0]!.id
 
@@ -99,7 +100,7 @@ export async function sendDraft(userId: string, draftId: number) {
   await sendMail({ to: draft.toEmail, subject: draft.subject, html, text: draft.plainBody }, userId)
   await db.update(drafts).set({ status: 'sent' }).where(eq(drafts.id, draft.id))
   if (draft.contactId) {
-    await db.update(contacts).set({ emailStatus: `Sent (${new Date().toLocaleString()})` })
+    await db.update(contacts).set({ emailStatus: `Sent (${formatDate(new Date())})` })
       .where(eq(contacts.id, draft.contactId))
   }
   await db.insert(events).values({

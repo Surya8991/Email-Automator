@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cancelScheduleAction, enqueueScheduleAction, previewScheduleAction } from '@/server/actions/schedule'
+import { formatDate } from '@/lib/utils'
 
 interface QueueRow { id: number; email: string; subject: string; scheduledAt: string; status: string }
 interface Preview { email: string; name: string; company: string; subject: string; scheduledAt: string }
@@ -71,7 +72,7 @@ export function ScheduleClient({ queue, queueCount }: { queue: QueueRow[]; queue
         <div className="border-b bg-muted/30 p-4">
           <div className="mb-2 flex items-center gap-2 text-sm font-medium">
             <CalendarClock className="h-4 w-4" />
-            {preview.total} contacts · first {new Date(preview.firstAt).toLocaleString()} · last {new Date(preview.lastAt).toLocaleString()}
+            {preview.total} contacts · first {formatDate(preview.firstAt)} · last {formatDate(preview.lastAt)} (IST)
           </div>
           <table className="w-full text-xs">
             <thead className="text-muted-foreground">
@@ -80,7 +81,7 @@ export function ScheduleClient({ queue, queueCount }: { queue: QueueRow[]; queue
             <tbody>
               {preview.preview.map((p, i) => (
                 <tr key={i} className="border-t">
-                  <td className="p-1 whitespace-nowrap">{new Date(p.scheduledAt).toLocaleString()}</td>
+                  <td className="p-1 whitespace-nowrap">{formatDate(p.scheduledAt)}</td>
                   <td className="p-1 font-mono">{p.email}</td>
                   <td className="p-1 truncate max-w-xs">{p.subject}</td>
                 </tr>
@@ -102,7 +103,7 @@ export function ScheduleClient({ queue, queueCount }: { queue: QueueRow[]; queue
             <tbody>
               {queue.map((r) => (
                 <tr key={r.id} className="border-t">
-                  <td className="p-2 whitespace-nowrap">{new Date(r.scheduledAt).toLocaleString()}</td>
+                  <td className="p-2 whitespace-nowrap">{formatDate(r.scheduledAt)}</td>
                   <td className="p-2 font-mono text-xs">{r.email}</td>
                   <td className="p-2 truncate max-w-xs">{r.subject}</td>
                   <td className="p-2"><span className="rounded bg-muted px-1.5 py-0.5 text-xs">{r.status}</span></td>

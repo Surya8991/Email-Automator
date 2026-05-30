@@ -10,6 +10,7 @@ import {
   addStepAction, deleteCampaignAction, enrollAction,
   moveStepAction, removeStepAction, setStatusAction,
 } from '@/server/actions/campaigns'
+import { formatDate } from '@/lib/utils'
 
 interface Step { id: number; campaignId: number; order: number; templateId: number | null; delayHours: number; stopOnReply: boolean }
 interface Enrollment { id: number; contactId: number; currentStep: number; nextRunAt: number; status: string }
@@ -161,7 +162,7 @@ export function CampaignDetail({ campaign, steps, enrollments, templates, tags }
                     <tr key={e.id} className="border-t">
                       <td className="p-1 font-mono text-xs">#{e.contactId}</td>
                       <td className="p-1">{e.currentStep + 1} / {steps.length}</td>
-                      <td className="p-1 text-muted-foreground">{new Date(e.nextRunAt).toLocaleString()}</td>
+                      <td className="p-1 text-muted-foreground">{formatDate(e.nextRunAt)}</td>
                       <td className="p-1 text-xs text-muted-foreground">{e.status}</td>
                     </tr>
                   ))}

@@ -3,6 +3,7 @@ import { db } from '@/server/db/client'
 import { contacts, emailLog, type Contact, type Template } from '@/server/db/schema'
 import { getActive } from './templates'
 import { buildEmail } from './drafts'
+import { formatDate, APP_TZ } from '@/lib/utils'
 
 // Random 3–5 minute stagger between scheduled emails. Mirrors v1.
 function staggerMs(): number {
@@ -59,10 +60,14 @@ export async function enqueue(userId: string, startMs: number): Promise<{ schedu
       email: contact.recruiterEmail, subject: e.subject, body: e.html,
       scheduledAt: next, status: 'Scheduled',
     })
+    // Render all stored timestamps in IST (en-IN locale) so the
+    // contact row and "Scheduled for…" status read the same way the
+    // Schedule page does — regardless of Vercel's UTC runtime.
+    const d = new Date(next)
     await db.update(contacts).set({
-      emailStatus: `Scheduled for ${new Date(next).toLocaleString()}`,
-      scheduleDate: new Date(next).toLocaleDateString(),
-      scheduleTime: new Date(next).toLocaleTimeString(),
+      emailStatus: `Scheduled for ${formatDate(d)}`,
+      scheduleDate: d.toLocaleDateString('en-IN', { timeZone: APP_TZ }),
+      scheduleTime: d.toLocaleTimeString('en-IN', { timeZone: APP_TZ, hour: '2-digit', minute: '2-digit' }),
     }).where(eq(contacts.id, contact.id))
     next += staggerMs()
     scheduled++

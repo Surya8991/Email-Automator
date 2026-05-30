@@ -11,6 +11,7 @@ import { sendMail } from './mailer'
 import { instrumentHtml } from './tracking'
 import { env } from '@/lib/env'
 import { logger } from '@/lib/logger'
+import { formatDate } from '@/lib/utils'
 
 const log = logger.child({ component: 'scheduler-tick' })
 
@@ -51,7 +52,7 @@ async function tickForUser(userId: string): Promise<{ sent: number; failed: numb
       }
       await sendMail({ to: row.email, subject: row.subject, html: instrumentHtml(row.body, row.id) }, userId)
       await db.update(emailLog).set({
-        status: 'Sent', attempts: row.attempts + 1, lastResult: new Date().toLocaleString(),
+        status: 'Sent', attempts: row.attempts + 1, lastResult: formatDate(new Date()),
       }).where(eq(emailLog.id, row.id))
       await db.insert(events).values({
         userId, contactId: row.contactId ?? null, kind: 'sent',
@@ -100,7 +101,7 @@ async function tickForUser(userId: string): Promise<{ sent: number; failed: numb
         scheduleId: `camp_${enr.campaignId}_${enr.id}_${enr.currentStep}`,
         email: contact.recruiterEmail, subject: email.subject, body: email.html,
         scheduledAt: now, status: 'Sent', attempts: 1,
-        lastResult: new Date().toLocaleString(),
+        lastResult: formatDate(new Date()),
       }).returning({ id: emailLog.id })
       const logId = inserted[0]!.id
       await sendMail({ ...email, html: instrumentHtml(email.html, logId) }, userId)
