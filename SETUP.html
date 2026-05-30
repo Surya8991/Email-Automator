@@ -222,7 +222,8 @@ TIMEZONE=Asia/Kolkata</pre>
   <li><input type="checkbox" id="p54" /><label for="p54">Add yourself as a contact, activate a template, create + send 1 draft to yourself</label></li>
   <li><input type="checkbox" id="p55" /><label for="p55">Open that email → check <code>/analytics</code> shows 1 sent + (after a moment) 1 open</label></li>
   <li><input type="checkbox" id="p56" /><label for="p56">Edit <code>public/.well-known/security.txt</code> — replace the placeholder email with yours, push</label></li>
-  <li><input type="checkbox" id="p57" /><label for="p57">Confirm Vercel Cron is running: Vercel dashboard → your project → Crons → <code>/api/cron/tick</code> should show recent invocations after a minute</label></li>
+  <li><input type="checkbox" id="p57a" /><label for="p57a"><strong>Set up the cron via GitHub Actions</strong> (Vercel Hobby plan blocks 1-min crons). Go to <strong>GitHub repo → Settings → Secrets and variables → Actions</strong> and add two repository secrets: <code>APP_URL</code> = your Vercel URL (no trailing /), <code>CRON_SECRET</code> = the same value you put in Vercel env vars. Then the included <code>.github/workflows/cron-tick.yml</code> will fire every 5 min.</label></li>
+  <li><input type="checkbox" id="p57b" /><label for="p57b">Verify: <strong>GitHub → Actions tab → "Cron tick"</strong> — first run appears within 5 min of adding the secrets. Or click <strong>Run workflow</strong> for an immediate test. Green ✓ = working.</label></li>
   <li><input type="checkbox" id="p58" /><label for="p58">If you have a custom domain: update <code>APP_URL</code>, <code>NEXTAUTH_URL</code>, and the Google OAuth redirect URI to use it</label></li>
 </ul>
 

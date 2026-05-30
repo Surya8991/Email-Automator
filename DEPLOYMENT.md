@@ -87,17 +87,24 @@ Same schema, same migrations, same SQL — Turso is wire-compatible with SQLite.
 to `pgTable` in `server/db/schema.ts` and use Drizzle's pg adapter. Only
 worth it if Postgres is already part of your stack.
 
-### Worker → Vercel Cron
+### Worker → GitHub Actions cron (free)
 
-The repo includes `app/api/cron/tick/route.ts` and `vercel.json` already
-configured to hit it every minute:
+Vercel's Hobby plan caps cron schedules at **1 per day**, so we use GitHub
+Actions instead — runs every 5 min, free, no credit card.
 
-```json
-{ "crons": [{ "path": "/api/cron/tick", "schedule": "*/1 * * * *" }] }
-```
+The workflow `.github/workflows/cron-tick.yml` is already in the repo. To
+enable it on your fork:
 
-Set `CRON_SECRET` in Vercel env vars; the route checks the `Authorization: Bearer ${CRON_SECRET}`
-header (Vercel sets it automatically) or `?secret=...` query param.
+1. **GitHub repo → Settings → Secrets and variables → Actions → New repository secret**
+   - `APP_URL` = your Vercel URL (e.g. `https://email-automator-three.vercel.app`)
+   - `CRON_SECRET` = same value you set in Vercel env vars
+2. Done. First run fires within 5 min of the push.
+
+You can also trigger a tick manually: GitHub → Actions tab → "Cron tick" → "Run workflow".
+
+**If you upgrade to Vercel Pro**, you can re-enable the in-platform cron by
+adding back `"crons": [{ "path": "/api/cron/tick", "schedule": "*/1 * * * *" }]`
+in `vercel.json` and disabling the GitHub workflow.
 
 ### Env vars to set in Vercel
 

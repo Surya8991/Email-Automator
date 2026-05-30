@@ -216,7 +216,7 @@ Bob Smith,Globex,CTO,bob@globex.com,,,,
               ['GET /api/track/click?eid=&u=&t=', 'open (HMAC)', '302 redirect + records click event'],
               ['GET /unsubscribe?e=&t=', 'open (HMAC)', 'Confirmation page; adds to global blocklist'],
               ['POST /unsubscribe?e=&t=', 'open (HMAC)', 'RFC 8058 one-click unsubscribe'],
-              ['GET /api/cron/tick', 'CRON_SECRET', 'Worker tick — sends scheduled emails, advances campaign enrollments. Vercel cron hits this every minute; Authorization: Bearer ${CRON_SECRET} required (or ?secret=).'],
+              ['GET /api/cron/tick', 'CRON_SECRET', 'Worker tick — sends scheduled emails, advances campaign enrollments. GitHub Actions cron hits this every 5 min (Vercel Hobby blocks short crons). Authorization: Bearer ${CRON_SECRET} required (or ?secret=).'],
             ].map(([path, auth, what]) => (
               <tr key={path} className="border-t"><td className="p-1">{path}</td><td className="p-1 text-muted-foreground">{auth}</td><td className="p-1 font-sans text-muted-foreground">{what}</td></tr>
             ))}
@@ -313,7 +313,8 @@ pm2 save`}</pre>
           <li>Create a Turso DB and grab the URL + auth token (CLI in DEPLOYMENT.md).</li>
           <li>Run <Code>DATABASE_URL=libsql://… TURSO_AUTH_TOKEN=… npm run db:migrate</Code> from your laptop once.</li>
           <li>Set those two env vars + <Code>CRON_SECRET</Code> + the SMTP/auth vars in Vercel.</li>
-          <li><Code>vercel --prod</Code>. The included <Code>vercel.json</Code> wires the 1-minute cron to <Code>/api/cron/tick</Code>.</li>
+          <li><Code>vercel --prod</Code>. <Code>vercel.json</Code> sets the build config.</li>
+          <li>Set up the cron via <strong>GitHub Actions</strong> (Vercel Hobby plan blocks crons under 1 day). Add two repo secrets in GitHub → Settings → Actions: <Code>APP_URL</Code> (your Vercel URL) and <Code>CRON_SECRET</Code> (same value as Vercel). The included <Code>.github/workflows/cron-tick.yml</Code> hits <Code>/api/cron/tick</Code> every 5 min.</li>
         </ol>
         <p className="text-sm">Alternative: <strong>Vercel Postgres / Neon</strong> — heavier swap; change schema to <Code>pgTable</Code> and use Drizzle's pg adapter. Only worth it if Postgres is already in your stack.</p>
 

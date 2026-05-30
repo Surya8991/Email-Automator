@@ -1,0 +1,46 @@
+# Pokes /api/cron/tick on the deployed app every 5 minutes. Replaces the
+# Vercel cron config in vercel.json, which Vercel's free Hobby plan rejects
+# (minimum allowed cadence on Hobby is 1 day).
+#
+# Required repo secrets (Settings → Secrets and variables → Actions):
+#   APP_URL      e.g. https://email-automator-three.vercel.app   (no trailing /)
+#   CRON_SECRET  same value you set in Vercel env vars
+#
+# The endpoint advances scheduled emails + campaign enrollments. If you've
+# got nothing pending, it's a cheap no-op. Job logs land in Actions tab.
+name: Cron tick
+
+on:
+  schedule:
+    # GitHub's effective minimum cadence is ~5 min (it's documented as 1 min
+    # but in practice short schedules drift / drop). 5 min is plenty for
+    # email scheduling — the worker processes a batch per call.
+    - cron: '*/5 * * * *'
+  workflow_dispatch:    # lets you trigger a tick manually from Actions tab
+
+permissions: {}
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Hit /api/cron/tick
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "::error::APP_URL and CRON_SECRET secrets must be set in this repo."
+            exit 1
+          fi
+          # -f exits non-zero on 4xx/5xx; -sS shows errors but hides progress.
+          # The cron route enforces the Bearer secret, not the query param.
+          code=$(curl -sS -o /tmp/body -w "%{http_code}" \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$APP_URL/api/cron/tick")
+          echo "HTTP $code"
+          cat /tmp/body
+          # 200 only — any 401/5xx fails the job so it's visible in the
+          # Actions tab and (with Actions email notifications) in your inbox.
+          [ "$code" = "200" ]

@@ -9,8 +9,5 @@
     "app/api/track/click/route.ts": { "maxDuration": 5 },
     "app/api/progress/route.ts":    { "maxDuration": 60 },
     "app/api/cron/tick/route.ts":   { "maxDuration": 60 }
-  },
-  "crons": [
-    { "path": "/api/cron/tick", "schedule": "*/1 * * * *" }
-  ]
+  }
 }
