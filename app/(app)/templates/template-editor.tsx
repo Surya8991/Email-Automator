@@ -93,22 +93,50 @@ export function TemplateEditor({ templates }: { templates: Template[] }) {
     setDraft({ key: t.key, label: t.label, subject: t.subject, initialMsg: t.initialMsg })
   }
 
+  // Template list filters — useful once you have the 20 seeded templates
+  // plus your own clones. Categories come from the templates themselves.
+  const [tplQ, setTplQ] = useState('')
+  const [tplCat, setTplCat] = useState('')
+  const categories = Array.from(new Set(templates.map((t) => t.category).filter(Boolean))).sort()
+  const visibleTemplates = templates.filter((t) => {
+    if (tplCat && t.category !== tplCat) return false
+    if (tplQ.trim()) {
+      const n = tplQ.toLowerCase()
+      if (!(t.label || '').toLowerCase().includes(n) && !(t.key || '').toLowerCase().includes(n) && !(t.category || '').toLowerCase().includes(n)) return false
+    }
+    return true
+  })
+
   return (
     <div className="grid gap-4 lg:grid-cols-[240px,1fr,1fr]">
       {/* On mobile + tablet: dropdown picker. On desktop: full list rail. */}
       <aside>
         <div className="mb-2 text-xs font-medium uppercase text-muted-foreground">Your templates</div>
+        <div className="mb-2 space-y-1.5">
+          <Input value={tplQ} onChange={(e) => setTplQ(e.target.value)}
+            placeholder="Search templates…" className="h-8 text-xs" />
+          {categories.length > 0 ? (
+            <select value={tplCat} onChange={(e) => setTplCat(e.target.value)}
+              className="block w-full h-8 rounded-md border bg-background px-2 text-xs">
+              <option value="">All categories</option>
+              {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          ) : null}
+        </div>
         <select className="block w-full h-9 rounded-md border bg-background px-2 text-sm lg:hidden"
           value={pickedId ?? ''} onChange={(e) => {
             const t = templates.find((x) => x.id === Number(e.target.value))
             if (t) load(t)
           }}>
-          {templates.length === 0 ? <option value="">— save to create —</option> : null}
-          {templates.map((t) => (<option key={t.id} value={t.id}>{(t.active ? '★ ' : '') + (t.label || t.key)}</option>))}
+          {visibleTemplates.length === 0 ? <option value="">— no matches —</option> : null}
+          {visibleTemplates.map((t) => (<option key={t.id} value={t.id}>{(t.active ? '★ ' : '') + (t.label || t.key)}</option>))}
         </select>
         <div className="hidden lg:block space-y-1">
           {templates.length === 0 ? <p className="text-sm text-muted-foreground">None yet — save to create.</p> : null}
-          {templates.map((t) => (
+          {templates.length > 0 && visibleTemplates.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No templates match the filter.</p>
+          ) : null}
+          {visibleTemplates.map((t) => (
             <button key={t.id} onClick={() => load(t)}
               className={`flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm hover:bg-accent ${pickedId === t.id ? 'border-primary' : ''}`}>
               <span className="truncate">{t.label || t.key}</span>

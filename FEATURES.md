@@ -18,6 +18,7 @@ Last refreshed: 2026-05-31.
 ## Contacts
 
 - **CRUD** — add one-by-one or import in bulk.
+- **Search + filter** — search by name/company/email/role · tag dropdown · status dropdown (Pending / Draft created / Scheduled / Sent / Replied / Bounced / Cancelled). Filters compose; URL-persisted.
 - **One-click follow-up** — per-row "Schedule follow-up in N days" button. Pick a number, scheduler queues it.
 - **CSV/Excel import** — `.csv`, `.xlsx`, `.xls`. Header names are fuzz-matched. Download the [starter template](https://email-automator-three.vercel.app/api/csv-template) for the canonical columns + sample rows.
 - **CSV export** of all your contacts.
@@ -30,6 +31,7 @@ Last refreshed: 2026-05-31.
 ## Templates
 
 - **20 starter templates** auto-seeded on first sign-in — 4 categories (Growth, Performance, SEO, Digital) × 5 tones (Formal, Friendly, Job-post, Referral, LinkedIn).
+- **Sidebar search + category filter** for picking among your templates.
 - **Clickable variable palette** — recipient fields (`{{name}}`, `{{company}}`, `{{role_name}}`, `{{email}}`, `{{location}}`, `{{platform}}`) plus HTML snippets (salutation, paragraph, bullet list, sign-off, divider). Click → token lands at cursor.
 - **Live preview** — see how the email looks against a sample contact.
 - **Email-safe styled wrapper** — every outgoing email gets a polished, Outlook-safe HTML shell automatically (rounded card, system font, max 600px, hidden preheader).
@@ -40,6 +42,7 @@ Last refreshed: 2026-05-31.
 
 ## Drafts
 
+- **Search** — substring match on recipient + subject across the visible queue.
 - **Bulk-create** drafts for every eligible contact (caps at 50/batch).
 - **Live progress** via SSE — see send count tick up in real time.
 - **Per-draft preview** — collapsible inline body view.
@@ -52,6 +55,7 @@ Last refreshed: 2026-05-31.
 
 ## Schedule
 
+- **Queue search + status filter** — search by recipient/subject, filter Scheduled vs Retrying.
 - **Pick start date + time** — IST by default; you change TZ in Settings.
 - **Configurable interval** — set min/max minutes between sends (default 3–5).
 - **Recurring presets** — Tomorrow 9:30 AM, Next weekday 10:00 AM, Next Monday 9:00 AM, In 3 days 11:00 AM, Tonight 7:00 PM.
@@ -64,6 +68,7 @@ Last refreshed: 2026-05-31.
 
 ## Campaigns / sequences
 
+- **Search + status filter** on the campaigns list.
 - **Multi-step sequences** — chain templates with per-step delays (hours) and "stop on reply".
 - **Drag-orderable step list** (up/down arrows).
 - **Enroll** by tag, by individual contacts, or all eligible.
@@ -102,10 +107,12 @@ Last refreshed: 2026-05-31.
 ## Audit log
 
 - **Last 500 events** with action / detail / IP / timestamp.
+- **Search + action filter** — substring across all columns + dropdown of distinct action types in the window.
 - **CSV export** of the entire log.
 
 ## Blocklist
 
+- **Search + type filter** (Email / Domain).
 - **Per-user + global** patterns — email or domain.
 - **Single add** or **bulk add** (paste a list, newline or comma separated; `@` autodetects type).
 - **Auto-block** on unsubscribe click.
@@ -138,6 +145,7 @@ Last refreshed: 2026-05-31.
 
 ## Admin
 
+- **Search + status filter** — search by email/name, filter All / Active / Suspended / Admins.
 - **User table** — email, name, contacts/drafts/events counts, joined-at.
 - **Suspend / Resume** any non-admin user — soft-pause their worker tick (queue stays intact).
 - **Delete user** — cascades to all their data.

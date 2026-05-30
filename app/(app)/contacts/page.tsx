@@ -7,7 +7,7 @@ import { ContactsTable } from './contacts-table'
 import { AddContactDialog } from './add-contact-dialog'
 import { ContactsToolbar } from './contacts-toolbar'
 
-export default async function ContactsPage(props: { searchParams: Promise<{ page?: string; search?: string; tag?: string }> }) {
+export default async function ContactsPage(props: { searchParams: Promise<{ page?: string; search?: string; tag?: string; status?: string }> }) {
   const search = await props.searchParams
   const u = await requireUser()
   const [data, allTags] = await Promise.all([
@@ -15,16 +15,18 @@ export default async function ContactsPage(props: { searchParams: Promise<{ page
       page: Number(search.page ?? 1),
       search: search.search ?? '',
       tag: search.tag ?? '',
+      status: search.status ?? '',
     }),
     listTags(u.id),
   ])
 
+  const filterBadges = [search.tag ? `#${search.tag}` : null, search.status ? search.status : null].filter(Boolean).join(' · ')
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Contacts</h1>
-          <p className="text-sm text-muted-foreground">{data.total} total{search.tag ? ` · #${search.tag}` : ''}</p>
+          <p className="text-sm text-muted-foreground">{data.total} total{filterBadges ? ` · ${filterBadges}` : ''}</p>
         </div>
         <div className="flex items-center gap-2">
           <ContactsToolbar />
@@ -40,6 +42,7 @@ export default async function ContactsPage(props: { searchParams: Promise<{ page
               pages={data.pages}
               search={search.search ?? ''}
               tag={search.tag ?? ''}
+              status={search.status ?? ''}
               allTags={allTags}
             />
           </Suspense>

@@ -1,7 +1,7 @@
 'use client'
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { CalendarClock, Eye, Play, X } from 'lucide-react'
+import { CalendarClock, Eye, Play, X, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -69,6 +69,18 @@ export function ScheduleClient({ queue, queueCount }: { queue: QueueRow[]; queue
   const [pending, start] = useTransition()
   const [preview, setPreview] = useState<PreviewResp | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
+  // Queue filters — client-side because the queue is capped at 50 rows
+  // (server-side). For thousands, push these to the server query.
+  const [q, setQ] = useState('')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'Scheduled' | 'Retrying'>('all')
+  const filtered = queue.filter((r) => {
+    if (statusFilter !== 'all' && r.status !== statusFilter) return false
+    if (q.trim()) {
+      const n = q.toLowerCase()
+      if (!r.email.toLowerCase().includes(n) && !r.subject.toLowerCase().includes(n)) return false
+    }
+    return true
+  })
 
   const presets = buildPresets()
 
@@ -175,9 +187,28 @@ export function ScheduleClient({ queue, queueCount }: { queue: QueueRow[]; queue
       ) : null}
 
       <div className="p-4">
-        <h2 className="mb-2 text-sm font-medium text-muted-foreground">Queue ({queueCount})</h2>
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <h2 className="text-sm font-medium text-muted-foreground">Queue ({queueCount})</h2>
+          {queue.length > 0 ? (
+            <>
+              <div className="relative ml-auto max-w-xs flex-1">
+                <Search className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input value={q} onChange={(e) => setQ(e.target.value)}
+                  placeholder="Search recipient or subject…" className="h-8 pl-8" />
+              </div>
+              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+                className="h-8 rounded-md border bg-background px-2 text-xs">
+                <option value="all">All statuses</option>
+                <option value="Scheduled">Scheduled</option>
+                <option value="Retrying">Retrying</option>
+              </select>
+            </>
+          ) : null}
+        </div>
         {queue.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">Nothing scheduled.</p>
+        ) : filtered.length === 0 ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">No rows match the filter.</p>
         ) : (
           <table className="w-full text-sm">
             <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
@@ -191,7 +222,7 @@ export function ScheduleClient({ queue, queueCount }: { queue: QueueRow[]; queue
               </tr>
             </thead>
             <tbody>
-              {queue.map((r) => (
+              {filtered.map((r) => (
                 <tr key={r.id} className="border-t">
                   <td className="p-2 whitespace-nowrap">{formatDate(r.scheduledAt)}</td>
                   <td className="p-2 font-mono text-xs">{r.email}</td>

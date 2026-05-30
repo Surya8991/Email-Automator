@@ -1,7 +1,7 @@
 'use client'
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Trash2, Upload } from 'lucide-react'
+import { Trash2, Upload, Search } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -19,6 +19,13 @@ export function BlocklistClient({ rows }: { rows: Row[] }) {
   const [err, setErr] = useState<string | null>(null)
   const [bulkOpen, setBulkOpen] = useState(false)
   const [bulkText, setBulkText] = useState('')
+  const [q, setQ] = useState('')
+  const [typeFilter, setTypeFilter] = useState<'all' | 'email' | 'domain'>('all')
+  const filtered = rows.filter((r) => {
+    if (typeFilter !== 'all' && r.type !== typeFilter) return false
+    if (q.trim() && !r.pattern.toLowerCase().includes(q.toLowerCase())) return false
+    return true
+  })
 
   return (
     <div>
@@ -63,8 +70,28 @@ export function BlocklistClient({ rows }: { rows: Row[] }) {
           </div>
         </div>
       ) : null}
+      {rows.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-2 border-b bg-muted/20 px-3 py-2">
+          <div className="relative max-w-xs flex-1">
+            <Search className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input value={q} onChange={(e) => setQ(e.target.value)}
+              placeholder="Search pattern…" className="h-8 pl-8" />
+          </div>
+          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as typeof typeFilter)}
+            className="h-8 rounded-md border bg-background px-2 text-xs">
+            <option value="all">All types</option>
+            <option value="email">Email</option>
+            <option value="domain">Domain</option>
+          </select>
+          <span className="ml-auto text-xs text-muted-foreground">
+            {filtered.length === rows.length ? `${rows.length}` : `${filtered.length}/${rows.length}`}
+          </span>
+        </div>
+      ) : null}
       {rows.length === 0 ? (
         <div className="px-6 py-12 text-center text-sm text-muted-foreground">No blocked patterns yet.</div>
+      ) : filtered.length === 0 ? (
+        <div className="px-6 py-8 text-center text-sm text-muted-foreground">No patterns match.</div>
       ) : (
         <table className="w-full text-sm">
           <thead className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
@@ -77,7 +104,7 @@ export function BlocklistClient({ rows }: { rows: Row[] }) {
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
+            {filtered.map((r) => (
               <tr key={r.id} className="border-t">
                 <td className="px-3 py-2 font-mono text-xs">{r.pattern}</td>
                 <td className="px-3 py-2">{r.type}</td>

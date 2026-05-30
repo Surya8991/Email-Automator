@@ -2,7 +2,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Send, Trash2, Sparkles, SendHorizontal, Pencil, Save, X, CalendarClock } from 'lucide-react'
+import { Send, Trash2, Sparkles, SendHorizontal, Pencil, Save, X, CalendarClock, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { createDraftsAction, deleteDraftAction, sendAllAction, sendDraftAction, updateDraftAction, scheduleFollowupAction } from '@/server/actions/drafts'
@@ -20,6 +20,15 @@ export function DraftsClient({ rows }: { rows: Draft[] }) {
   const [editId, setEditId] = useState<number | null>(null)
   const [editSubject, setEditSubject] = useState('')
   const [editBody, setEditBody] = useState('')
+  // Client-side search — substring match against recipient + subject.
+  // Cheap because draft list is capped at 50 rows server-side.
+  const [q, setQ] = useState('')
+  const filtered = q.trim()
+    ? rows.filter((d) => {
+        const needle = q.toLowerCase()
+        return d.toEmail.toLowerCase().includes(needle) || d.subject.toLowerCase().includes(needle)
+      })
+    : rows
 
   return (
     <div>
@@ -53,13 +62,33 @@ export function DraftsClient({ rows }: { rows: Draft[] }) {
         ) : null}
       </div>
 
+      {rows.length > 0 ? (
+        <div className="border-b px-4 py-2">
+          <div className="relative max-w-sm">
+            <Search className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={q} onChange={(e) => setQ(e.target.value)}
+              placeholder="Search recipient or subject…"
+              className="pl-8"
+            />
+          </div>
+          {q.trim() ? (
+            <p className="mt-1 text-xs text-muted-foreground">{filtered.length} of {rows.length} drafts</p>
+          ) : null}
+        </div>
+      ) : null}
+
       {rows.length === 0 ? (
         <div className="px-6 py-16 text-center text-sm text-muted-foreground">
           No pending drafts. Activate a template and click <strong>Create drafts</strong>.
         </div>
+      ) : filtered.length === 0 ? (
+        <div className="px-6 py-12 text-center text-sm text-muted-foreground">
+          No drafts match &ldquo;{q}&rdquo;.
+        </div>
       ) : (
         <ul className="divide-y">
-          {rows.map((d) => {
+          {filtered.map((d) => {
             const isEditing = editId === d.id
             return (
             <li key={d.id} className="px-4 py-3">

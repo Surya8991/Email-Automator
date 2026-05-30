@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Download } from 'lucide-react'
 import { formatDate, APP_TZ } from '@/lib/utils'
 import { getSetting } from '@/server/services/settings'
+import { AuditTable } from './audit-table'
 
 export default async function AuditPage() {
   const u = await requireUser()
@@ -37,26 +38,12 @@ export default async function AuditPage() {
         {rows.length === 0 ? (
           <div className="px-6 py-12 text-center text-sm text-muted-foreground">No audit entries yet.</div>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2">Time</th>
-                <th className="px-3 py-2">Action</th>
-                <th className="px-3 py-2">Detail</th>
-                <th className="px-3 py-2">IP</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.id} className="border-t">
-                  <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">{formatDate(r.createdAt, tz)}</td>
-                  <td className="px-3 py-2"><span className="rounded bg-muted px-1.5 py-0.5 text-xs">{r.action}</span></td>
-                  <td className="px-3 py-2 text-muted-foreground">{r.detail || '—'}</td>
-                  <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{r.ip || '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          // Pre-format timestamps server-side so the client component stays
+          // pure presentational (no TZ context dependency, no hydration risk).
+          <AuditTable rows={rows.map((r) => ({
+            id: r.id, action: r.action, detail: r.detail, ip: r.ip,
+            createdAt: formatDate(r.createdAt, tz),
+          }))} />
         )}
       </CardContent></Card>
     </div>

@@ -2,7 +2,7 @@ import { and, asc, count, desc, eq, inArray, like, or, sql } from 'drizzle-orm'
 import { db } from '@/server/db/client'
 import { contacts } from '@/server/db/schema'
 
-export interface ListOpts { page?: number; pageSize?: number; search?: string; tag?: string }
+export interface ListOpts { page?: number; pageSize?: number; search?: string; tag?: string; status?: string }
 
 export async function listContacts(userId: string, opts: ListOpts = {}) {
   const page = Math.max(1, opts.page ?? 1)
@@ -24,6 +24,12 @@ export async function listContacts(userId: string, opts: ListOpts = {}) {
     // tags stored as comma-separated; surround stored value with commas so
     // a search for "vc" doesn't match "newvc".
     clauses.push(like(sql`',' || ${contacts.tags} || ','`, `%,${opts.tag},%`))
+  }
+  if (opts.status) {
+    // Status is free-text ("Sent (5/30…)", "Scheduled for …"). 'pending'
+    // is the special bucket for rows with no status set yet.
+    if (opts.status === 'pending') clauses.push(eq(contacts.emailStatus, ''))
+    else clauses.push(like(contacts.emailStatus, `%${opts.status}%`))
   }
   const where = and(...clauses)
 

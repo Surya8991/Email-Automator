@@ -98,12 +98,34 @@ Bob Smith,Globex,CTO,bob@globex.com,,,,
         <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs font-mono">{`tags: vc, priority-a, london`}</pre>
         <p className="text-sm">Filter on the Contacts page (chip click or dropdown), or enroll just one tag into a campaign.</p>
 
-        <h3 className="text-sm font-semibold mt-3">Bulk actions</h3>
+        <h3 className="text-sm font-semibold mt-3">Search & filter</h3>
         <ul className="list-disc pl-6 text-sm space-y-1">
-          <li>Check rows → <strong>Delete N</strong></li>
-          <li><strong>Export</strong> dumps everything to CSV</li>
-          <li><strong>Reset status</strong> clears <Code>emailStatus</Code> on every contact so they become draft-eligible again</li>
-          <li>Click the clock icon on any row for the full event timeline</li>
+          <li>Search by name / company / email / role (top-left).</li>
+          <li>Tag dropdown filters to one tag.</li>
+          <li>Status dropdown filters by send state (Pending / Draft created / Scheduled / Sent / Replied / Bounced / Cancelled).</li>
+          <li>Filters compose; "Clear filters" resets both.</li>
+        </ul>
+
+        <h3 className="text-sm font-semibold mt-3">Bulk actions</h3>
+        <p className="text-sm">Per-page select-all checkbox at the top of the table. With rows checked, a toolbar appears:</p>
+        <ul className="list-disc pl-6 text-sm space-y-1">
+          <li><strong>Add tag</strong> / <strong>Remove tag</strong> — comma-separated; lower-cased automatically.</li>
+          <li><strong>Reset status</strong> — makes them eligible for a fresh draft.</li>
+          <li><strong>Block</strong> — adds emails to your blocklist <em>and</em> removes the contact rows.</li>
+          <li><strong>Delete</strong> — permanent.</li>
+        </ul>
+        <p className="text-sm mt-2">Per-row icons:</p>
+        <ul className="list-disc pl-6 text-sm space-y-1">
+          <li><strong>Calendar clock</strong> — schedule a one-off follow-up using your active template (1-60 days out).</li>
+          <li><strong>Clock</strong> — full event timeline for that contact.</li>
+          <li><strong>Trash</strong> — delete the single row.</li>
+        </ul>
+        <p className="text-sm mt-2">Toolbar buttons:</p>
+        <ul className="list-disc pl-6 text-sm space-y-1">
+          <li><strong>Import</strong> — CSV / XLSX upload, fuzz-matched headers.</li>
+          <li><strong>Export</strong> — full CSV dump of your contacts.</li>
+          <li><strong>Sample CSV</strong> — starter file with the exact headers + 5 realistic sample rows.</li>
+          <li><strong>Reset status</strong> — clears <Code>emailStatus</Code> on every contact (re-runnable for the whole list).</li>
         </ul>
       </Section>
 
@@ -122,7 +144,18 @@ Bob Smith,Globex,CTO,bob@globex.com,,,,
         <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs font-mono">{`<p>Hi {{name}},</p>
 <p>I came across your work at <b>{{company}}</b> — would love to chat about the {{role_name}} role.</p>
 <p><a href="https://yourname.com">Portfolio</a></p>`}</pre>
-        <p className="text-xs text-muted-foreground">Values are HTML-escaped in body mode and CR/LF-stripped in subject mode automatically. Recipient input can't inject script.</p>
+        <p className="text-xs text-muted-foreground">Values are HTML-escaped in body mode and CR/LF-stripped in subject mode automatically. Recipient input can't inject script. Every outgoing email is wrapped in an email-safe styled container (table layout, system font, max 600 px) — the JSON body just needs the copy, not the chrome.</p>
+
+        <h3 className="text-sm font-semibold mt-3">Clickable insertion palette</h3>
+        <p className="text-sm">Below the body textarea: two rows of clickable chips.</p>
+        <ul className="list-disc pl-6 text-sm space-y-1">
+          <li><strong>Recipient</strong> — clicking <Code>{'{{name}}'}</Code> etc. inserts the variable at your cursor (substituted per recipient on send).</li>
+          <li><strong>Common HTML</strong> — salutation lines ("Hi {'{{'}name{'}}'}", "Dear {'{{'}name{'}}'}"), empty paragraph, 3-bullet list, sign-offs ("Best regards,", "Thanks,"), divider. Inserts raw HTML.</li>
+        </ul>
+        <p className="text-sm">Hover any chip to see what it does. The clicked snippet lands wherever you last placed your cursor (subject or body).</p>
+
+        <h3 className="text-sm font-semibold mt-3">Search / filter / clone</h3>
+        <p className="text-sm">Sidebar search box filters by label, key, or category. Category dropdown filters to one bucket. <strong>Clone</strong> button (next to Activate) duplicates the selected template with a <Code>-copy</Code> suffix — safe A/B without touching the original.</p>
 
         <h3 className="text-sm font-semibold mt-3">A/B subject lines</h3>
         <p className="text-sm">Fill in optional <em>Subject B</em>. At send time the recipient gets A or B by <Code>contact.id % 2</Code> — deterministic, so the same person never sees both.</p>
@@ -139,16 +172,27 @@ Bob Smith,Globex,CTO,bob@globex.com,,,,
         </ul>
         <p className="text-sm">Each <strong>Send</strong> writes an <Code>email_log</Code> row, then sends through SMTP with the tracking pixel + click rewrites injected.</p>
         <p className="text-sm">Daily limit defaults to <strong>50</strong> per user — change in <Link href="/settings" className="underline">Settings → General</Link>.</p>
+
+        <h3 className="text-sm font-semibold mt-3">In-row actions</h3>
+        <ul className="list-disc pl-6 text-sm space-y-1">
+          <li><strong>Pencil</strong> — edit subject + HTML body inline before sending. No need to re-create from the template.</li>
+          <li><strong>Send</strong> — Sends. If the same recipient was emailed in the last 7 days, a confirmation dialog shows the previous send timestamp; confirm to send anyway.</li>
+          <li><strong>Calendar clock</strong> — schedules a follow-up for this contact (uses active template).</li>
+          <li><strong>Trash</strong> — drops the draft.</li>
+        </ul>
+        <p className="text-sm mt-2"><strong>Search</strong> box at the top of the list filters by recipient or subject.</p>
       </Section>
 
       <Section id="schedule" title="6. Schedule (one-off blast)">
         <ol className="list-decimal pl-6 text-sm space-y-1">
-          <li>Pick start date/time on <Link href="/schedule" className="underline">Schedule</Link>.</li>
-          <li><strong>Preview</strong> — see the first 20 with staggered times.</li>
-          <li><strong>Schedule</strong> to enqueue them all.</li>
-          <li>Worker (<Code>npm run worker</Code>) ticks every 30 s and sends what's due.</li>
+          <li>Use one of the 5 <strong>presets</strong> (Tomorrow 9:30 AM / Next weekday 10 AM / Next Monday 9 AM / In 3 days / Tonight 7 PM) — or pick a custom date/time.</li>
+          <li>Adjust <strong>Gap min / Gap max</strong> (minutes between sends). Defaults to 3–5 min.</li>
+          <li><strong>Preview</strong> shows total contacts, first/last times, exact spacing, and the first 20 rows.</li>
+          <li><strong>Schedule</strong> enqueues them all.</li>
+          <li>Worker (<Code>npm run worker</Code>) ticks every 30 s and sends what's due. On Vercel, GitHub Actions cron pings every 5 min.</li>
         </ol>
         <p className="text-sm"><strong>Cancel all</strong> flips Scheduled rows to Cancelled; already-sent rows stay.</p>
+        <p className="text-sm">The Queue table below the form supports search (recipient/subject) + status filter (Scheduled / Retrying). Each row shows attempts + last result so you can debug stuck retries.</p>
       </Section>
 
       <Section id="campaigns" title="7. Campaigns (multi-step sequences)">

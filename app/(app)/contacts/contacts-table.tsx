@@ -13,9 +13,23 @@ import {
 import { scheduleFollowupAction } from '@/server/actions/drafts'
 import { ContactTimeline } from './contact-timeline'
 
-interface Props { rows: Contact[]; page: number; pages: number; search: string; tag: string; allTags: string[] }
+interface Props { rows: Contact[]; page: number; pages: number; search: string; tag: string; allTags: string[]; status?: string }
 
-export function ContactsTable({ rows, page, pages, search, tag, allTags }: Props) {
+// Recognized status buckets for the filter dropdown. We match by substring
+// since the DB stores statuses as text ("Sent (5/30/2026, 7:14 PM)") —
+// e.g. selecting "Sent" matches any string starting with that word.
+const STATUS_OPTIONS = [
+  { value: '', label: 'All statuses' },
+  { value: 'pending', label: 'Pending (no status)' },
+  { value: 'Draft Created', label: 'Draft created' },
+  { value: 'Scheduled', label: 'Scheduled' },
+  { value: 'Sent', label: 'Sent' },
+  { value: 'Replied', label: 'Replied' },
+  { value: 'BOUNCED', label: 'Bounced' },
+  { value: 'Cancelled', label: 'Cancelled' },
+]
+
+export function ContactsTable({ rows, page, pages, search, tag, allTags, status = '' }: Props) {
   const router = useRouter()
   const sp = useSearchParams()
   const [pending, start] = useTransition()
@@ -47,9 +61,13 @@ export function ContactsTable({ rows, page, pages, search, tag, allTags }: Props
             </select>
           </div>
         ) : null}
-        {tag ? (
-          <Button variant="ghost" size="sm" onClick={() => go({ tag: '', page: '1' })}>
-            <X className="mr-1 h-3 w-3" /> Clear filter
+        <select value={status} onChange={(e) => go({ status: e.target.value, page: '1' })}
+          className="h-9 rounded-md border bg-background px-2 text-sm">
+          {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+        {tag || status ? (
+          <Button variant="ghost" size="sm" onClick={() => go({ tag: '', status: '', page: '1' })}>
+            <X className="mr-1 h-3 w-3" /> Clear filters
           </Button>
         ) : null}
         {selected.size > 0 ? (
