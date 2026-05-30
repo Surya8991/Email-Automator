@@ -12,7 +12,9 @@ import { users, templates } from '../server/db/schema'
 
 const args = process.argv.slice(2)
 const targetEmail = (args[0] ?? 'test@gmail.com').toLowerCase()
-const file = path.join(process.cwd(), '..', 'standalone', 'data', 'templates.json')
+// Bundled in the repo at ./data/seed-templates.json — copied from the v1
+// standalone templates.json during the v3 restructure.
+const file = path.join(process.cwd(), 'data', 'seed-templates.json')
 if (!fs.existsSync(file)) {
   console.error(`[seed] not found: ${file}`)
   process.exit(1)

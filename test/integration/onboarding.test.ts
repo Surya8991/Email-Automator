@@ -20,7 +20,7 @@ vi.mock('@/server/db/client', () => ({ db, schema }))
 
 let onboarding: typeof import('@/server/services/onboarding')
 
-const seedFile = path.join(process.cwd(), '..', 'standalone', 'data', 'templates.json')
+const seedFile = path.join(process.cwd(), 'data', 'seed-templates.json')
 const seedAvailable = fs.existsSync(seedFile)
 
 beforeAll(async () => {

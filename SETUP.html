@@ -89,7 +89,7 @@
 <h2 id="prereq"><span class="step-num">1</span> Prereqs</h2>
 <ul class="checklist">
   <li><input type="checkbox" id="p1" /><label for="p1">Node.js 20 or later installed (<code>node -v</code>)</label></li>
-  <li><input type="checkbox" id="p2" /><label for="p2">Git installed; you have the repo cloned and ran <code>cd web && npm install --legacy-peer-deps</code></label></li>
+  <li><input type="checkbox" id="p2" /><label for="p2">Git installed; you have the repo cloned and ran <code>npm install --legacy-peer-deps</code></label></li>
   <li><input type="checkbox" id="p3" /><label for="p3">A Gmail account with 2-Factor Authentication on</label></li>
   <li><input type="checkbox" id="p4" /><label for="p4">A Vercel account (free tier is fine) — <a href="https://vercel.com" target="_blank">sign up</a></label></li>
 </ul>
@@ -132,8 +132,7 @@ turso db show email-automator --url            # → libsql://email-automator-&l
 turso db tokens create email-automator         # → eyJ…   (this is TURSO_AUTH_TOKEN)</pre>
 
 <h3>4c. Apply migrations to the new DB (one-time, from your laptop)</h3>
-<pre>cd web
-DATABASE_URL=libsql://email-automator-&lt;org&gt;.turso.io \
+<pre>DATABASE_URL=libsql://email-automator-&lt;org&gt;.turso.io \
 TURSO_AUTH_TOKEN=eyJ… \
 npm run db:migrate</pre>
 
@@ -229,8 +228,7 @@ TIMEZONE=Asia/Kolkata</pre>
 
 <h2 id="self-host"><span class="step-num">9</span> Alternative: self-host on Linux</h2>
 <p>If you'd rather not use Vercel, you can run on any Linux box with Node 20+. SQLite file persists locally.</p>
-<pre>cd web
-cp .env.example .env       # edit everything; leave DATABASE_URL as ./data/tracker.db
+<pre>cp .env.example .env       # edit everything; leave DATABASE_URL as ./data/tracker.db
 npm install --legacy-peer-deps
 npm run build
 npm run db:migrate

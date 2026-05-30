@@ -12,7 +12,7 @@ The cleanest setup. SQLite file persists, worker is a long-running process.
 ```bash
 # one-time
 git clone <repo> /opt/email-automator
-cd /opt/email-automator/web
+cd /opt/email-automator
 cp .env.example .env                 # fill in everything
 npm install --legacy-peer-deps
 npm run build

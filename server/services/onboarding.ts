@@ -15,18 +15,15 @@ let SEED: Record<string, {
 
 function loadSeed() {
   if (SEED !== null) return SEED
-  // Two candidate paths: dev (../standalone) and Docker (/app/seed-templates.json)
-  const candidates = [
-    path.join(process.cwd(), '..', 'standalone', 'data', 'templates.json'),
-    path.join(process.cwd(), 'data', 'seed-templates.json'),
-  ]
-  for (const p of candidates) {
-    if (fs.existsSync(p)) {
-      try {
-        SEED = JSON.parse(fs.readFileSync(p, 'utf8'))
-        return SEED
-      } catch { /* try next */ }
-    }
+  // Bundled at ./data/seed-templates.json — copied from the v1 standalone
+  // templates.json during the v3 root-restructure so the legacy folder isn't
+  // a runtime dependency.
+  const p = path.join(process.cwd(), 'data', 'seed-templates.json')
+  if (fs.existsSync(p)) {
+    try {
+      SEED = JSON.parse(fs.readFileSync(p, 'utf8'))
+      return SEED
+    } catch { /* fall through */ }
   }
   SEED = {}
   return SEED

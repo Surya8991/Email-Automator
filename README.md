@@ -1,38 +1,27 @@
-# Email Automator
+# 📬 Email Automator
 
 A self-hosted email outreach tool. Templates with variables, multi-step
 campaigns, open/click tracking, AI-assisted writing (Groq), per-user
-multi-tenant isolation, full audit log.
+multi-tenant isolation, full audit log, JSON API + webhooks.
 
-Two implementations live in this repo:
-
-- **`web/`** — current v2. Next.js 15 (App Router) + TypeScript strict +
-  Tailwind + shadcn-style UI + Drizzle ORM on better-sqlite3 + Auth.js (magic
-  link + Google). This is the one you should run.
-- **`standalone/`** — v1. Express + sql.js + vanilla-JS SPA. Hardened during
-  Phase 1 (security fixes pinned by `standalone/test/security.test.js`) and
-  kept around for cutover. It runs.
-- **`Code_Rewritten.gs`** — the original Google Apps Script (Gmail-bound).
-
-A pre-rewrite snapshot lives in `archive/v1-express-2026-05-30/` and at git
-tag `v1-pre-rewrite`.
+**Stack:** Next.js 15 (App Router) · TypeScript strict · Tailwind +
+shadcn-style UI · Drizzle ORM on SQLite (better-sqlite3 local / Turso on
+Vercel) · Auth.js (magic link + Google) · Groq (Llama 3.3) · Pino logging.
 
 ---
 
-## 🚀 Deploying somewhere?
+## 🚀 Deploying to Vercel?
 
 Open **[`SETUP.html`](SETUP.html)** in your browser — a one-page interactive
-checklist that walks you through everything you need to do (Gmail App
-Password, Turso DB, Vercel env vars, deploy, post-deploy verification).
-Ticks persist in localStorage so you can come back to it.
+checklist that walks you through every step (Gmail App Password, Turso DB,
+Vercel env vars, deploy, post-deploy verify). Ticks persist in localStorage.
 
 ---
 
-## TL;DR — run v2 in 60 seconds
+## TL;DR — run locally
 
 ```bash
-cd web
-cp .env.example .env             # edit AUTH_SECRET, SMTP_*, (optionally GROQ_API_KEY)
+cp .env.example .env             # edit AUTH_SECRET, SMTP_*, etc.
 npm install --legacy-peer-deps
 npm run db:migrate
 npm run dev                      # http://localhost:3000
@@ -40,38 +29,44 @@ npm run dev                      # http://localhost:3000
 npm run worker                   # background scheduler / campaign advancer
 ```
 
-Open <http://localhost:3000/login>. If you set `ALLOW_DEV_SIGNIN=true` and
-`DEV_BYPASS_EMAILS=test@gmail.com` in `.env`, you'll see a one-click sign-in
-button for testing without SMTP.
+For one-click dev sign-in (no SMTP), set in `.env`:
 
-For the full A-to-Z setup (Gmail App Password, Google OAuth, Groq key,
-deployment), open **`/guide`** in the running app — it's the most current
-documentation.
+```
+ALLOW_DEV_SIGNIN=true
+DEV_BYPASS_EMAILS=test@gmail.com
+```
+
+You'll get a "Sign in as test@gmail.com (dev)" button on the login page.
+**Turn this off before sharing the instance.**
 
 ---
 
-## What it does
+## Features
 
-| Feature | Where |
+| Page | What it does |
 |---|---|
-| Contacts (CSV/XLSX import + export, tags, timeline) | `/contacts` |
-| Templates (editor + live preview + variables + A/B subject + AI rewrite via Groq) | `/templates` |
-| Drafts (bulk create with SSE progress, individual send) | `/drafts` |
-| Dry-run preview (first 100 contacts × active template) | `/dry-run` |
-| Schedule (date/time picker, preview, queue, cancel) | `/schedule` |
-| Campaigns (multi-step sequences with delays + stop-on-reply) | `/campaigns` |
-| Analytics (KPIs + 14-day chart, fed by tracking pixel + click rewriting) | `/analytics` |
-| Blocklist (per-user + global; unsubscribe link auto-adds to global) | `/blocklist` |
-| Audit log (last 500 actions) | `/audit` |
-| Profile + Settings (tabbed: General/Email/AI/Auth/Data/Danger) | `/profile`, `/settings` |
-| Diagnostic (SMTP test, DNS/SPF/DMARC, AI/OAuth checks) | `/diagnostic` |
-| Admin (per-user stats, delete user, full DB backup) | `/admin` |
-| Command palette (⌘K) | global |
-| User guide | `/guide` |
+| `/dashboard` | KPIs + recent activity + onboarding card when empty |
+| `/contacts` | Add/import/export, tags + filter, timeline modal, mobile card view |
+| `/templates` | Editor + live preview + variable autocomplete + A/B subject + AI Improve |
+| `/drafts` | Bulk create with SSE progress, individual + send-all, body preview |
+| `/dry-run` | First 100 contacts × active template (no email goes out) |
+| `/schedule` | Date/time picker, preview, queue table, cancel-all |
+| `/campaigns` | Multi-step sequences (drag-ordered, per-step delays, enroll by tag) |
+| `/analytics` | KPIs + 14-day chart (opens · clicks · replies · bounces) |
+| `/blocklist` | Per-user + global suppression; unsubscribe link auto-adds to global |
+| `/audit` | Last 500 actions per user |
+| `/diagnostic` | SMTP / Groq / OAuth / SPF / DMARC checks + send test |
+| `/profile` | Name, phone, signature, portfolio link |
+| `/settings` | 8 tabs: General · Email · AI · Auth · API keys · Webhooks · Data · Danger |
+| `/admin` | Per-user stats, delete user (cascades), full DB backup |
+| `/guide` | In-app 17-section manual |
+| `/readme` | Public landing page (no login required) |
 
-Backend bits: Server Actions for every mutation, Drizzle migrations,
-better-sqlite3 with WAL + `foreign_keys = ON`, per-user SSE fan-out,
-HMAC-signed tracking + unsubscribe tokens.
+**API:** `/api/v1/contacts` (GET, POST) — Bearer auth via API keys you create
+in Settings → API keys.
+
+**Webhooks:** outbound POSTs on `sent` / `open` / `click` events with
+HMAC-SHA256 signatures. Configure in Settings → Webhooks.
 
 ---
 
@@ -79,22 +74,38 @@ HMAC-signed tracking + unsubscribe tokens.
 
 ```
 .
-├── archive/v1-express-2026-05-30/   # pre-rewrite snapshot (tag: v1-pre-rewrite)
-├── standalone/                       # legacy Express + sql.js + vanilla SPA (hardened)
-├── web/                              # ← current Next.js 15 app
-│   ├── app/                            App Router pages, route handlers, layouts
-│   ├── components/                     UI + shared components
-│   ├── lib/                            env, escape, utils
-│   ├── server/
-│   │   ├── db/                         schema + client + migrations
-│   │   ├── services/                   pure business logic (testable in isolation)
-│   │   └── actions/                    typed Server Actions (Zod-validated)
-│   ├── workers/scheduler.ts            standalone Node process — sends scheduled + advances campaigns
-│   ├── scripts/{migrate,seed-templates}.ts
-│   ├── test/{unit,integration,e2e}/    Vitest + Playwright
-│   └── README.md
-├── Code_Rewritten.gs                 # Google Apps Script (Gmail-bound) implementation
-└── dist/                             # zipped builds (see dist/MANIFEST.md)
+├── app/                          # Next.js App Router
+│   ├── (auth)/login/
+│   ├── (app)/                    # everything behind requireUser()
+│   │   ├── dashboard/  contacts/  templates/  drafts/  dry-run/
+│   │   ├── schedule/  campaigns/  analytics/  blocklist/  audit/
+│   │   ├── diagnostic/  profile/  settings/  guide/  admin/
+│   └── api/
+│       ├── auth/[...nextauth]/
+│       ├── cron/tick/            # Vercel cron target (worker tick)
+│       ├── dev-signin/           # opt-in dev session (ALLOW_DEV_SIGNIN)
+│       ├── v1/contacts/          # JSON API (Bearer auth)
+│       ├── progress/             # per-user SSE
+│       ├── contacts/export/  csv-template/  backup/
+│       └── track/{open,click}/
+├── components/                   # shadcn primitives + sidebar/topbar/palette/dialog
+├── lib/                          # env, escape, utils, logger, rate-limit, bearer-auth
+├── server/
+│   ├── db/                       # Drizzle schema + dual driver + migrations
+│   ├── services/                 # business logic, mockable in tests
+│   └── actions/                  # typed Server Actions (Zod-validated)
+├── workers/scheduler.ts          # long-running scheduler (Linux deploys)
+├── scripts/                      # migrate, seed-templates, seed-contacts, reset-db
+├── test/{unit,integration,e2e}/
+├── data/
+│   ├── seed-templates.json       # 20 starter templates (auto-seeded on first sign-in)
+│   └── tracker.db                # local SQLite (gitignored)
+├── public/.well-known/security.txt
+├── vercel.json                   # Next.js preset + 1-min cron at /api/cron/tick
+├── Dockerfile                    # multi-stage build, tini, /app/data volume
+├── SETUP.html                    # your personal deployment checklist
+├── DEPLOYMENT.md                 # Linux / Docker / Vercel paths
+└── .env.example
 ```
 
 ---
@@ -102,39 +113,58 @@ HMAC-signed tracking + unsubscribe tokens.
 ## Tests
 
 ```bash
-# v2
-cd web && npm run typecheck && npm test && npm run e2e
-
-# v1 (legacy)
-cd standalone && npm test
+npm run typecheck      # strict tsc --noEmit
+npm test               # Vitest (unit + integration)
+npm run e2e            # Playwright (chromium)
 ```
 
-Current matrix:
-
-| Suite | Result |
+| Layer | Coverage |
 |---|---|
-| standalone Vitest | 29/29 |
-| web Vitest (unit + integration + worst-case) | 35/35 |
-| web `tsc --noEmit` (strict) | clean |
-| web Playwright (chromium) | 3/3 |
+| Unit | `lib/escape` (12) · `analytics` math (2) · `drafts.buildEmail` (2) |
+| Integration | contacts (3) · services (4) · multi-tenant isolation (3) · worst-case regressions (12) · credentials (6) · onboarding (3) · api keys + webhooks (8) |
+| E2E (Playwright) | login renders · root redirect · protected pages redirect (3) |
+
+Current: **52 unit + integration green** · strict TS clean · 22 routes build.
 
 ---
 
-## Security model (short version)
+## Security
 
-- Every Server Action and protected page calls `requireUser()`; no implicit
-  fallback user id exists
-- All template variable substitution is HTML-escaped (body) or CR/LF-stripped
-  (subject); `assertNoCrlf()` runs on every outgoing email header
-- Tracking pixel and click URLs are HMAC-SHA256 signed with `AUTH_SECRET`
-- Dev sign-in is hard-disabled in production unless `ALLOW_DEV_SIGNIN=true`
-- DB backup endpoint is admin-only (`/api/backup`)
-- Atomic template activation; unique constraint on campaign enrollments;
-  per-tenant ownership re-check on cross-object references (e.g. attaching a
-  template to a campaign step)
-- Hardened CSP, X-Frame-Options DENY, no inline scripts in v2
+- `requireUser()` / `requireAdmin()` on every Server Action and protected page
+- HMAC-SHA256 signed tracking pixels, click URLs, unsubscribe links, webhook payloads (all keyed by `AUTH_SECRET`)
+- Dev sign-in disabled in production unless `ALLOW_DEV_SIGNIN=true`
+- DB backup endpoint admin-only
+- Atomic template activation (single `CASE-WHEN` UPDATE) — no two-active race
+- `UNIQUE(campaign_id, contact_id)` — double-enroll is a no-op
+- Ownership re-check when attaching templates to campaign steps
+- 100k row hard cap on CSV/XLSX imports (no OOM)
+- Strict CSP headers + `foreign_keys = ON` in SQLite
+- Per-user rate limits: AI (20/min), dev-signin (10/min), v1 API (60–120/min)
+- API keys stored as SHA-256 hash; plaintext shown once on creation
+- `public/.well-known/security.txt` (RFC 9116)
 
-Full audit + fix history is in the git log.
+---
+
+## Deployment
+
+See **[DEPLOYMENT.md](DEPLOYMENT.md)** for full Linux / Docker / Vercel
+walkthroughs, or open **[SETUP.html](SETUP.html)** for the interactive
+checklist tailored to a first-time deployer.
+
+| Target | Notes |
+|---|---|
+| **Vercel** (recommended) | Uses Turso (libSQL) + Vercel Cron. Zero code changes — the DB driver auto-detects from `DATABASE_URL`. |
+| **Self-hosted Linux** | `pm2 start npm -- start` + `pm2 start npm -- run worker`. SQLite in `./data/`. Back up with rsync/restic. |
+| **Docker** | `Dockerfile` in repo root; mount `./data` as a volume. |
+
+---
+
+## Legacy
+
+The original Express + sql.js + vanilla-JS implementation, the Google Apps
+Script, and the sample Excel file were moved out to a sibling folder during
+the v3 root-restructure. They're preserved at git tag **`v1-pre-rewrite`**
+(commit `7c0972f`) and aren't part of this runtime any more.
 
 ---
 

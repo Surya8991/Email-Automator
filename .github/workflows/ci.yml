@@ -6,23 +6,9 @@ on:
   pull_request:
 
 jobs:
-  legacy:
-    name: standalone (Express)
-    runs-on: ubuntu-latest
-    defaults: { run: { working-directory: standalone } }
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 20, cache: npm, cache-dependency-path: standalone/package-lock.json }
-      - run: npm ci
-      - run: npm test
-      - run: npm audit --audit-level=high
-        continue-on-error: true
-
   web:
     name: web (Next.js)
     runs-on: ubuntu-latest
-    defaults: { run: { working-directory: web } }
     env:
       AUTH_SECRET: test-secret-must-be-at-least-16-chars-long
       DATABASE_URL: ./data/test.db
@@ -32,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 20, cache: npm, cache-dependency-path: web/package-lock.json }
+        with: { node-version: 20, cache: npm }
       - run: npm install --legacy-peer-deps
       - run: npm run db:migrate
       - run: npm run typecheck
