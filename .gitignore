@@ -12,6 +12,9 @@ build
 *.db
 *.db-journal
 data/
+# …but DO ship the seed templates — onboarding loads them at first sign-in,
+# and Vercel needs the file in the build to populate new users' libraries.
+!data/seed-templates.json
 
 # logs
 *.log
