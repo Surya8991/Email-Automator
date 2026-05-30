@@ -104,6 +104,13 @@ two implementations will drift.
 - The `createRequire` call in [server/db/client.ts](server/db/client.ts) is
   marked `/* turbopackIgnore: true */` so Turbopack doesn't statically bundle
   both DB drivers into every function. Leave that annotation.
+- **Do NOT add `"type": "module"` to package.json.** Next 16's build output
+  then becomes ESM, but Vercel's serverless wrapper `require()`s the page
+  module — Node rejects `require()` of ESM in a type:module package and
+  every route 500s before any code runs. The local `npm start` path doesn't
+  hit the wrapper, so the bug is invisible until deploy. The dual-driver
+  picker accommodates this: prefers the global `require` (CJS) and falls
+  back to `createRequire(import.meta.url)` only when it's absent (tsx).
 
 ## Verifying changes before committing
 
