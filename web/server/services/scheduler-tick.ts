@@ -10,6 +10,9 @@ import { buildEmail } from './drafts'
 import { sendMail } from './mailer'
 import { instrumentHtml } from './tracking'
 import { env } from '@/lib/env'
+import { logger } from '@/lib/logger'
+
+const log = logger.child({ component: 'scheduler-tick' })
 
 const BATCH_PER_USER = 10
 const DAILY_LIMIT =
@@ -111,7 +114,7 @@ async function tickForUser(userId: string): Promise<{ sent: number; failed: numb
       }).where(eq(campaignEnrollments.id, enr.id))
       advanced++
     } catch (err) {
-      console.error('[scheduler-tick] enrollment send failed', enr.id, err)
+      log.error({ err, enrollmentId: enr.id, campaignId: enr.campaignId }, 'enrollment send failed')
       failed++
     }
   }
@@ -127,7 +130,7 @@ export async function tickOnce(): Promise<TickStats> {
       const r = await tickForUser(u.id)
       sent += r.sent; failed += r.failed; advanced += r.advanced
     } catch (err) {
-      console.error('[scheduler-tick] user failed', u.id, err)
+      log.error({ err, userId: u.id }, 'user tick failed')
     }
   }
   return { sent, failed, advanced, users: allUsers.length }

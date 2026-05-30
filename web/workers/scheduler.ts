@@ -4,20 +4,21 @@
 // .env loading is handled inside lib/env.ts itself so it runs before zod parses.
 import '../lib/env'
 import { tickOnce } from '../server/services/scheduler-tick'
+import { logger } from '../lib/logger'
 
 const TICK_MS = 30_000
+const log = logger.child({ component: 'worker' })
 
 async function loop() {
   try {
     const r = await tickOnce()
-    if (r.sent || r.failed || r.advanced) {
-      console.log(`[worker] sent=${r.sent} failed=${r.failed} advanced=${r.advanced} users=${r.users}`)
-    }
+    if (r.sent || r.failed || r.advanced) log.info({ ...r }, 'tick')
+    else log.debug({ ...r }, 'tick (idle)')
   } catch (err) {
-    console.error('[worker] tick threw', err)
+    log.error({ err }, 'tick threw')
   }
 }
 
-console.log('[worker] scheduler started, tick every', TICK_MS, 'ms')
+log.info({ tickMs: TICK_MS }, 'scheduler started')
 loop()
 setInterval(loop, TICK_MS)

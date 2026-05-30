@@ -2,6 +2,7 @@ import { db } from '@/server/db/client'
 import { emailLog, events } from '@/server/db/schema'
 import { eq } from 'drizzle-orm'
 import { verifyOpen } from '@/server/services/tracking'
+import { dispatchAsync } from '@/server/services/webhooks'
 
 // 1×1 transparent GIF — universally rendered, no decoding errors.
 const GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64')
@@ -19,6 +20,7 @@ export async function GET(req: Request) {
         kind: 'open',
         meta: JSON.stringify({ subject: row.subject }),
       })
+      dispatchAsync(row.userId, 'open', { subject: row.subject, emailLogId: row.id })
     }
   }
   return new Response(GIF, {

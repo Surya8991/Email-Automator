@@ -1,6 +1,8 @@
 import { requireUser } from '@/auth'
 import { getMany } from '@/server/services/settings'
 import { getAiFor, getSmtpFor } from '@/server/services/credentials'
+import { listKeys } from '@/server/services/api-keys'
+import { listWebhooks } from '@/server/services/webhooks'
 import { env } from '@/lib/env'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
@@ -8,7 +10,9 @@ import { SettingsForm } from './settings-form'
 import { DangerZone } from './danger-zone'
 import { SmtpForm } from './smtp-form'
 import { AiForm } from './ai-form'
-import { CheckCircle2, XCircle, Mail, Bot, Lock, Database } from 'lucide-react'
+import { ApiKeysForm } from './api-keys-form'
+import { WebhooksForm } from './webhooks-form'
+import { CheckCircle2, XCircle, Mail, Bot, Lock, Database, KeyRound, Webhook } from 'lucide-react'
 
 function Status({ ok, label, detail }: { ok: boolean; label: string; detail?: string }) {
   return (
@@ -30,7 +34,9 @@ export default async function SettingsPage() {
     'SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'EMAIL_FROM',
     'GROQ_API_KEY', 'GROQ_MODEL',
   ])
-  const [smtp, ai] = await Promise.all([getSmtpFor(u.id), getAiFor(u.id)])
+  const [smtp, ai, apiKeyRows, webhookRows] = await Promise.all([
+    getSmtpFor(u.id), getAiFor(u.id), listKeys(u.id), listWebhooks(u.id),
+  ])
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -45,6 +51,8 @@ export default async function SettingsPage() {
           <TabsTrigger value="email">Email</TabsTrigger>
           <TabsTrigger value="ai">AI</TabsTrigger>
           <TabsTrigger value="auth">Auth</TabsTrigger>
+          <TabsTrigger value="api">API keys</TabsTrigger>
+          <TabsTrigger value="webhooks">Webhooks</TabsTrigger>
           <TabsTrigger value="data">Data</TabsTrigger>
           <TabsTrigger value="danger" className="text-destructive">Danger</TabsTrigger>
         </TabsList>
@@ -103,6 +111,28 @@ export default async function SettingsPage() {
                 </ol>
               </details>
             </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* API keys */}
+        <TabsContent value="api">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><KeyRound className="h-4 w-4" /> API keys</CardTitle>
+              <CardDescription>Bearer tokens for the <code>/api/v1/*</code> JSON API. Plaintext is shown once at creation.</CardDescription>
+            </CardHeader>
+            <CardContent><ApiKeysForm rows={apiKeyRows} /></CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Webhooks */}
+        <TabsContent value="webhooks">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><Webhook className="h-4 w-4" /> Webhooks</CardTitle>
+              <CardDescription>Outbound POSTs on every email event. Each delivery is HMAC-SHA256-signed.</CardDescription>
+            </CardHeader>
+            <CardContent><WebhooksForm rows={webhookRows} /></CardContent>
           </Card>
         </TabsContent>
 

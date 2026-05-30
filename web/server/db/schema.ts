@@ -178,10 +178,43 @@ export const events = sqliteTable('events', {
   ts: integer('ts').notNull().$defaultFn(() => Date.now()),
 }, (t) => ({ byUserKindTs: index('events_user_kind_ts_idx').on(t.userId, t.kind, t.ts) }))
 
+// Per-user API tokens for the JSON API at /api/v1/*. We store SHA-256 of the
+// raw key; the plaintext is shown once at creation and never again.
+export const apiKeys = sqliteTable('api_keys', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  keyHash: text('key_hash').notNull(),
+  prefix: text('prefix').notNull(), // first 8 chars of the raw key, for UI display
+  lastUsedAt: integer('last_used_at', { mode: 'timestamp_ms' }),
+  revokedAt: integer('revoked_at', { mode: 'timestamp_ms' }),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),
+}, (t) => ({
+  byUser: index('api_keys_user_idx').on(t.userId),
+  byHash: uniqueIndex('api_keys_hash_idx').on(t.keyHash),
+}))
+
+// Outbound webhooks. `events` is a comma-separated kind list ("sent,open,click,…").
+export const webhooks = sqliteTable('webhooks', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  url: text('url').notNull(),
+  secret: text('secret').notNull(), // for HMAC signing of payloads
+  events: text('events').notNull().default('sent,open,click,reply,bounce,unsubscribe'),
+  lastStatus: integer('last_status'),
+  lastDeliveryAt: integer('last_delivery_at', { mode: 'timestamp_ms' }),
+  lastError: text('last_error'),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),
+}, (t) => ({ byUser: index('webhooks_user_idx').on(t.userId) }))
+
 export type User = typeof users.$inferSelect
+export type ApiKey = typeof apiKeys.$inferSelect
+export type Webhook = typeof webhooks.$inferSelect
 export type Contact = typeof contacts.$inferSelect
 export type Template = typeof templates.$inferSelect
 export type Draft = typeof drafts.$inferSelect
 export type EmailLogRow = typeof emailLog.$inferSelect
 export type Campaign = typeof campaigns.$inferSelect
 export type Event = typeof events.$inferSelect
+// (apiKeys / webhooks types are declared next to the table definitions above
+//  in the same file — duplicated here so the export block stays grouped.)

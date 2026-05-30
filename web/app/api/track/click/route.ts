@@ -2,6 +2,7 @@ import { db } from '@/server/db/client'
 import { emailLog, events } from '@/server/db/schema'
 import { eq } from 'drizzle-orm'
 import { verifyClick } from '@/server/services/tracking'
+import { dispatchAsync } from '@/server/services/webhooks'
 
 export async function GET(req: Request) {
   const url = new URL(req.url)
@@ -19,6 +20,7 @@ export async function GET(req: Request) {
         kind: 'click',
         meta: JSON.stringify({ url: target }),
       })
+      dispatchAsync(row.userId, 'click', { url: target, emailLogId: row.id })
     }
   }
   // Only allow http(s) targets — never internal paths or javascript: URLs.
