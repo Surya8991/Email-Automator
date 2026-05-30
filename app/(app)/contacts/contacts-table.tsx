@@ -1,7 +1,8 @@
 'use client'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useState, useTransition } from 'react'
-import { Trash2, ChevronLeft, ChevronRight, Search, History, X, Tag, Ban, RotateCcw, Plus } from 'lucide-react'
+import { Trash2, ChevronLeft, ChevronRight, Search, History, X, Tag, Ban, RotateCcw, Plus, CalendarClock } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type { Contact } from '@/server/db/schema'
@@ -9,6 +10,7 @@ import {
   deleteContactAction, deleteContactsBulkAction,
   bulkTagAction, bulkBlockAction, resetStatusAction,
 } from '@/server/actions/contacts'
+import { scheduleFollowupAction } from '@/server/actions/drafts'
 import { ContactTimeline } from './contact-timeline'
 
 interface Props { rows: Contact[]; page: number; pages: number; search: string; tag: string; allTags: string[] }
@@ -193,6 +195,24 @@ export function ContactsTable({ rows, page, pages, search, tag, allTags }: Props
                   </td>
                   <td className="px-3 py-2 text-xs text-muted-foreground">{c.emailStatus || 'Pending'}</td>
                   <td className="px-3 py-2 text-right whitespace-nowrap">
+                    {/* Follow-up — pick a day count, scheduler queues it.
+                        Uses the active template, so the user picks the
+                        body once and reuses across follow-ups. */}
+                    <Button variant="ghost" size="icon" aria-label="Schedule follow-up" disabled={pending} title="Schedule a follow-up"
+                      onClick={() => {
+                        const v = prompt('Send follow-up in how many days?', '3')?.trim()
+                        if (!v) return
+                        const d = Math.max(1, Math.min(60, Number(v) || 0))
+                        if (!d) return
+                        start(async () => {
+                          const r = await scheduleFollowupAction(c.id, d)
+                          if ('error' in r && r.error) toast.error(r.error)
+                          else toast.success(`Follow-up scheduled in ${d} day${d === 1 ? '' : 's'}`)
+                          router.refresh()
+                        })
+                      }}>
+                      <CalendarClock className="h-4 w-4" />
+                    </Button>
                     <Button variant="ghost" size="icon" aria-label="Timeline" onClick={() => setTimelineFor(c)}>
                       <History className="h-4 w-4" />
                     </Button>

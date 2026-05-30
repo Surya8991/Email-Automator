@@ -2,10 +2,10 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Send, Trash2, Sparkles, SendHorizontal, Pencil, Save, X } from 'lucide-react'
+import { Send, Trash2, Sparkles, SendHorizontal, Pencil, Save, X, CalendarClock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { createDraftsAction, deleteDraftAction, sendAllAction, sendDraftAction, updateDraftAction } from '@/server/actions/drafts'
+import { createDraftsAction, deleteDraftAction, sendAllAction, sendDraftAction, updateDraftAction, scheduleFollowupAction } from '@/server/actions/drafts'
 import type { Draft } from '@/server/db/schema'
 import { useProgress } from '@/components/use-progress'
 
@@ -113,12 +113,40 @@ export function DraftsClient({ rows }: { rows: Draft[] }) {
                 )}
                 <Button variant="ghost" size="icon" aria-label="Send" disabled={pending || isEditing}
                   onClick={() => start(async () => {
-                    try { await sendDraftAction(d.id); toast.success(`Sent to ${d.toEmail}`) }
-                    catch (e) { toast.error(e instanceof Error ? e.message : 'Send failed') }
+                    try {
+                      const r = await sendDraftAction(d.id)
+                      // Duplicate-send guard: the server returns a
+                      // 'recent-send' warning instead of sending. Confirm
+                      // with the user, then call again with force=true.
+                      if ('warning' in r && r.warning === 'recent-send') {
+                        const when = new Date(r.lastSentAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })
+                        if (!confirm(`You already emailed ${r.email} on ${when} (IST). Send again anyway?`)) return
+                        await sendDraftAction(d.id, { force: true })
+                      }
+                      toast.success(`Sent to ${d.toEmail}`)
+                    } catch (e) { toast.error(e instanceof Error ? e.message : 'Send failed') }
                     router.refresh()
                   })}>
                   <Send className="h-4 w-4" />
                 </Button>
+                {d.contactId ? (
+                  <Button variant="ghost" size="icon" aria-label="Schedule follow-up" disabled={pending || isEditing}
+                    title="Schedule a follow-up for this contact"
+                    onClick={() => {
+                      const v = prompt('Send follow-up in how many days?', '3')?.trim()
+                      if (!v) return
+                      const dDays = Math.max(1, Math.min(60, Number(v) || 0))
+                      if (!dDays) return
+                      start(async () => {
+                        const r = await scheduleFollowupAction(d.contactId!, dDays)
+                        if ('error' in r && r.error) toast.error(r.error)
+                        else toast.success(`Follow-up in ${dDays}d`)
+                        router.refresh()
+                      })
+                    }}>
+                    <CalendarClock className="h-4 w-4" />
+                  </Button>
+                ) : null}
                 <Button variant="ghost" size="icon" aria-label="Delete" disabled={pending}
                   onClick={() => start(async () => {
                     await deleteDraftAction(d.id); toast(`Deleted draft to ${d.toEmail}`); router.refresh()

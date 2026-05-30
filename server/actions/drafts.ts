@@ -14,11 +14,43 @@ export async function createDraftsAction(count: number) {
   return { ok: true, ...r }
 }
 
-export async function sendDraftAction(id: number) {
+export async function sendDraftAction(id: number, opts: { force?: boolean } = {}) {
   const u = await requireUser()
+  // Duplicate-send guard. Look up the draft's recipient, check whether
+  // they were already sent to in the last 7 days. If yes and !force,
+  // return a warning so the UI can confirm. force=true bypasses.
+  const allPending = await drafts.listDrafts(u.id, 1, 200)
+  const target = allPending.rows.find((d) => d.id === id)
+  if (target && !opts.force) {
+    const recent = await drafts.lastSentTo(u.id, target.toEmail, 7)
+    if (recent) {
+      return {
+        warning: 'recent-send' as const,
+        email: target.toEmail,
+        lastSentAt: recent.toISOString(),
+      }
+    }
+  }
   await drafts.sendDraft(u.id, id)
   revalidatePath('/drafts')
-  return { ok: true }
+  return { ok: true as const }
+}
+
+// Schedule a single follow-up for one contact, N days from now, using the
+// active template. UI exposes this as a "Schedule follow-up" button on each
+// contact row + on each draft row. Wraps the existing scheduler — the
+// follow-up appears in /schedule like any other queued row.
+export async function scheduleFollowupAction(contactId: number, days: number) {
+  const u = await requireUser()
+  try {
+    const r = await drafts.scheduleFollowup(u.id, contactId, days)
+    revalidatePath('/contacts')
+    revalidatePath('/schedule')
+    revalidatePath('/dashboard')
+    return { ok: true as const, ...r }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Schedule failed' }
+  }
 }
 
 export async function deleteDraftAction(id: number) {

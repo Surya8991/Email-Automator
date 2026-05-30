@@ -114,6 +114,51 @@ export async function deleteDraft(userId: string, draftId: number) {
 }
 
 /**
+ * Was this email address sent to within the last `windowDays` days?
+ * Used by the duplicate-send guard to warn the user before they send to
+ * someone they just contacted.
+ */
+export async function lastSentTo(userId: string, email: string, windowDays = 7): Promise<Date | null> {
+  const since = Date.now() - windowDays * 24 * 60 * 60 * 1000
+  const rows = await db.select({ ts: emailLog.scheduledAt }).from(emailLog)
+    .where(and(
+      eq(emailLog.userId, userId),
+      sql`LOWER(${emailLog.email}) = LOWER(${email})`,
+      eq(emailLog.status, 'Sent'),
+      sql`${emailLog.scheduledAt} >= ${since}`,
+    ))
+    .orderBy(desc(emailLog.scheduledAt)).limit(1)
+  return rows[0] ? new Date(rows[0].ts) : null
+}
+
+/**
+ * Schedule a follow-up email to one contact, `days` days from now, using
+ * the user's currently-active template. Mirrors what the scheduler tick
+ * does to bulk schedules — same emailLog row shape, status='Scheduled',
+ * picked up on the next tick. Returns the scheduled timestamp.
+ */
+export async function scheduleFollowup(
+  userId: string, contactId: number, days: number,
+): Promise<{ at: number; subject: string }> {
+  const { getActive } = await import('./templates')
+  const tpl = await getActive(userId)
+  if (!tpl) throw new Error('No active template — pick one in /templates first')
+  const [contact] = await db.select().from(contacts)
+    .where(and(eq(contacts.id, contactId), eq(contacts.userId, userId)))
+  if (!contact) throw new Error('Contact not found')
+  if (!contact.recruiterEmail) throw new Error('Contact has no email')
+  const at = Date.now() + Math.max(1, days) * 24 * 60 * 60 * 1000
+  const email = buildEmail(tpl, contact)
+  await db.insert(emailLog).values({
+    userId, contactId,
+    scheduleId: `fup_${at}_${contactId}`,
+    email: contact.recruiterEmail, subject: email.subject, body: email.html,
+    scheduledAt: at, status: 'Scheduled',
+  })
+  return { at, subject: email.subject }
+}
+
+/**
  * Update a pending draft's subject and body. Lets the user fix typos or
  * personalize per-recipient before sending — previously they had to
  * delete + recreate from a template change.

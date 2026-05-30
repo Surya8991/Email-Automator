@@ -18,6 +18,7 @@ Last refreshed: 2026-05-31.
 ## Contacts
 
 - **CRUD** — add one-by-one or import in bulk.
+- **One-click follow-up** — per-row "Schedule follow-up in N days" button. Pick a number, scheduler queues it.
 - **CSV/Excel import** — `.csv`, `.xlsx`, `.xls`. Header names are fuzz-matched. Download the [starter template](https://email-automator-three.vercel.app/api/csv-template) for the canonical columns + sample rows.
 - **CSV export** of all your contacts.
 - **Tag filter** — comma-separated tags per contact; click a tag to filter, dropdown shows every tag you've used.
@@ -29,7 +30,7 @@ Last refreshed: 2026-05-31.
 ## Templates
 
 - **20 starter templates** auto-seeded on first sign-in — 4 categories (Growth, Performance, SEO, Digital) × 5 tones (Formal, Friendly, Job-post, Referral, LinkedIn).
-- **Variable insertion** — `{{name}}`, `{{company}}`, `{{role_name}}`, `{{email}}`, `{{location}}`, `{{platform}}`.
+- **Clickable variable palette** — recipient fields (`{{name}}`, `{{company}}`, `{{role_name}}`, `{{email}}`, `{{location}}`, `{{platform}}`) plus HTML snippets (salutation, paragraph, bullet list, sign-off, divider). Click → token lands at cursor.
 - **Live preview** — see how the email looks against a sample contact.
 - **Email-safe styled wrapper** — every outgoing email gets a polished, Outlook-safe HTML shell automatically (rounded card, system font, max 600px, hidden preheader).
 - **A/B subject lines** — set `subjectB`; the system deterministically splits 50/50 by contact id.
@@ -43,6 +44,8 @@ Last refreshed: 2026-05-31.
 - **Live progress** via SSE — see send count tick up in real time.
 - **Per-draft preview** — collapsible inline body view.
 - **Inline edit** — fix subject + HTML body before sending without recreating from template.
+- **Duplicate-send guard** — sending to a recipient you already emailed in the last 7 days surfaces a confirmation dialog with the previous send date.
+- **One-click follow-up** — per draft, "Schedule follow-up in N days" button uses the active template + queues it in /schedule.
 - **Send one** or **Send all**.
 - **Retry failed** — re-run all pending drafts in one click.
 - **Delete** individual drafts.
@@ -152,7 +155,8 @@ Last refreshed: 2026-05-31.
 
 ## Roadmap (not yet shipped)
 
-- Per-recipient throttle (e.g. "max 1 email per contact per 30 days").
+- **User-defined custom fields** — declare your own `{{vars}}` per contact (needs schema migration).
+- Per-recipient throttle (e.g. "max 1 email per contact per 30 days") — *partial: duplicate-send guard ships now*.
 - Per-domain rate limit (e.g. "max 50/day to @gmail.com").
 - Multiple email identities per user.
 - Campaign-level A/B (split contacts across two variant step sequences).

@@ -14,7 +14,34 @@ import type { Template } from '@/server/db/schema'
 type Tone = 'professional' | 'friendly' | 'concise' | 'enthusiastic' | 'formal'
 const TONES: Tone[] = ['professional', 'friendly', 'concise', 'enthusiastic', 'formal']
 
-const VARS = ['name', 'company', 'role_name', 'email', 'location', 'platform'] as const
+// Variables exposed in the editor's clickable palette. Anything mapped
+// in server/services/drafts.ts buildEmail() can be inserted — keep the
+// two lists in sync. Grouped so the UI can render them in sections.
+const VAR_GROUPS = [
+  {
+    label: 'Recipient',
+    vars: [
+      { key: 'name',      hint: 'Recruiter or contact name' },
+      { key: 'email',     hint: 'Email address' },
+      { key: 'company',   hint: 'Company / organization' },
+      { key: 'role_name', hint: 'Job title / role' },
+      { key: 'location',  hint: 'City or "Remote"' },
+      { key: 'platform',  hint: 'Where you found them (LinkedIn, Naukri…)' },
+    ],
+  },
+  {
+    label: 'Common HTML',
+    vars: [
+      { key: 'salutation_hi',     hint: 'Inserts "Hi {{name}},"', literal: '<p>Hi {{name}},</p>' },
+      { key: 'salutation_dear',   hint: 'Inserts "Dear {{name}},"', literal: '<p>Dear {{name}},</p>' },
+      { key: 'paragraph',         hint: 'Inserts an empty paragraph', literal: '<p></p>' },
+      { key: 'bullet_list',       hint: 'Inserts a 3-bullet list', literal: '<ul><li></li><li></li><li></li></ul>' },
+      { key: 'signoff_best',      hint: 'Sign-off "Best regards,"', literal: '<p>Best regards,</p>' },
+      { key: 'signoff_thanks',    hint: 'Sign-off "Thanks,"', literal: '<p>Thanks,</p>' },
+      { key: 'divider',           hint: 'Horizontal divider', literal: '<hr />' },
+    ],
+  },
+] as const
 
 const SAMPLE = { name: 'Jane Doe', company: 'Acme Corp', role_name: 'Senior Marketer', email: 'jane@acme.com', location: 'Remote', platform: 'LinkedIn' }
 
@@ -35,10 +62,12 @@ export function TemplateEditor({ templates }: { templates: Template[] }) {
   const [aiGoal, setAiGoal] = useState('')
   const [subjectSuggestions, setSubjectSuggestions] = useState<string[] | null>(null)
 
-  // Insert {{var}} at the cursor of whichever field was last focused. Keeps the
-  // focus in that field so the user can chain insertions without re-clicking.
-  function insertVar(v: string) {
-    const token = `{{${v}}}`
+  // Insert a token at the cursor of whichever field was last focused.
+  // Tokens are either {{var}} (variables — substituted per recipient by
+  // the personalize() helper) or raw HTML snippets (literal). Keeps focus
+  // in the field so the user can chain insertions without re-clicking.
+  function insertVar(v: string, literal?: string) {
+    const token = literal ?? `{{${v}}}`
     const subjectActive = document.activeElement === subjectRef.current
     if (subjectActive && subjectRef.current) {
       const el = subjectRef.current
@@ -135,11 +164,25 @@ export function TemplateEditor({ templates }: { templates: Template[] }) {
           <textarea ref={bodyRef} id="initialMsg" rows={14}
             className="flex w-full rounded-md border bg-background px-3 py-2 font-mono text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
             value={draft.initialMsg ?? ''} onChange={(e) => setDraft({ ...draft, initialMsg: e.target.value })} />
-          <div className="flex flex-wrap items-center gap-1 text-xs">
-            <span className="text-muted-foreground">Insert:</span>
-            {VARS.map((v) => (
-              <button key={v} type="button" onClick={() => insertVar(v)}
-                className="rounded bg-muted px-1.5 py-0.5 font-mono hover:bg-accent">{`{{${v}}}`}</button>
+          {/* Clickable insertion palette. Two groups: per-recipient
+              variables (substituted on send) and HTML snippets (raw
+              markup inserted as-is). Click a chip → token lands at the
+              cursor of the most-recently-focused field. */}
+          <div className="space-y-1.5 text-xs">
+            {VAR_GROUPS.map((g) => (
+              <div key={g.label} className="flex flex-wrap items-center gap-1">
+                <span className="min-w-[80px] text-muted-foreground">{g.label}:</span>
+                {g.vars.map((v) => (
+                  <button
+                    key={v.key} type="button"
+                    onClick={() => insertVar(v.key, 'literal' in v ? v.literal : undefined)}
+                    title={v.hint}
+                    className="rounded bg-muted px-1.5 py-0.5 font-mono hover:bg-accent"
+                  >
+                    {'literal' in v ? v.key : `{{${v.key}}}`}
+                  </button>
+                ))}
+              </div>
             ))}
           </div>
         </div>
