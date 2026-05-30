@@ -112,17 +112,43 @@ two implementations will drift.
   picker accommodates this: prefers the global `require` (CJS) and falls
   back to `createRequire(import.meta.url)` only when it's absent (tsx).
 
-## Verifying changes before committing
+## Pre-push checklist
 
-For any non-trivial change, run all three:
+Before `git push` on `main`, run all of these. They take ~2 minutes total
+and catch the failure modes that have actually bitten this repo:
 
 ```bash
-npm run typecheck && npm test && npm run build
+# 1. No "type":"module" in package.json (breaks Vercel — see "Do NOT" above)
+grep '"type"' package.json && echo "STOP: remove type:module" || echo "ok"
+
+# 2. Standard gates
+npm run typecheck
+npm test
+npm run build
+
+# 3. CJS-loadability smoke — exactly what Vercel's serverless wrapper does.
+#    A clean "require() of ES Module" rejection here is the bug that
+#    500s every route in production. Any OTHER error (e.g. AsyncLocalStorage
+#    not available) is fine — it just means Next is running and complaining
+#    about missing request context outside a real request.
+node -e "require('./.next/server/app/page.js')" 2>&1 | head -3
+
+# 4. Prod boot against the real Turso DB (mirrors Vercel's runtime exactly).
+#    npm start uses next start which DOES bypass the serverless wrapper,
+#    so this catches request-time failures but NOT the wrapper-level one
+#    above — both checks are needed.
+DATABASE_URL='libsql://…turso.io' TURSO_AUTH_TOKEN='eyJ…' npm start &
+sleep 8
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3000/login          # → 200
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3000/api/auth/session # → 200
 ```
 
-For DB / auth / scheduler changes, also boot prod against the real Turso DB
-and probe `/login`, `/api/auth/session`, dev-signin + `/dashboard` — this
-mirrors what Vercel runs and has caught issues `npm run dev` missed.
+After push, probe the live URL — Vercel's CDN sometimes serves the prior
+deploy briefly:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" https://email-automator-three.vercel.app/login
+```
 
 ## What NOT to do
 
