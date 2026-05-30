@@ -8,8 +8,15 @@
 // or rely on UNIQUE constraints + try/catch.
 import path from 'node:path'
 import fs from 'node:fs'
+import { createRequire } from 'node:module'
 import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core'
 import * as schema from './schema'
+
+// We need synchronous `require()` to pick a driver at module-load time.
+// CommonJS (how Next.js bundles this) provides it as a global; pure ESM
+// (how tsx loads our CLI scripts via "type": "module") doesn't.
+// createRequire gives us sync require in both worlds.
+const require = createRequire(import.meta.url)
 
 const url = process.env.DATABASE_URL ?? './data/tracker.db'
 // Anything that looks like a URL (libsql://, https://, file:) goes through

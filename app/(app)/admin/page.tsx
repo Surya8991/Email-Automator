@@ -35,6 +35,34 @@ export default async function AdminPage() {
         <p className="text-sm text-muted-foreground">{all.length} user{all.length === 1 ? '' : 's'} on this instance.</p>
       </div>
       <Card>
+        <CardHeader>
+          <CardTitle>Admins ({adminEmails.length})</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {adminEmails.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No admin emails configured. Set <code>ADMIN_EMAILS</code> in your environment to a
+              comma-separated list (e.g. <code>you@example.com,cofounder@example.com</code>), then restart.
+            </p>
+          ) : (
+            <>
+              <ul className="flex flex-wrap gap-2">
+                {adminEmails.map((e) => (
+                  <li key={e} className="inline-flex items-center gap-1.5 rounded-full border bg-muted px-2.5 py-1 text-xs font-mono">
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                    {e}
+                  </li>
+                ))}
+              </ul>
+              <p className="text-xs text-muted-foreground">
+                Configured via <code>ADMIN_EMAILS</code> (comma-separated). Restart required after changes.
+              </p>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
         <CardHeader><CardTitle>Users</CardTitle></CardHeader>
         <CardContent className="p-0">
           <AdminTable rows={rows} />
