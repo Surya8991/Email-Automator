@@ -147,23 +147,25 @@ export async function sendTimeHeatmap(userId: string, days = 30): Promise<HourCe
       if (m.emailLogId) sendByLogId.set(m.emailLogId, e.ts)
     } catch { /* ignore */ }
   }
-  // grid[dow][hour] = { sent, opens }. Bucket in user's local IST so the
-  // "10 AM" heatmap cell reflects 10 AM IST, not UTC.
+  // grid[dow][hour] = { sent, opens }. Bucket in IST so the "10 AM" cell
+  // reflects 10 AM IST regardless of the server's own timezone.
   const grid: HourCell[] = []
   for (let d = 0; d < 7; d++) for (let h = 0; h < 24; h++) grid.push({ dow: d, hour: h, sent: 0, opens: 0 })
+  // Use Intl.DateTimeFormat to extract IST dow/hour directly — avoids the
+  // earlier server-TZ-dependent math that broke on IST hosts.
+  const DOW_MAP: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }
+  const istFmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Kolkata', weekday: 'short', hour: '2-digit', hour12: false,
+  })
   const cell = (ts: number): HourCell => {
-    // Render the timestamp in IST to extract dow/hour without DST drift.
-    // (Server's TZ may be UTC; we always bucket against IST.)
-    const istString = new Date(ts).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })
-    // "30/05/2026, 11:32:14 pm" → parse day, hour
-    const d = new Date(ts)
-    // Computing dow/hour against IST: shift ts by IST offset (+5:30 = 330 min).
-    const istMs = ts + (330 * 60 * 1000) + (d.getTimezoneOffset() * 60 * 1000)
-    const ist = new Date(istMs)
-    const dow = ist.getUTCDay()
-    const hour = ist.getUTCHours()
+    const parts = istFmt.formatToParts(new Date(ts))
+    const dow = DOW_MAP[parts.find((p) => p.type === 'weekday')?.value ?? 'Sun'] ?? 0
+    // hour: 'numeric'+'2-digit' with hour12=false can return "24" at midnight
+    // on some runtimes; clamp into 0..23.
+    let hour = Number(parts.find((p) => p.type === 'hour')?.value ?? 0)
+    if (!Number.isFinite(hour) || hour < 0) hour = 0
+    if (hour > 23) hour = 0
     return grid[dow * 24 + hour]!
-    void istString // silence unused; the formatString above is a sanity guard
   }
   for (const e of evRows) {
     if (e.kind === 'sent') {
