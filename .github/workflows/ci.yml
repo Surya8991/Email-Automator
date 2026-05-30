@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Weekly Monday-morning audit so a freshly disclosed CVE in a transitive
+  # dep surfaces on its own, not at the next deploy attempt.
+  schedule:
+    - cron: '0 6 * * 1'
 
 jobs:
   web:
@@ -20,6 +24,12 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 20, cache: npm }
       - run: npm install --legacy-peer-deps
+      # FAIL the build on any high/critical CVE. Vercel does the same check
+      # at deploy time and silently blocks deploys (which is how we landed
+      # in the 404 state with Next 15.0.3). Surfacing it here makes it
+      # visible at PR time instead of at production deploy.
+      - name: Security audit (high/critical = blocking)
+        run: npm audit --audit-level=high
       - run: npm run db:migrate
       - run: npm run typecheck
       - run: npm run lint --if-present
