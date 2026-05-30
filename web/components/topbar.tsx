@@ -5,8 +5,8 @@ import { LogOut } from 'lucide-react'
 
 export function Topbar({ userEmail }: { userEmail?: string }) {
   return (
-    <header className="flex h-14 items-center justify-between border-b px-4">
-      <div className="text-sm text-muted-foreground">{userEmail ?? ''}</div>
+    <header className="flex h-14 items-center justify-between border-b px-4 pl-14 md:pl-4">
+      <div className="text-sm text-muted-foreground truncate">{userEmail ?? ''}</div>
       <div className="flex items-center gap-2">
         <ThemeToggle />
         {userEmail ? (

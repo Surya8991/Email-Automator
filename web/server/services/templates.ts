@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import { db } from '@/server/db/client'
 import { templates, type Template } from '@/server/db/schema'
 
@@ -36,11 +36,19 @@ export async function upsertTemplate(userId: string, key: string, patch: Partial
   return inserted[0]!
 }
 
-// Activate exactly one template per user. better-sqlite3's transaction
-// callback is synchronous, so we issue the two updates back-to-back; if the
-// process crashes between them, the worst case is no template is active for
-// a moment — the UI flips back on the next save.
+// Activate exactly one template per user — atomic single UPDATE. Computes
+// each row's `active` value in one go so concurrent activate() calls can
+// never leave the user with two active templates or briefly with none.
 export async function activate(userId: string, id: number) {
-  await db.update(templates).set({ active: false }).where(eq(templates.userId, userId))
-  await db.update(templates).set({ active: true }).where(and(eq(templates.userId, userId), eq(templates.id, id)))
+  await db.update(templates)
+    .set({ active: sql`CASE WHEN ${templates.id} = ${id} THEN 1 ELSE 0 END` })
+    .where(eq(templates.userId, userId))
+}
+
+// True iff the user owns the given template — used to gate cross-tenant
+// references (e.g. campaign steps).
+export async function userOwnsTemplate(userId: string, id: number): Promise<boolean> {
+  const rows = await db.select({ id: templates.id }).from(templates)
+    .where(and(eq(templates.userId, userId), eq(templates.id, id)))
+  return rows.length > 0
 }

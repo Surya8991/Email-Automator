@@ -1,31 +1,43 @@
 import { requireAdmin } from '@/auth'
 import { db } from '@/server/db/client'
-import { users } from '@/server/db/schema'
+import { users, contacts, drafts, events } from '@/server/db/schema'
+import { eq, sql } from 'drizzle-orm'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { AdminTable } from './admin-table'
+import { adminEmails } from '@/lib/env'
+
+async function userStats(uid: string) {
+  const cRows = await db.select({ n: sql<number>`COUNT(*)` }).from(contacts).where(eq(contacts.userId, uid))
+  const dRows = await db.select({ n: sql<number>`COUNT(*)` }).from(drafts).where(eq(drafts.userId, uid))
+  const sRows = await db.select({ n: sql<number>`COUNT(*)` }).from(events).where(eq(events.userId, uid))
+  return {
+    contacts: Number(cRows[0]?.n ?? 0),
+    drafts: Number(dRows[0]?.n ?? 0),
+    events: Number(sRows[0]?.n ?? 0),
+  }
+}
 
 export default async function AdminPage() {
-  await requireAdmin()
+  const me = await requireAdmin()
   const all = await db.select().from(users)
+  const rows = await Promise.all(all.map(async (u) => ({
+    id: u.id, email: u.email, name: u.name ?? '',
+    createdAt: u.createdAt.toISOString(),
+    isAdmin: adminEmails.includes((u.email ?? '').toLowerCase()),
+    isMe: u.id === me.id,
+    ...(await userStats(u.id)),
+  })))
+
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Admin</h1>
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Admin</h1>
+        <p className="text-sm text-muted-foreground">{all.length} user{all.length === 1 ? '' : 's'} on this instance.</p>
+      </div>
       <Card>
-        <CardHeader><CardTitle>{all.length} users</CardTitle></CardHeader>
+        <CardHeader><CardTitle>Users</CardTitle></CardHeader>
         <CardContent className="p-0">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/40 text-left text-xs uppercase text-muted-foreground">
-              <tr><th className="px-3 py-2">Email</th><th className="px-3 py-2">Name</th><th className="px-3 py-2">Created</th></tr>
-            </thead>
-            <tbody>
-              {all.map((u) => (
-                <tr key={u.id} className="border-t">
-                  <td className="px-3 py-2 font-mono text-xs">{u.email}</td>
-                  <td className="px-3 py-2">{u.name ?? '—'}</td>
-                  <td className="px-3 py-2 text-muted-foreground">{new Date(u.createdAt).toLocaleString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <AdminTable rows={rows} />
         </CardContent>
       </Card>
     </div>

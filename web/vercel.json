@@ -1,0 +1,16 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "npm run build",
+  "installCommand": "npm install --legacy-peer-deps",
+  "framework": "nextjs",
+  "regions": ["bom1"],
+  "functions": {
+    "app/api/track/open/route.ts":  { "maxDuration": 5 },
+    "app/api/track/click/route.ts": { "maxDuration": 5 },
+    "app/api/progress/route.ts":    { "maxDuration": 60 },
+    "app/api/cron/tick/route.ts":   { "maxDuration": 60 }
+  },
+  "crons": [
+    { "path": "/api/cron/tick", "schedule": "*/1 * * * *" }
+  ]
+}

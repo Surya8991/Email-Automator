@@ -4,10 +4,19 @@ import Nodemailer from 'next-auth/providers/nodemailer'
 import { DrizzleAdapter } from '@auth/drizzle-adapter'
 import { redirect } from 'next/navigation'
 import { db } from './server/db/client'
+import { accounts, sessions, users, verificationTokens } from './server/db/schema'
 import { adminEmails, env } from './lib/env'
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  adapter: DrizzleAdapter(db),
+  // Pass our plural-named tables explicitly — without this the adapter
+  // defines its own SINGULAR-named tables (user/session/account/...) and
+  // queries those instead of ours, so every session lookup returns null.
+  adapter: DrizzleAdapter(db, {
+    usersTable: users,
+    accountsTable: accounts,
+    sessionsTable: sessions,
+    verificationTokensTable: verificationTokens,
+  }),
   session: { strategy: 'database', maxAge: 60 * 60 * 24 * 7 },
   trustHost: true,
   providers: [

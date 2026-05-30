@@ -49,6 +49,10 @@ export function AddContactDialog() {
                   <Input id="platform" name="platform" placeholder="LinkedIn, Naukri…" />
                 </div>
               </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="tags">Tags <span className="text-xs text-muted-foreground">(comma-separated)</span></Label>
+                <Input id="tags" name="tags" placeholder="vc, priority-a, london" />
+              </div>
               {error ? <p className="text-sm text-destructive">{error}</p> : null}
               <div className="mt-2 flex justify-end gap-2">
                 <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>

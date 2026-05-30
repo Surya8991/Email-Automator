@@ -1,0 +1,179 @@
+'use client'
+import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
+import { ChevronDown, ChevronUp, Pause, Play, Trash2, UserPlus, Archive, X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  addStepAction, deleteCampaignAction, enrollAction,
+  moveStepAction, removeStepAction, setStatusAction,
+} from '@/server/actions/campaigns'
+
+interface Step { id: number; campaignId: number; order: number; templateId: number | null; delayHours: number; stopOnReply: boolean }
+interface Enrollment { id: number; contactId: number; currentStep: number; nextRunAt: number; status: string }
+interface Props {
+  campaign: { id: number; name: string; status: string }
+  steps: Step[]
+  enrollments: Enrollment[]
+  templates: Array<{ id: number; label: string }>
+  tags: string[]
+}
+
+export function CampaignDetail({ campaign, steps, enrollments, templates, tags }: Props) {
+  const router = useRouter()
+  const [pending, start] = useTransition()
+  const [msg, setMsg] = useState<string | null>(null)
+
+  // New step form
+  const [tplId, setTplId] = useState<number | ''>(templates[0]?.id ?? '')
+  const [delay, setDelay] = useState(48)
+  const [stopOnReply, setStopOnReply] = useState(true)
+
+  // Enroll form
+  const [tag, setTag] = useState<string>('')
+
+  const tplName = (id: number | null) => templates.find((t) => t.id === id)?.label ?? '— deleted template —'
+
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="rounded bg-muted px-2 py-1 text-xs">{campaign.status}</span>
+        {campaign.status !== 'active' ? (
+          <Button size="sm" disabled={pending || steps.length === 0} onClick={() => start(async () => {
+            await setStatusAction(campaign.id, 'active'); router.refresh()
+          })}><Play className="mr-1.5 h-4 w-4" /> Activate</Button>
+        ) : (
+          <Button size="sm" variant="outline" disabled={pending} onClick={() => start(async () => {
+            await setStatusAction(campaign.id, 'paused'); router.refresh()
+          })}><Pause className="mr-1.5 h-4 w-4" /> Pause</Button>
+        )}
+        <Button size="sm" variant="ghost" disabled={pending} onClick={() => start(async () => {
+          await setStatusAction(campaign.id, 'archived'); router.refresh()
+        })}><Archive className="mr-1.5 h-4 w-4" /> Archive</Button>
+        <Button size="sm" variant="destructive" className="ml-auto" disabled={pending} onClick={() => {
+          if (!confirm('Delete this campaign? Enrollments + steps go with it.')) return
+          start(async () => { await deleteCampaignAction(campaign.id); router.push('/campaigns') })
+        }}><Trash2 className="mr-1.5 h-4 w-4" /> Delete</Button>
+        {msg ? <p className="text-sm text-muted-foreground">{msg}</p> : null}
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Steps</CardTitle>
+          <CardDescription>Order them top-down. Step 1 sends immediately on enrollment.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {steps.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No steps yet — add one below.</p>
+          ) : (
+            <ol className="space-y-2">
+              {steps.map((s, i) => (
+                <li key={s.id} className="flex items-center gap-3 rounded-md border p-3">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">{i + 1}</span>
+                  <div className="flex-1">
+                    <div className="text-sm font-medium">{tplName(s.templateId)}</div>
+                    <div className="text-xs text-muted-foreground">
+                      Wait {s.delayHours}h after enrollment{s.stopOnReply ? ' · stops on reply' : ''}
+                    </div>
+                  </div>
+                  <Button variant="ghost" size="icon" aria-label="Move up" disabled={pending || i === 0}
+                    onClick={() => start(async () => { await moveStepAction(campaign.id, s.id, 'up'); router.refresh() })}>
+                    <ChevronUp className="h-4 w-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" aria-label="Move down" disabled={pending || i === steps.length - 1}
+                    onClick={() => start(async () => { await moveStepAction(campaign.id, s.id, 'down'); router.refresh() })}>
+                    <ChevronDown className="h-4 w-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" aria-label="Remove step" disabled={pending}
+                    onClick={() => start(async () => { await removeStepAction(campaign.id, s.id); router.refresh() })}>
+                    <X className="h-4 w-4" />
+                  </Button>
+                </li>
+              ))}
+            </ol>
+          )}
+
+          {templates.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Create a template first to add steps.</p>
+          ) : (
+            <div className="grid gap-2 md:grid-cols-[1fr_120px_auto_auto] items-end">
+              <div className="grid gap-1.5">
+                <Label>Template</Label>
+                <select className="h-9 rounded-md border bg-background px-2 text-sm"
+                  value={tplId} onChange={(e) => setTplId(Number(e.target.value))}>
+                  {templates.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+                </select>
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="delay">Delay (hrs)</Label>
+                <Input id="delay" type="number" min={0} value={delay} onChange={(e) => setDelay(Number(e.target.value))} />
+              </div>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={stopOnReply} onChange={(e) => setStopOnReply(e.target.checked)} />
+                Stop on reply
+              </label>
+              <Button disabled={pending || tplId === ''} onClick={() => start(async () => {
+                const r = await addStepAction({ campaignId: campaign.id, templateId: Number(tplId), delayHours: delay, stopOnReply })
+                if ('error' in r && r.error) { setMsg(r.error); return }
+                setMsg('Step added'); router.refresh()
+              })}>Add step</Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Enroll contacts</CardTitle>
+          <CardDescription>Pick a tag, or leave blank to enroll every contact you have.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="grid gap-1.5">
+              <Label>Filter by tag (optional)</Label>
+              <select className="h-9 rounded-md border bg-background px-2 text-sm"
+                value={tag} onChange={(e) => setTag(e.target.value)}>
+                <option value="">— all contacts —</option>
+                {tags.map((t) => <option key={t} value={t}>#{t}</option>)}
+              </select>
+            </div>
+            <Button disabled={pending} onClick={() => start(async () => {
+              const r = await enrollAction({ campaignId: campaign.id, tag: tag || undefined })
+              if ('error' in r && r.error) { setMsg(r.error); return }
+              if ('ok' in r) setMsg(`Enrolled ${r.enrolled}`)
+              router.refresh()
+            })}><UserPlus className="mr-1.5 h-4 w-4" /> Enroll</Button>
+          </div>
+
+          <div>
+            <h3 className="mb-2 text-sm font-medium text-muted-foreground">Active enrollments ({enrollments.filter(e => e.status === 'active').length}/{enrollments.length})</h3>
+            {enrollments.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No contacts enrolled yet.</p>
+            ) : (
+              <table className="w-full text-sm">
+                <thead className="text-left text-xs uppercase text-muted-foreground">
+                  <tr><th className="p-1">Contact</th><th className="p-1">Step</th><th className="p-1">Next run</th><th className="p-1">Status</th></tr>
+                </thead>
+                <tbody>
+                  {enrollments.slice(0, 50).map((e) => (
+                    <tr key={e.id} className="border-t">
+                      <td className="p-1 font-mono text-xs">#{e.contactId}</td>
+                      <td className="p-1">{e.currentStep + 1} / {steps.length}</td>
+                      <td className="p-1 text-muted-foreground">{new Date(e.nextRunAt).toLocaleString()}</td>
+                      <td className="p-1 text-xs text-muted-foreground">{e.status}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            {enrollments.length > 50 ? (
+              <p className="mt-2 text-xs text-muted-foreground">…and {enrollments.length - 50} more.</p>
+            ) : null}
+          </div>
+        </CardContent>
+      </Card>
+    </>
+  )
+}

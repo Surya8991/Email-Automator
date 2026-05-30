@@ -6,6 +6,7 @@ function tpl(overrides: Partial<Template> = {}): Template {
   return {
     id: 1, userId: 'u1', key: 'k', label: '', category: '',
     subject: 'Hi {{name}} re {{role_name}}',
+    subjectB: '',
     initialMsg: '<p>Hi {{name}}, at {{company}}…</p>',
     follow1Msg: '', lastFollowMsg: '', active: true, version: 1,
     updatedAt: new Date(), ...overrides,
@@ -18,6 +19,7 @@ function contact(overrides: Partial<Contact> = {}): Contact {
     recruiterEmail: 'jane@acme.com', location: '', workMode: '', jobType: '',
     platform: '', sourceUrl: '', status: '', priority: '', salary: '',
     emailStatus: '', scheduleDate: '', scheduleTime: '', notes: '',
+    tags: '',
     createdAt: new Date(), ...overrides,
   }
 }

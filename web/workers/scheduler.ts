@@ -1,31 +1,16 @@
-import fs from 'node:fs'
-import path from 'node:path'
+// .env loading is handled inside lib/env.ts itself so it runs before zod
+// parses (ESM hoists imports, so a loader called here would run too late).
 import { and, eq, lte, sql } from 'drizzle-orm'
-
-// Minimal .env loader — same shape as scripts/migrate.ts so the worker can
-// run as a plain `tsx workers/scheduler.ts` without a dotenv dependency.
-function loadDotEnv(file: string) {
-  if (!fs.existsSync(file)) return
-  for (const raw of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
-    const line = raw.trim()
-    if (!line || line.startsWith('#')) continue
-    const eq = line.indexOf('=')
-    if (eq < 0) continue
-    const k = line.slice(0, eq).trim()
-    let v = line.slice(eq + 1).trim()
-    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1)
-    if (!(k in process.env)) process.env[k] = v
-  }
-}
-loadDotEnv(path.join(process.cwd(), '.env'))
 import { db } from '../server/db/client'
 import { campaignEnrollments, campaignSteps, contacts, emailLog, events, templates, users } from '../server/db/schema'
 import { buildEmail } from '../server/services/drafts'
 import { sendMail } from '../server/services/mailer'
+import { instrumentHtml } from '../server/services/tracking'
 import { env } from '../lib/env'
 
 const TICK_MS = 30_000
 const BATCH_PER_USER = 10
+const DAILY_LIMIT = Number.isInteger(env.DAILY_SEND_LIMIT) && env.DAILY_SEND_LIMIT > 0 ? env.DAILY_SEND_LIMIT : 50
 
 function backoffMs(attempt: number): number {
   const raw = 60_000 * Math.pow(2, Math.max(0, attempt - 1))
@@ -41,7 +26,7 @@ async function tickForUser(userId: string) {
   const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0)
   const sentTodayRows = await db.select({ n: sql<number>`COUNT(*)` }).from(events)
     .where(and(eq(events.userId, userId), eq(events.kind, 'sent'), sql`${events.ts} >= ${startOfDay.getTime()}`))
-  const remaining = Math.max(0, env.DAILY_SEND_LIMIT - Number(sentTodayRows[0]?.n ?? 0))
+  const remaining = Math.max(0, DAILY_LIMIT - Number(sentTodayRows[0]?.n ?? 0))
   if (remaining <= 0) return
 
   // 1. Send any scheduled email_log rows whose time has come.
@@ -50,10 +35,17 @@ async function tickForUser(userId: string) {
     .limit(Math.min(BATCH_PER_USER, remaining))
   for (const row of due) {
     try {
-      await sendMail({ to: row.email, subject: row.subject, html: row.body || row.subject })
+      // Don't fall back to subject-as-HTML — if body is empty we have nothing
+      // to send, so skip this row (treat as a programming bug upstream).
+      if (!row.body) {
+        await db.update(emailLog).set({ status: 'Failed', lastResult: 'Empty body' }).where(eq(emailLog.id, row.id))
+        continue
+      }
+      const html = instrumentHtml(row.body, row.id)
+      await sendMail({ to: row.email, subject: row.subject, html })
       await db.update(emailLog).set({ status: 'Sent', attempts: row.attempts + 1, lastResult: new Date().toLocaleString() })
         .where(eq(emailLog.id, row.id))
-      await db.insert(events).values({ userId, contactId: row.contactId ?? null, kind: 'sent', meta: JSON.stringify({ subject: row.subject }) })
+      await db.insert(events).values({ userId, contactId: row.contactId ?? null, kind: 'sent', meta: JSON.stringify({ subject: row.subject, emailLogId: row.id }) })
     } catch (err) {
       const next = row.attempts + 1
       const failed = next >= 3
@@ -76,16 +68,37 @@ async function tickForUser(userId: string) {
     if (!contact || contact.userId !== userId) continue
     const [step] = await db.select().from(campaignSteps).where(and(eq(campaignSteps.campaignId, enr.campaignId), eq(campaignSteps.order, enr.currentStep)))
     if (!step) {
+      // No step at this index — campaign is done for this enrollment.
       await db.update(campaignEnrollments).set({ status: 'completed' }).where(eq(campaignEnrollments.id, enr.id))
       continue
     }
-    if (!step.templateId) continue
+    // Template was deleted between step creation and worker tick — mark the
+    // enrollment 'stopped' so the user notices, instead of silently looping.
+    if (!step.templateId) {
+      await db.update(campaignEnrollments).set({ status: 'stopped' }).where(eq(campaignEnrollments.id, enr.id))
+      continue
+    }
     const [tpl] = await db.select().from(templates).where(eq(templates.id, step.templateId))
-    if (!tpl) continue
+    if (!tpl) {
+      await db.update(campaignEnrollments).set({ status: 'stopped' }).where(eq(campaignEnrollments.id, enr.id))
+      continue
+    }
     const email = buildEmail(tpl, contact)
     try {
-      await sendMail(email)
-      await db.insert(events).values({ userId, contactId: contact.id, templateId: tpl.id, kind: 'sent', meta: JSON.stringify({ step: enr.currentStep }) })
+      // Create an email_log row to thread the tracking pixel/clicks through.
+      const inserted = await db.insert(emailLog).values({
+        userId, contactId: contact.id,
+        scheduleId: `camp_${enr.campaignId}_${enr.id}_${enr.currentStep}`,
+        email: contact.recruiterEmail, subject: email.subject, body: email.html,
+        scheduledAt: now, status: 'Sent', attempts: 1,
+        lastResult: new Date().toLocaleString(),
+      }).returning({ id: emailLog.id })
+      const logId = inserted[0]!.id
+      await sendMail({ ...email, html: instrumentHtml(email.html, logId) })
+      await db.insert(events).values({
+        userId, contactId: contact.id, templateId: tpl.id, kind: 'sent',
+        meta: JSON.stringify({ step: enr.currentStep, campaignId: enr.campaignId, emailLogId: logId }),
+      })
       await db.update(campaignEnrollments).set({
         currentStep: enr.currentStep + 1,
         nextRunAt: now + step.delayHours * 60 * 60 * 1000,

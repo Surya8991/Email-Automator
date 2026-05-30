@@ -2,18 +2,22 @@
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useState, useTransition } from 'react'
-import { Trash2, ChevronLeft, ChevronRight, Search } from 'lucide-react'
+import { Trash2, ChevronLeft, ChevronRight, Search, History, X, Tag } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type { Contact } from '@/server/db/schema'
 import { deleteContactAction, deleteContactsBulkAction } from '@/server/actions/contacts'
+import { ContactTimeline } from './contact-timeline'
 
-export function ContactsTable({ rows, page, pages, search }: { rows: Contact[]; page: number; pages: number; search: string }) {
+interface Props { rows: Contact[]; page: number; pages: number; search: string; tag: string; allTags: string[] }
+
+export function ContactsTable({ rows, page, pages, search, tag, allTags }: Props) {
   const router = useRouter()
   const sp = useSearchParams()
   const [pending, start] = useTransition()
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [q, setQ] = useState(search)
+  const [timelineFor, setTimelineFor] = useState<Contact | null>(null)
 
   function go(updates: Record<string, string>) {
     const next = new URLSearchParams(sp.toString())
@@ -23,12 +27,27 @@ export function ContactsTable({ rows, page, pages, search }: { rows: Contact[]; 
 
   return (
     <div>
-      <div className="flex items-center gap-2 border-b px-4 py-3">
+      <div className="flex flex-wrap items-center gap-2 border-b px-4 py-3">
         <div className="relative flex-1 max-w-sm">
           <Search className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && go({ search: q, page: '1' })}
             placeholder="Search by name, company, email…" className="pl-8" />
         </div>
+        {allTags.length > 0 ? (
+          <div className="flex items-center gap-1">
+            <Tag className="h-4 w-4 text-muted-foreground" />
+            <select value={tag} onChange={(e) => go({ tag: e.target.value, page: '1' })}
+              className="h-9 rounded-md border bg-background px-2 text-sm">
+              <option value="">All tags</option>
+              {allTags.map((t) => <option key={t} value={t}>#{t}</option>)}
+            </select>
+          </div>
+        ) : null}
+        {tag ? (
+          <Button variant="ghost" size="sm" onClick={() => go({ tag: '', page: '1' })}>
+            <X className="mr-1 h-3 w-3" /> Clear filter
+          </Button>
+        ) : null}
         {selected.size > 0 ? (
           <Button variant="destructive" size="sm" disabled={pending} onClick={() => {
             const ids = Array.from(selected)
@@ -53,6 +72,7 @@ export function ContactsTable({ rows, page, pages, search }: { rows: Contact[]; 
                 <th className="px-3 py-2">Company</th>
                 <th className="px-3 py-2">Role</th>
                 <th className="px-3 py-2">Email</th>
+                <th className="px-3 py-2">Tags</th>
                 <th className="px-3 py-2">Status</th>
                 <th className="px-3 py-2"></th>
               </tr>
@@ -73,8 +93,17 @@ export function ContactsTable({ rows, page, pages, search }: { rows: Contact[]; 
                   <td className="px-3 py-2">{c.company || '—'}</td>
                   <td className="px-3 py-2 text-muted-foreground">{c.jobTitle || '—'}</td>
                   <td className="px-3 py-2 font-mono text-xs">{c.recruiterEmail}</td>
+                  <td className="px-3 py-2 text-xs">
+                    {(c.tags || '').split(',').filter(Boolean).map((t) => (
+                      <button key={t} onClick={() => go({ tag: t, page: '1' })}
+                        className="mr-1 rounded bg-muted px-1.5 py-0.5 hover:bg-accent">#{t}</button>
+                    ))}
+                  </td>
                   <td className="px-3 py-2 text-xs text-muted-foreground">{c.emailStatus || 'Pending'}</td>
-                  <td className="px-3 py-2 text-right">
+                  <td className="px-3 py-2 text-right whitespace-nowrap">
+                    <Button variant="ghost" size="icon" aria-label="Timeline" onClick={() => setTimelineFor(c)}>
+                      <History className="h-4 w-4" />
+                    </Button>
                     <Button variant="ghost" size="icon" aria-label="Delete contact" disabled={pending}
                       onClick={() => start(async () => { await deleteContactAction(c.id); router.refresh() })}>
                       <Trash2 className="h-4 w-4" />
@@ -86,6 +115,8 @@ export function ContactsTable({ rows, page, pages, search }: { rows: Contact[]; 
           </table>
         </div>
       )}
+
+      {timelineFor ? <ContactTimeline contact={timelineFor} onClose={() => setTimelineFor(null)} /> : null}
 
       <div className="flex items-center justify-between border-t px-4 py-3 text-sm">
         <span className="text-muted-foreground">Page {page} of {pages}</span>

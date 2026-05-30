@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `enr_unique_idx` ON `campaign_enrollments` (`campaign_id`,`contact_id`);

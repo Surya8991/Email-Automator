@@ -1,4 +1,4 @@
-import { sqliteTable, integer, text, primaryKey, index } from 'drizzle-orm/sqlite-core'
+import { sqliteTable, integer, text, primaryKey, index, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { sql } from 'drizzle-orm'
 
 // ── Auth.js standard tables ─────────────────────────────────────────────
@@ -58,6 +58,8 @@ export const contacts = sqliteTable('contacts', {
   scheduleDate: text('schedule_date').notNull().default(''),
   scheduleTime: text('schedule_time').notNull().default(''),
   notes: text('notes').notNull().default(''),
+  // Comma-separated tags (e.g. "vc,priority-a,seo"). Cheap to filter via LIKE.
+  tags: text('tags').notNull().default(''),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),
 }, (t) => ({
   byUser: index('contacts_user_idx').on(t.userId),
@@ -71,6 +73,8 @@ export const templates = sqliteTable('templates', {
   label: text('label').notNull().default(''),
   category: text('category').notNull().default(''),
   subject: text('subject').notNull().default(''),
+  // Optional second subject for 50/50 A/B testing — empty = no split.
+  subjectB: text('subject_b').notNull().default(''),
   initialMsg: text('initial_msg').notNull().default(''),
   follow1Msg: text('follow1_msg').notNull().default(''),
   lastFollowMsg: text('last_follow_msg').notNull().default(''),
@@ -156,7 +160,12 @@ export const campaignEnrollments = sqliteTable('campaign_enrollments', {
   currentStep: integer('current_step').notNull().default(0),
   nextRunAt: integer('next_run_at').notNull(),
   status: text('status').notNull().default('active'), // active|completed|stopped|replied
-}, (t) => ({ byNext: index('enr_next_idx').on(t.status, t.nextRunAt) }))
+}, (t) => ({
+  byNext: index('enr_next_idx').on(t.status, t.nextRunAt),
+  // A contact can only be in a given campaign once. Guards a race where
+  // two concurrent enroll() calls both pass the "already enrolled?" check.
+  uqCampaignContact: uniqueIndex('enr_unique_idx').on(t.campaignId, t.contactId),
+}))
 
 // Analytics events — fact table for the dashboard.
 export const events = sqliteTable('events', {

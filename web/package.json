@@ -15,10 +15,10 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate.ts",
     "db:studio": "drizzle-kit studio",
-    "worker": "tsx workers/scheduler.ts"
+    "worker": "tsx workers/scheduler.ts",
+    "seed:templates": "tsx scripts/seed-templates.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.32.1",
     "@auth/core": "^0.37.4",
     "@auth/drizzle-adapter": "^1.7.4",
     "@hookform/resolvers": "^3.9.1",
@@ -48,10 +48,12 @@
     "sonner": "^1.7.0",
     "tailwind-merge": "^2.5.4",
     "tailwindcss-animate": "^1.0.7",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zod": "^3.23.8"
   },
   "devDependencies": {
     "@playwright/test": "^1.48.2",
+    "@tailwindcss/typography": "^0.5.19",
     "@types/better-sqlite3": "^7.6.11",
     "@types/node": "^22.9.0",
     "@types/nodemailer": "^6.4.16",
