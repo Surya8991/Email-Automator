@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { createWebhookAction, deleteWebhookAction, testWebhooksAction } from '@/server/actions/webhooks'
-import { formatDate } from '@/lib/utils'
+import { useFormatDate } from '@/components/timezone-provider'
 
 interface Row {
   id: number; url: string; events: string; lastStatus: number | null;
@@ -17,6 +17,7 @@ interface Row {
 const ALL_EVENTS = ['sent', 'open', 'click', 'reply', 'bounce', 'unsubscribe'] as const
 
 export function WebhooksForm({ rows }: { rows: Row[] }) {
+  const formatDate = useFormatDate()
   const router = useRouter()
   const [pending, start] = useTransition()
   const [url, setUrl] = useState('')

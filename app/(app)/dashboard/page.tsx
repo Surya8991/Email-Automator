@@ -7,7 +7,8 @@ import { desc, eq } from 'drizzle-orm'
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Users, Send, MailCheck, MousePointerClick, Reply, AlertTriangle, Sparkles, Upload, FileText, Activity } from 'lucide-react'
-import { formatDate } from '@/lib/utils'
+import { formatDate, APP_TZ } from '@/lib/utils'
+import { getSetting } from '@/server/services/settings'
 
 function Stat({ label, value, icon: Icon }: { label: string; value: string | number; icon: React.ComponentType<{ className?: string }> }) {
   return (
@@ -32,9 +33,13 @@ const KIND_LABEL: Record<string, string> = {
 
 export default async function DashboardPage() {
   const u = await requireUser()
-  const [k, recent] = await Promise.all([
+  // Pick up the user's TZ for the Recent Activity timestamps. Server-rendered
+  // here, so we can't use the client useFormatDate() hook — pass it as the
+  // 2nd arg to formatDate instead.
+  const [k, recent, tz] = await Promise.all([
     kpis(u.id),
     db.select().from(events).where(eq(events.userId, u.id)).orderBy(desc(events.ts)).limit(10),
+    getSetting(u.id, 'TIMEZONE').then((v) => v || APP_TZ).catch(() => APP_TZ),
   ])
   const pct = (n: number) => `${(n * 100).toFixed(1)}%`
   const empty = k.totalContacts === 0
@@ -93,7 +98,7 @@ export default async function DashboardPage() {
                       <span className="rounded bg-muted px-1.5 py-0.5 text-xs">{KIND_LABEL[e.kind] ?? e.kind}</span>
                       <span className="truncate text-muted-foreground">{detail || '—'}</span>
                     </span>
-                    <span className="shrink-0 text-xs text-muted-foreground">{formatDate(e.ts)}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">{formatDate(e.ts, tz)}</span>
                   </li>
                 )
               })}

@@ -2,10 +2,11 @@
 import { useEffect, useState } from 'react'
 import type { Contact } from '@/server/db/schema'
 import { fetchTimelineAction, type TimelineItem } from '@/server/actions/timeline'
-import { formatDate } from '@/lib/utils'
+import { useFormatDate } from '@/components/timezone-provider'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
 export function ContactTimeline({ contact, onClose }: { contact: Contact; onClose: () => void }) {
+  const formatDate = useFormatDate()
   const [items, setItems] = useState<TimelineItem[] | null>(null)
   const [err, setErr] = useState<string | null>(null)
 

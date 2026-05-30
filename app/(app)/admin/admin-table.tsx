@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import { Trash2, Shield, User } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { deleteUserAction } from '@/server/actions/admin'
-import { formatDate } from '@/lib/utils'
+import { useFormatDate } from '@/components/timezone-provider'
 
 interface Row {
   id: string; email: string; name: string; createdAt: string
@@ -13,6 +13,7 @@ interface Row {
 }
 
 export function AdminTable({ rows }: { rows: Row[] }) {
+  const formatDate = useFormatDate()
   const router = useRouter()
   const [pending, start] = useTransition()
   const [err, setErr] = useState<string | null>(null)

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cancelScheduleAction, enqueueScheduleAction, previewScheduleAction } from '@/server/actions/schedule'
-import { formatDate } from '@/lib/utils'
+import { useFormatDate, useTimezone } from '@/components/timezone-provider'
 
 interface QueueRow { id: number; email: string; subject: string; scheduledAt: string; status: string }
 interface Preview { email: string; name: string; company: string; subject: string; scheduledAt: string }
@@ -17,6 +17,8 @@ function tomorrow930() {
 }
 
 export function ScheduleClient({ queue, queueCount }: { queue: QueueRow[]; queueCount: number }) {
+  const formatDate = useFormatDate()
+  const tz = useTimezone()
   const router = useRouter()
   const init = tomorrow930()
   const [date, setDate] = useState(init.date)
@@ -72,7 +74,7 @@ export function ScheduleClient({ queue, queueCount }: { queue: QueueRow[]; queue
         <div className="border-b bg-muted/30 p-4">
           <div className="mb-2 flex items-center gap-2 text-sm font-medium">
             <CalendarClock className="h-4 w-4" />
-            {preview.total} contacts · first {formatDate(preview.firstAt)} · last {formatDate(preview.lastAt)} (IST)
+            {preview.total} contacts · first {formatDate(preview.firstAt)} · last {formatDate(preview.lastAt)} ({tzShort(tz)})
           </div>
           <table className="w-full text-xs">
             <thead className="text-muted-foreground">
@@ -115,4 +117,11 @@ export function ScheduleClient({ queue, queueCount }: { queue: QueueRow[]; queue
       </div>
     </div>
   )
+}
+
+// Render "Asia/Kolkata" → "Kolkata". Cosmetic label next to preview times
+// so the user knows which TZ they're seeing without reading the full IANA id.
+function tzShort(tz: string): string {
+  const tail = tz.split('/').pop() ?? tz
+  return tail.replace(/_/g, ' ')
 }

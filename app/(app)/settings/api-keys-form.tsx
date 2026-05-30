@@ -7,11 +7,12 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { createKeyAction, revokeKeyAction } from '@/server/actions/api-keys'
-import { formatDate } from '@/lib/utils'
+import { useFormatDate } from '@/components/timezone-provider'
 
 interface Row { id: number; name: string; prefix: string; lastUsedAt: Date | null; revokedAt: Date | null; createdAt: Date }
 
 export function ApiKeysForm({ rows }: { rows: Row[] }) {
+  const formatDate = useFormatDate()
   const router = useRouter()
   const [pending, start] = useTransition()
   const [name, setName] = useState('')

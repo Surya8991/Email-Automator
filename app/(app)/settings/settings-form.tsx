@@ -6,6 +6,24 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { saveSettingsAction } from '@/server/actions/settings'
 
+// Major business hubs + the IANA "Etc/UTC" anchor. The user is in India
+// so IST leads, but a future operator in another region can pick theirs.
+const TIMEZONE_OPTIONS = [
+  { value: 'Asia/Kolkata',       label: 'India (IST · UTC+5:30) — default' },
+  { value: 'UTC',                label: 'UTC' },
+  { value: 'America/New_York',   label: 'New York (ET)' },
+  { value: 'America/Los_Angeles',label: 'Los Angeles (PT)' },
+  { value: 'America/Chicago',    label: 'Chicago (CT)' },
+  { value: 'Europe/London',      label: 'London (GMT/BST)' },
+  { value: 'Europe/Berlin',      label: 'Berlin (CET/CEST)' },
+  { value: 'Europe/Paris',       label: 'Paris (CET/CEST)' },
+  { value: 'Asia/Dubai',         label: 'Dubai (GST · UTC+4)' },
+  { value: 'Asia/Singapore',     label: 'Singapore (SGT · UTC+8)' },
+  { value: 'Asia/Tokyo',         label: 'Tokyo (JST · UTC+9)' },
+  { value: 'Asia/Shanghai',      label: 'Shanghai (CST · UTC+8)' },
+  { value: 'Australia/Sydney',   label: 'Sydney (AEST/AEDT)' },
+] as const
+
 export function SettingsForm({ initial }: { initial: Record<string, string> }) {
   const [s, setS] = useState({
     DAILY_SEND_LIMIT: initial.DAILY_SEND_LIMIT ?? '50',
@@ -32,7 +50,21 @@ export function SettingsForm({ initial }: { initial: Record<string, string> }) {
       </div>
       <div className="grid gap-1.5">
         <Label htmlFor="TIMEZONE">Timezone</Label>
-        <Input id="TIMEZONE" value={s.TIMEZONE} onChange={(e) => set('TIMEZONE')(e.target.value)} placeholder="Asia/Kolkata" />
+        <select
+          id="TIMEZONE"
+          value={s.TIMEZONE}
+          onChange={(e) => set('TIMEZONE')(e.target.value)}
+          className="h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        >
+          {/* Curated list — covers India + the major business hubs.
+              Free-text override is still possible by editing the DB. */}
+          {TIMEZONE_OPTIONS.map((tz) => (
+            <option key={tz.value} value={tz.value}>{tz.label}</option>
+          ))}
+        </select>
+        <p className="text-xs text-muted-foreground">
+          Used to render every date/time in the UI. New timestamps you create from now on are stored as IST.
+        </p>
       </div>
       <div className="grid gap-1.5">
         <Label htmlFor="DEFAULT_ROLE_NAME">Default role (for <code>{'{{role_name}}'}</code>)</Label>

@@ -5,12 +5,16 @@ import { eq, desc } from 'drizzle-orm'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Download } from 'lucide-react'
-import { formatDate } from '@/lib/utils'
+import { formatDate, APP_TZ } from '@/lib/utils'
+import { getSetting } from '@/server/services/settings'
 
 export default async function AuditPage() {
   const u = await requireUser()
-  const rows = await db.select().from(auditLog).where(eq(auditLog.userId, u.id))
-    .orderBy(desc(auditLog.id)).limit(500)
+  const [rows, tz] = await Promise.all([
+    db.select().from(auditLog).where(eq(auditLog.userId, u.id))
+      .orderBy(desc(auditLog.id)).limit(500),
+    getSetting(u.id, 'TIMEZONE').then((v) => v || APP_TZ).catch(() => APP_TZ),
+  ])
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -40,7 +44,7 @@ export default async function AuditPage() {
             <tbody>
               {rows.map((r) => (
                 <tr key={r.id} className="border-t">
-                  <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">{formatDate(r.createdAt)}</td>
+                  <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">{formatDate(r.createdAt, tz)}</td>
                   <td className="px-3 py-2"><span className="rounded bg-muted px-1.5 py-0.5 text-xs">{r.action}</span></td>
                   <td className="px-3 py-2 text-muted-foreground">{r.detail || '—'}</td>
                   <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{r.ip || '—'}</td>

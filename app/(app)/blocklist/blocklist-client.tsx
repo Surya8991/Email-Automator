@@ -5,11 +5,12 @@ import { Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { addBlocklistAction, removeBlocklistAction } from '@/server/actions/blocklist'
-import { formatDate } from '@/lib/utils'
+import { useFormatDate } from '@/components/timezone-provider'
 
 interface Row { id: number; userId: string | null; pattern: string; type: string; createdAt: Date }
 
 export function BlocklistClient({ rows }: { rows: Row[] }) {
+  const formatDate = useFormatDate()
   const router = useRouter()
   const [pattern, setPattern] = useState('')
   const [type, setType] = useState<'email' | 'domain'>('email')

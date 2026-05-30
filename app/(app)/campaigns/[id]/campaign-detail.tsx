@@ -10,7 +10,7 @@ import {
   addStepAction, deleteCampaignAction, enrollAction,
   moveStepAction, removeStepAction, setStatusAction,
 } from '@/server/actions/campaigns'
-import { formatDate } from '@/lib/utils'
+import { useFormatDate } from '@/components/timezone-provider'
 
 interface Step { id: number; campaignId: number; order: number; templateId: number | null; delayHours: number; stopOnReply: boolean }
 interface Enrollment { id: number; contactId: number; currentStep: number; nextRunAt: number; status: string }
@@ -23,6 +23,7 @@ interface Props {
 }
 
 export function CampaignDetail({ campaign, steps, enrollments, templates, tags }: Props) {
+  const formatDate = useFormatDate()
   const router = useRouter()
   const [pending, start] = useTransition()
   const [msg, setMsg] = useState<string | null>(null)
