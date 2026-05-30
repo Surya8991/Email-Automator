@@ -7,6 +7,15 @@ import { env } from '@/lib/env'
 
 export interface DiagResult { name: string; status: 'pass' | 'warn' | 'fail'; detail: string }
 
+// Major mailbox providers — the user can't change their DMARC/SPF policy
+// because they don't own the domain. Flagging "p=none on gmail.com" is a
+// false positive that scares people; suppress it for these.
+const PROVIDER_DOMAINS = new Set([
+  'gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com', 'live.com',
+  'yahoo.com', 'yahoo.co.in', 'icloud.com', 'me.com', 'proton.me', 'protonmail.com',
+  'aol.com', 'zoho.com', 'fastmail.com',
+])
+
 export async function runDiagnosticsAction(): Promise<{ results: DiagResult[] }> {
   const u = await requireUser()
   const r: DiagResult[] = []
@@ -34,12 +43,18 @@ export async function runDiagnosticsAction(): Promise<{ results: DiagResult[] }>
   const sender = smtp.user
   if (sender && sender.includes('@')) {
     const domain = sender.split('@')[1]!.toLowerCase()
+    const isProvider = PROVIDER_DOMAINS.has(domain)
+
     try {
       const txts = await dns.resolveTxt(domain)
       const flat = txts.map((t) => t.join('')).join(' | ')
       if (/v=spf1/i.test(flat)) pass('SPF', flat.match(/v=spf1[^|]*/i)?.[0] ?? '')
+      else if (isProvider) pass('SPF', `${domain} is a mailbox provider — SPF is managed by them`)
       else warn('SPF', `No SPF record on ${domain}`)
-    } catch { warn('SPF', `No TXT records on ${domain}`) }
+    } catch {
+      if (isProvider) pass('SPF', `${domain} is a mailbox provider — DNS managed by them`)
+      else warn('SPF', `No TXT records on ${domain}`)
+    }
 
     try {
       const txts = await dns.resolveTxt('_dmarc.' + domain)
@@ -47,10 +62,20 @@ export async function runDiagnosticsAction(): Promise<{ results: DiagResult[] }>
       const rec = flat.match(/v=DMARC1[^|]*/i)?.[0]
       if (rec) {
         const policy = rec.match(/\bp\s*=\s*([a-z]+)/i)?.[1]?.toLowerCase()
-        if (policy === 'none') warn('DMARC', `Policy is p=none on ${domain}; consider quarantine/reject`)
-        else pass('DMARC', rec)
+        if (policy === 'none' && isProvider) {
+          // gmail.com etc. — you don't own the domain, you can't change its
+          // policy, and it's not your problem. Surface as pass.
+          pass('DMARC', `${rec} (${domain} is a mailbox provider — policy is set by them)`)
+        } else if (policy === 'none') {
+          warn('DMARC', `Policy is p=none on ${domain}; consider quarantine/reject for stronger anti-spoof`)
+        } else pass('DMARC', rec)
+      } else if (isProvider) {
+        pass('DMARC', `${domain} is a mailbox provider — DMARC is managed by them`)
       } else warn('DMARC', `No DMARC record at _dmarc.${domain}`)
-    } catch { warn('DMARC', `No _dmarc.${domain} TXT records`) }
+    } catch {
+      if (isProvider) pass('DMARC', `${domain} is a mailbox provider — DMARC managed by them`)
+      else warn('DMARC', `No _dmarc.${domain} TXT records`)
+    }
   } else warn('DNS', 'No sender domain to check')
 
   pass('User', `Signed in as ${u.email}`)

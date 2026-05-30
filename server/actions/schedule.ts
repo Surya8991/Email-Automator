@@ -7,6 +7,11 @@ import * as svc from '@/server/services/schedule'
 const Schema = z.object({
   startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   startTime: z.string().regex(/^\d{2}:\d{2}$/),
+  // Optional. UI ships the user's chosen min/max gap (in minutes) between
+  // sends. Clamped 0–240 — anything beyond 4 h between sends is almost
+  // certainly a typo, not a real schedule.
+  intervalMin: z.number().int().min(0).max(240).optional(),
+  intervalMax: z.number().int().min(0).max(240).optional(),
 })
 
 function parseStart(input: z.infer<typeof Schema>): number | null {
@@ -20,7 +25,10 @@ export async function previewScheduleAction(input: z.infer<typeof Schema>) {
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Invalid input' }
   const start = parseStart(parsed.data)
   if (!start) return { error: 'Invalid date/time' }
-  const r = await svc.previewSchedule(u.id, start)
+  const r = await svc.previewSchedule(u.id, start, {
+    intervalMin: parsed.data.intervalMin,
+    intervalMax: parsed.data.intervalMax,
+  })
   return r
 }
 
@@ -32,7 +40,10 @@ export async function enqueueScheduleAction(input: z.infer<typeof Schema>) {
   if (!start) return { error: 'Invalid date/time' }
   if (start <= Date.now()) return { error: 'Start time must be in the future' }
   try {
-    const r = await svc.enqueue(u.id, start)
+    const r = await svc.enqueue(u.id, start, {
+      intervalMin: parsed.data.intervalMin,
+      intervalMax: parsed.data.intervalMax,
+    })
     revalidatePath('/schedule')
     revalidatePath('/dashboard')
     return { ok: true, ...r }

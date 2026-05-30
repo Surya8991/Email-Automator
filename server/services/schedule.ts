@@ -5,11 +5,17 @@ import { getActive } from './templates'
 import { buildEmail } from './drafts'
 import { formatDate, APP_TZ } from '@/lib/utils'
 
-// Random 3–5 minute stagger between scheduled emails. Mirrors v1.
-function staggerMs(): number {
-  const min = 3 * 60 * 1000, max = 5 * 60 * 1000
-  return Math.floor(min + Math.random() * (max - min))
+// Random stagger in [minMin, maxMin] minutes between sends. Caller picks
+// the window (Schedule page form fields); we clamp + jitter here. The
+// default 3–5 mirrors v1.
+function staggerMs(minMin: number, maxMin: number): number {
+  const lo = Math.max(0, Math.min(minMin, maxMin)) * 60_000
+  const hi = Math.max(0, Math.max(minMin, maxMin)) * 60_000
+  if (hi === lo) return lo
+  return Math.floor(lo + Math.random() * (hi - lo))
 }
+
+export const DEFAULT_INTERVAL = { min: 3, max: 5 } as const
 
 async function eligibleContacts(userId: string): Promise<Contact[]> {
   return db.select().from(contacts).where(
@@ -24,32 +30,43 @@ async function eligibleContacts(userId: string): Promise<Contact[]> {
   )
 }
 
-export async function previewSchedule(userId: string, startMs: number) {
+export interface IntervalOpt { intervalMin?: number; intervalMax?: number }
+
+export async function previewSchedule(userId: string, startMs: number, opt: IntervalOpt = {}) {
   const tpl = await getActive(userId)
   if (!tpl) return { error: 'No active template' as const }
   const cs = await eligibleContacts(userId)
   if (cs.length === 0) return { error: 'No contacts ready' as const }
+  const minM = opt.intervalMin ?? DEFAULT_INTERVAL.min
+  const maxM = opt.intervalMax ?? DEFAULT_INTERVAL.max
 
   let next = startMs
   const preview = cs.slice(0, 20).map((c) => {
     const e = buildEmail(tpl, c)
     const at = new Date(next)
-    next += staggerMs()
+    next += staggerMs(minM, maxM)
     return { email: c.recruiterEmail, name: c.recruiterName, company: c.company, subject: e.subject, scheduledAt: at.toISOString() }
   })
+  // Walk the remaining contacts (just the timestamp) so lastAt reflects
+  // the true tail of the queue, not just the 20-row preview window.
+  for (let i = 20; i < cs.length; i++) next += staggerMs(minM, maxM)
   return {
     total: cs.length,
     firstAt: new Date(startMs).toISOString(),
     lastAt: new Date(next).toISOString(),
+    intervalMin: minM,
+    intervalMax: maxM,
     preview,
   }
 }
 
-export async function enqueue(userId: string, startMs: number): Promise<{ scheduled: number }> {
+export async function enqueue(userId: string, startMs: number, opt: IntervalOpt = {}): Promise<{ scheduled: number }> {
   const tpl = await getActive(userId)
   if (!tpl) throw new Error('No active template')
   const cs = await eligibleContacts(userId)
   if (cs.length === 0) throw new Error('No contacts ready')
+  const minM = opt.intervalMin ?? DEFAULT_INTERVAL.min
+  const maxM = opt.intervalMax ?? DEFAULT_INTERVAL.max
 
   let next = startMs, scheduled = 0
   for (const contact of cs) {
@@ -69,7 +86,7 @@ export async function enqueue(userId: string, startMs: number): Promise<{ schedu
       scheduleDate: d.toLocaleDateString('en-IN', { timeZone: APP_TZ }),
       scheduleTime: d.toLocaleTimeString('en-IN', { timeZone: APP_TZ, hour: '2-digit', minute: '2-digit' }),
     }).where(eq(contacts.id, contact.id))
-    next += staggerMs()
+    next += staggerMs(minM, maxM)
     scheduled++
   }
   return { scheduled }

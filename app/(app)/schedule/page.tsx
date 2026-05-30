@@ -17,6 +17,7 @@ export default async function SchedulePage() {
       <Card><CardContent className="p-0"><ScheduleClient queueCount={queue.length} queue={queue.slice(0, 50).map((q) => ({
         id: q.id, email: q.email, subject: q.subject,
         scheduledAt: new Date(q.scheduledAt).toISOString(), status: q.status,
+        attempts: q.attempts, lastResult: q.lastResult,
       }))} /></CardContent></Card>
     </div>
   )

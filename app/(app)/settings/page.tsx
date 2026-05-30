@@ -30,7 +30,7 @@ export default async function SettingsPage() {
   const u = await requireUser()
   const cur = await getMany(u.id, [
     'DAILY_SEND_LIMIT', 'TIMEZONE', 'DEFAULT_ROLE_NAME', 'USER_PORTFOLIO_LINK',
-    'CACHED_SIGNATURE', 'UNSUBSCRIBE_TEXT', 'UNSUBSCRIBE_ENABLED',
+    'CACHED_SIGNATURE', 'UNSUBSCRIBE_TEXT', 'UNSUBSCRIBE_ENABLED', 'SENDS_PAUSED',
     'SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'EMAIL_FROM',
     'GROQ_API_KEY', 'GROQ_MODEL',
   ])

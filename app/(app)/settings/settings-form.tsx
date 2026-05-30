@@ -1,6 +1,6 @@
 'use client'
 import { useState, useTransition } from 'react'
-import { Save } from 'lucide-react'
+import { Save, Pause, Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -32,6 +32,7 @@ export function SettingsForm({ initial }: { initial: Record<string, string> }) {
     USER_PORTFOLIO_LINK: initial.USER_PORTFOLIO_LINK ?? '',
     UNSUBSCRIBE_TEXT: initial.UNSUBSCRIBE_TEXT ?? '',
     UNSUBSCRIBE_ENABLED: initial.UNSUBSCRIBE_ENABLED ?? 'false',
+    SENDS_PAUSED: initial.SENDS_PAUSED ?? 'false',
   })
   const [pending, start] = useTransition()
   const [msg, setMsg] = useState<string | null>(null)
@@ -82,6 +83,32 @@ export function SettingsForm({ initial }: { initial: Record<string, string> }) {
             onChange={(e) => set('UNSUBSCRIBE_ENABLED')(e.target.checked ? 'true' : 'false')} />
           Append unsubscribe footer to outgoing emails
         </label>
+      </div>
+      {/* Emergency pause — instantly stops the worker from sending anything
+          for you (schedules + campaigns just sit until you resume). Use it
+          if you spot a problem mid-blast. */}
+      <div className="md:col-span-2 rounded-md border p-3">
+        <div className="flex items-start gap-3">
+          {s.SENDS_PAUSED === 'true'
+            ? <Pause className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
+            : <Play className="mt-0.5 h-5 w-5 shrink-0 text-emerald-500" />}
+          <div className="flex-1">
+            <div className="font-medium">{s.SENDS_PAUSED === 'true' ? 'Sends paused' : 'Sends active'}</div>
+            <p className="text-xs text-muted-foreground">
+              Emergency kill-switch. When paused, the worker tick skips your scheduled emails
+              and campaign steps. Already-queued rows stay; nothing is cancelled.
+            </p>
+          </div>
+          <label className="inline-flex cursor-pointer items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="h-4 w-4"
+              checked={s.SENDS_PAUSED === 'true'}
+              onChange={(e) => set('SENDS_PAUSED')(e.target.checked ? 'true' : 'false')}
+            />
+            Pause
+          </label>
+        </div>
       </div>
       <div className="md:col-span-2 flex items-center gap-3 pt-2">
         <Button type="submit" disabled={pending}><Save className="mr-1.5 h-4 w-4" /> {pending ? 'Saving…' : 'Save'}</Button>

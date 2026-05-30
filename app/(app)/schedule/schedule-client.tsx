@@ -8,8 +8,15 @@ import { Label } from '@/components/ui/label'
 import { cancelScheduleAction, enqueueScheduleAction, previewScheduleAction } from '@/server/actions/schedule'
 import { useFormatDate, useTimezone } from '@/components/timezone-provider'
 
-interface QueueRow { id: number; email: string; subject: string; scheduledAt: string; status: string }
+interface QueueRow {
+  id: number; email: string; subject: string; scheduledAt: string; status: string
+  attempts: number; lastResult: string
+}
 interface Preview { email: string; name: string; company: string; subject: string; scheduledAt: string }
+interface PreviewResp {
+  total: number; firstAt: string; lastAt: string
+  intervalMin: number; intervalMax: number; preview: Preview[]
+}
 
 function tomorrow930() {
   const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(9, 30, 0, 0)
@@ -23,8 +30,14 @@ export function ScheduleClient({ queue, queueCount }: { queue: QueueRow[]; queue
   const init = tomorrow930()
   const [date, setDate] = useState(init.date)
   const [time, setTime] = useState(init.time)
+  // Stagger between sends — defaults match the previous hardcoded 3-5 min
+  // window so existing behavior is unchanged unless the user picks new
+  // values. min must be <= max; we let the form save either way and the
+  // server normalizes.
+  const [intervalMin, setIntervalMin] = useState(3)
+  const [intervalMax, setIntervalMax] = useState(5)
   const [pending, start] = useTransition()
-  const [preview, setPreview] = useState<{ total: number; firstAt: string; lastAt: string; preview: Preview[] } | null>(null)
+  const [preview, setPreview] = useState<PreviewResp | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
 
   return (
@@ -38,9 +51,21 @@ export function ScheduleClient({ queue, queueCount }: { queue: QueueRow[]; queue
           <Label htmlFor="time">Start time</Label>
           <Input id="time" type="time" value={time} onChange={(e) => setTime(e.target.value)} />
         </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor="imin">Gap min (min)</Label>
+          <Input id="imin" type="number" min={0} max={240} value={intervalMin}
+            onChange={(e) => setIntervalMin(Math.max(0, Math.min(240, Number(e.target.value) || 0)))}
+            className="w-24" />
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor="imax">Gap max (min)</Label>
+          <Input id="imax" type="number" min={0} max={240} value={intervalMax}
+            onChange={(e) => setIntervalMax(Math.max(0, Math.min(240, Number(e.target.value) || 0)))}
+            className="w-24" />
+        </div>
         <Button variant="outline" disabled={pending} onClick={() => start(async () => {
           setMsg(null); setPreview(null)
-          const r = await previewScheduleAction({ startDate: date, startTime: time })
+          const r = await previewScheduleAction({ startDate: date, startTime: time, intervalMin, intervalMax })
           if ('error' in r && r.error) { setMsg(r.error); return }
           if ('total' in r) setPreview(r)
         })}>
@@ -49,7 +74,7 @@ export function ScheduleClient({ queue, queueCount }: { queue: QueueRow[]; queue
         <Button disabled={pending} onClick={() => start(async () => {
           if (!confirm('Schedule all eligible contacts starting at that time?')) return
           setMsg(null)
-          const r = await enqueueScheduleAction({ startDate: date, startTime: time })
+          const r = await enqueueScheduleAction({ startDate: date, startTime: time, intervalMin, intervalMax })
           if ('error' in r && r.error) { setMsg(r.error); return }
           if ('ok' in r) setMsg(`Scheduled ${r.scheduled}`)
           setPreview(null)
@@ -72,9 +97,19 @@ export function ScheduleClient({ queue, queueCount }: { queue: QueueRow[]; queue
 
       {preview ? (
         <div className="border-b bg-muted/30 p-4">
-          <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+          <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm font-medium">
             <CalendarClock className="h-4 w-4" />
-            {preview.total} contacts · first {formatDate(preview.firstAt)} · last {formatDate(preview.lastAt)} ({tzShort(tz)})
+            <span>{preview.total} contacts</span>
+            <span className="text-muted-foreground">·</span>
+            <span>first {formatDate(preview.firstAt)}</span>
+            <span className="text-muted-foreground">·</span>
+            <span>last {formatDate(preview.lastAt)} ({tzShort(tz)})</span>
+            <span className="text-muted-foreground">·</span>
+            <span className="text-muted-foreground">
+              spacing {preview.intervalMin === preview.intervalMax
+                ? `${preview.intervalMin} min`
+                : `${preview.intervalMin}–${preview.intervalMax} min`} between sends
+            </span>
           </div>
           <table className="w-full text-xs">
             <thead className="text-muted-foreground">
@@ -100,7 +135,14 @@ export function ScheduleClient({ queue, queueCount }: { queue: QueueRow[]; queue
         ) : (
           <table className="w-full text-sm">
             <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
-              <tr><th className="p-2">Run at</th><th className="p-2">To</th><th className="p-2">Subject</th><th className="p-2">Status</th></tr>
+              <tr>
+                <th className="p-2">Run at</th>
+                <th className="p-2">To</th>
+                <th className="p-2">Subject</th>
+                <th className="p-2">Status</th>
+                <th className="p-2">Attempts</th>
+                <th className="p-2">Last result</th>
+              </tr>
             </thead>
             <tbody>
               {queue.map((r) => (
@@ -108,7 +150,15 @@ export function ScheduleClient({ queue, queueCount }: { queue: QueueRow[]; queue
                   <td className="p-2 whitespace-nowrap">{formatDate(r.scheduledAt)}</td>
                   <td className="p-2 font-mono text-xs">{r.email}</td>
                   <td className="p-2 truncate max-w-xs">{r.subject}</td>
-                  <td className="p-2"><span className="rounded bg-muted px-1.5 py-0.5 text-xs">{r.status}</span></td>
+                  <td className="p-2">
+                    <span className={`rounded px-1.5 py-0.5 text-xs ${
+                      r.status === 'Retrying' ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400' : 'bg-muted'
+                    }`}>{r.status}</span>
+                  </td>
+                  <td className="p-2 text-xs tabular-nums">{r.attempts || 0}</td>
+                  <td className="p-2 text-xs text-muted-foreground truncate max-w-[16rem]" title={r.lastResult}>
+                    {r.lastResult || '—'}
+                  </td>
                 </tr>
               ))}
             </tbody>

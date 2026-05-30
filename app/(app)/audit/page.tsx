@@ -22,11 +22,16 @@ export default async function AuditPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Audit log</h1>
           <p className="text-sm text-muted-foreground">Last 500 events.</p>
         </div>
-        {u.isAdmin ? (
+        <div className="flex gap-2">
           <Button variant="outline" size="sm" asChild>
-            <a href="/api/backup" download><Download className="mr-1.5 h-4 w-4" /> Download DB backup</a>
+            <a href="/api/audit/export" download><Download className="mr-1.5 h-4 w-4" /> Export CSV</a>
           </Button>
-        ) : null}
+          {u.isAdmin ? (
+            <Button variant="outline" size="sm" asChild>
+              <a href="/api/backup" download><Download className="mr-1.5 h-4 w-4" /> Download DB backup</a>
+            </Button>
+          ) : null}
+        </div>
       </div>
       <Card><CardContent className="p-0">
         {rows.length === 0 ? (

@@ -4,7 +4,7 @@
 import { and, eq, sql, lte } from 'drizzle-orm'
 import { db } from '@/server/db/client'
 import {
-  emailLog, events, campaignEnrollments, campaignSteps, contacts, templates, users,
+  emailLog, events, campaignEnrollments, campaignSteps, contacts, settings, templates, users,
 } from '@/server/db/schema'
 import { buildEmail } from './drafts'
 import { sendMail } from './mailer'
@@ -33,6 +33,14 @@ export interface TickStats { sent: number; failed: number; advanced: number; use
 
 async function tickForUser(userId: string): Promise<{ sent: number; failed: number; advanced: number }> {
   const now = Date.now()
+  // Emergency kill-switch — if the user flipped Settings → Pause sends,
+  // skip the whole tick for them. Their scheduled rows just wait.
+  const pausedRow = await db.select().from(settings)
+    .where(and(eq(settings.userId, userId), eq(settings.key, 'SENDS_PAUSED')))
+  if (pausedRow[0]?.value === 'true') {
+    log.debug({ userId }, 'sends paused by user setting — skip tick')
+    return { sent: 0, failed: 0, advanced: 0 }
+  }
   const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0)
   const sentToday = await db.select({ n: sql<number>`COUNT(*)` }).from(events)
     .where(and(eq(events.userId, userId), eq(events.kind, 'sent'), sql`${events.ts} >= ${startOfDay.getTime()}`))

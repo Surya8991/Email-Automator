@@ -1,7 +1,7 @@
 'use client'
 import { useState, useTransition } from 'react'
 import { toast } from 'sonner'
-import { CheckCircle2, AlertTriangle, XCircle, Play, Mail, Reply, AlertOctagon } from 'lucide-react'
+import { CheckCircle2, AlertTriangle, XCircle, Play, Mail, Reply, AlertOctagon, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { runDiagnosticsAction, sendSmtpTestAction, type DiagResult } from '@/server/actions/diagnostic'
 import { checkBouncesAction, checkRepliesAction } from '@/server/actions/gmail'
@@ -50,6 +50,21 @@ export function DiagnosticClient() {
                 <div className="text-sm font-medium">{r.name}</div>
                 <div className="text-xs text-muted-foreground break-all">{r.detail}</div>
               </div>
+              {/* Per-check retry — re-runs the full check suite and replaces
+                  this row. Cheap: the full run is just DNS + a few API pings
+                  and takes well under a second. */}
+              {r.status !== 'pass' ? (
+                <Button
+                  variant="ghost" size="sm" disabled={pending}
+                  onClick={() => start(async () => {
+                    const fresh = await runDiagnosticsAction()
+                    setRows(fresh.results)
+                  })}
+                  title="Re-run checks"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                </Button>
+              ) : null}
             </li>
           ))}
         </ul>

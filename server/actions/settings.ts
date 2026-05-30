@@ -21,6 +21,10 @@ const Schema = z.object({
   CACHED_SIGNATURE: z.string().max(8000).optional(),
   UNSUBSCRIBE_TEXT: z.string().max(500).optional(),
   UNSUBSCRIBE_ENABLED: z.string().optional(),
+  // Emergency kill-switch. When 'true', the worker tick refuses to send
+  // anything for this user — schedules + campaigns just sit. Flip back
+  // to 'false' to resume. The toggle is per-user, not global.
+  SENDS_PAUSED: z.string().optional(),
 })
 
 export async function saveSettingsAction(input: Record<string, string | undefined>) {
