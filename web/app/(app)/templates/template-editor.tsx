@@ -58,17 +58,28 @@ export function TemplateEditor({ templates }: { templates: Template[] }) {
   }
 
   return (
-    <div className="grid gap-4 md:grid-cols-[260px,1fr,1fr]">
-      <aside className="space-y-1">
-        <div className="text-xs font-medium uppercase text-muted-foreground">Your templates</div>
-        {templates.length === 0 ? <p className="text-sm text-muted-foreground">None yet — save to create.</p> : null}
-        {templates.map((t) => (
-          <button key={t.id} onClick={() => load(t)}
-            className={`flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm hover:bg-accent ${pickedId === t.id ? 'border-primary' : ''}`}>
-            <span className="truncate">{t.label || t.key}</span>
-            {t.active ? <CheckCircle2 className="h-4 w-4 text-primary" /> : null}
-          </button>
-        ))}
+    <div className="grid gap-4 lg:grid-cols-[240px,1fr,1fr]">
+      {/* On mobile + tablet: dropdown picker. On desktop: full list rail. */}
+      <aside>
+        <div className="mb-2 text-xs font-medium uppercase text-muted-foreground">Your templates</div>
+        <select className="block w-full h-9 rounded-md border bg-background px-2 text-sm lg:hidden"
+          value={pickedId ?? ''} onChange={(e) => {
+            const t = templates.find((x) => x.id === Number(e.target.value))
+            if (t) load(t)
+          }}>
+          {templates.length === 0 ? <option value="">— save to create —</option> : null}
+          {templates.map((t) => (<option key={t.id} value={t.id}>{(t.active ? '★ ' : '') + (t.label || t.key)}</option>))}
+        </select>
+        <div className="hidden lg:block space-y-1">
+          {templates.length === 0 ? <p className="text-sm text-muted-foreground">None yet — save to create.</p> : null}
+          {templates.map((t) => (
+            <button key={t.id} onClick={() => load(t)}
+              className={`flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm hover:bg-accent ${pickedId === t.id ? 'border-primary' : ''}`}>
+              <span className="truncate">{t.label || t.key}</span>
+              {t.active ? <CheckCircle2 className="h-4 w-4 text-primary" /> : null}
+            </button>
+          ))}
+        </div>
       </aside>
 
       <section className="space-y-3">

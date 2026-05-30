@@ -46,7 +46,7 @@ async function tickForUser(userId: string): Promise<{ sent: number; failed: numb
         await db.update(emailLog).set({ status: 'Failed', lastResult: 'Empty body' }).where(eq(emailLog.id, row.id))
         failed++; continue
       }
-      await sendMail({ to: row.email, subject: row.subject, html: instrumentHtml(row.body, row.id) })
+      await sendMail({ to: row.email, subject: row.subject, html: instrumentHtml(row.body, row.id) }, userId)
       await db.update(emailLog).set({
         status: 'Sent', attempts: row.attempts + 1, lastResult: new Date().toLocaleString(),
       }).where(eq(emailLog.id, row.id))
@@ -100,7 +100,7 @@ async function tickForUser(userId: string): Promise<{ sent: number; failed: numb
         lastResult: new Date().toLocaleString(),
       }).returning({ id: emailLog.id })
       const logId = inserted[0]!.id
-      await sendMail({ ...email, html: instrumentHtml(email.html, logId) })
+      await sendMail({ ...email, html: instrumentHtml(email.html, logId) }, userId)
       await db.insert(events).values({
         userId, contactId: contact.id, templateId: tpl.id, kind: 'sent',
         meta: JSON.stringify({ step: enr.currentStep, campaignId: enr.campaignId, emailLogId: logId }),

@@ -84,7 +84,7 @@ export async function sendDraft(userId: string, draftId: number) {
   const logId = inserted[0]!.id
 
   const html = instrumentHtml(draft.htmlBody, logId)
-  await sendMail({ to: draft.toEmail, subject: draft.subject, html, text: draft.plainBody })
+  await sendMail({ to: draft.toEmail, subject: draft.subject, html, text: draft.plainBody }, userId)
   await db.update(drafts).set({ status: 'sent' }).where(eq(drafts.id, draft.id))
   if (draft.contactId) {
     await db.update(contacts).set({ emailStatus: `Sent (${new Date().toLocaleString()})` })

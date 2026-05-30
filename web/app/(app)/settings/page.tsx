@@ -1,11 +1,14 @@
 import { requireUser } from '@/auth'
 import { getMany } from '@/server/services/settings'
+import { getAiFor, getSmtpFor } from '@/server/services/credentials'
 import { env } from '@/lib/env'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { SettingsForm } from './settings-form'
 import { DangerZone } from './danger-zone'
-import { CheckCircle2, XCircle, Mail, Bot, Lock, Database, Sparkles } from 'lucide-react'
+import { SmtpForm } from './smtp-form'
+import { AiForm } from './ai-form'
+import { CheckCircle2, XCircle, Mail, Bot, Lock, Database } from 'lucide-react'
 
 function Status({ ok, label, detail }: { ok: boolean; label: string; detail?: string }) {
   return (
@@ -24,7 +27,10 @@ export default async function SettingsPage() {
   const cur = await getMany(u.id, [
     'DAILY_SEND_LIMIT', 'TIMEZONE', 'DEFAULT_ROLE_NAME', 'USER_PORTFOLIO_LINK',
     'CACHED_SIGNATURE', 'UNSUBSCRIBE_TEXT', 'UNSUBSCRIBE_ENABLED',
+    'SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'EMAIL_FROM',
+    'GROQ_API_KEY', 'GROQ_MODEL',
   ])
+  const [smtp, ai] = await Promise.all([getSmtpFor(u.id), getAiFor(u.id)])
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -34,7 +40,7 @@ export default async function SettingsPage() {
       </div>
 
       <Tabs defaultValue="general">
-        <TabsList className="flex-wrap h-auto">
+        <TabsList className="flex-wrap h-auto gap-1">
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="email">Email</TabsTrigger>
           <TabsTrigger value="ai">AI</TabsTrigger>
@@ -43,6 +49,7 @@ export default async function SettingsPage() {
           <TabsTrigger value="danger" className="text-destructive">Danger</TabsTrigger>
         </TabsList>
 
+        {/* General — daily limit, timezone, signature, unsubscribe */}
         <TabsContent value="general">
           <Card>
             <CardHeader><CardTitle>General</CardTitle><CardDescription>Defaults applied across drafts and campaigns.</CardDescription></CardHeader>
@@ -50,53 +57,63 @@ export default async function SettingsPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="email" className="space-y-3">
+        {/* Email — per-user SMTP creds with verify */}
+        <TabsContent value="email">
           <Card>
-            <CardHeader><CardTitle className="flex items-center gap-2"><Mail className="h-4 w-4" /> Outbound SMTP</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              <Status ok={Boolean(env.SMTP_USER && env.SMTP_PASS)} label="SMTP" detail={env.SMTP_USER ? `${env.SMTP_USER} via ${env.SMTP_HOST}:${env.SMTP_PORT}` : 'Set SMTP_USER and SMTP_PASS in .env'} />
-              <p className="text-xs text-muted-foreground">
-                Edit <code>.env</code> on the server to change credentials. For Gmail, generate an
-                <a className="underline" href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer"> App Password</a>.
-              </p>
-              <a href="/diagnostic" className="text-xs underline">Run SMTP test → /diagnostic</a>
-            </CardContent>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><Mail className="h-4 w-4" /> Outbound SMTP</CardTitle>
+              <CardDescription>Your SMTP credentials. Used for magic-link login and every outgoing draft.</CardDescription>
+            </CardHeader>
+            <CardContent><SmtpForm initial={cur} source={smtp.source} /></CardContent>
           </Card>
         </TabsContent>
 
+        {/* AI — per-user Groq key */}
         <TabsContent value="ai">
           <Card>
-            <CardHeader><CardTitle className="flex items-center gap-2"><Bot className="h-4 w-4" /> AI provider</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              <Status ok={Boolean(env.GROQ_API_KEY)} label="Groq" detail={env.GROQ_API_KEY ? `Model ${env.GROQ_MODEL}` : 'Set GROQ_API_KEY in .env'} />
-              <p className="text-xs text-muted-foreground flex items-center gap-1">
-                <Sparkles className="h-3 w-3" />
-                Powers the "AI improve" button in the template editor. Get a free key at
-                <a className="underline" href="https://console.groq.com" target="_blank" rel="noreferrer"> console.groq.com</a>.
-              </p>
-            </CardContent>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><Bot className="h-4 w-4" /> AI provider (Groq)</CardTitle>
+              <CardDescription>Powers the "AI Improve" button in the template editor.</CardDescription>
+            </CardHeader>
+            <CardContent><AiForm initial={cur} source={ai.source} /></CardContent>
           </Card>
         </TabsContent>
 
+        {/* Auth — read-only status; Google OAuth requires env + server restart */}
         <TabsContent value="auth">
           <Card>
-            <CardHeader><CardTitle className="flex items-center gap-2"><Lock className="h-4 w-4" /> Sign-in methods</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><Lock className="h-4 w-4" /> Sign-in methods</CardTitle>
+              <CardDescription>Magic link uses your Email tab settings. Google OAuth + dev sign-in are configured in <code>.env</code> (server restart required).</CardDescription>
+            </CardHeader>
             <CardContent className="space-y-3">
-              <Status ok={Boolean(env.SMTP_USER && env.SMTP_PASS)} label="Magic link" detail="Uses your SMTP credentials." />
-              <Status ok={Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET)} label="Google OAuth" detail={env.GOOGLE_CLIENT_ID ? 'Configured' : 'Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env'} />
-              <Status ok={process.env.ALLOW_DEV_SIGNIN === 'true'} label="Dev sign-in" detail={process.env.ALLOW_DEV_SIGNIN === 'true' ? 'On — disable before sharing this instance' : 'Off (recommended)'} />
+              <Status ok={smtp.source !== 'none'} label="Magic link" detail={smtp.source !== 'none' ? `Uses ${smtp.user}` : 'Configure in Email tab'} />
+              <Status ok={Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET)} label="Google OAuth"
+                detail={env.GOOGLE_CLIENT_ID ? 'Configured' : 'Set GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET in .env'} />
+              <Status ok={process.env.ALLOW_DEV_SIGNIN === 'true'} label="Dev sign-in (production)"
+                detail={process.env.ALLOW_DEV_SIGNIN === 'true' ? 'ON — disable before sharing this instance' : 'Off (recommended for production)'} />
+              <details className="rounded-md border p-3 text-xs">
+                <summary className="cursor-pointer font-medium">How to add Google OAuth</summary>
+                <ol className="mt-2 list-decimal pl-5 space-y-1 text-muted-foreground">
+                  <li>Open <a className="underline" href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer">Google Cloud → Credentials</a>.</li>
+                  <li>Create OAuth Client ID → Web application.</li>
+                  <li>Authorized redirect URI: <code>{env.APP_URL.replace(/\/$/, '')}/api/auth/callback/google</code></li>
+                  <li>Paste Client ID + Secret into <code>.env</code> as <code>GOOGLE_CLIENT_ID</code> / <code>GOOGLE_CLIENT_SECRET</code>.</li>
+                  <li>Restart the server. "Continue with Google" appears on /login.</li>
+                </ol>
+              </details>
             </CardContent>
           </Card>
         </TabsContent>
 
+        {/* Data */}
         <TabsContent value="data">
           <Card>
-            <CardHeader><CardTitle className="flex items-center gap-2"><Database className="h-4 w-4" /> Database</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-sm text-muted-foreground">SQLite, WAL mode, foreign keys ON. File at <code>{env.DATABASE_URL}</code>.</p>
-              <a className="text-xs underline" href="/api/backup" download>Download .db backup</a>
-              <br />
-              <a className="text-xs underline" href="/api/contacts/export" download>Export contacts as CSV</a>
+            <CardHeader><CardTitle className="flex items-center gap-2"><Database className="h-4 w-4" /> Data</CardTitle></CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <p className="text-muted-foreground">SQLite, WAL mode, foreign keys ON. File at <code>{env.DATABASE_URL}</code>.</p>
+              <a className="block text-xs underline" href="/api/contacts/export" download>Export contacts as CSV</a>
+              {u.isAdmin ? <a className="block text-xs underline" href="/api/backup" download>Download full .db backup (admin)</a> : null}
             </CardContent>
           </Card>
         </TabsContent>

@@ -1,7 +1,8 @@
 'use server'
 import { promises as dns } from 'node:dns'
 import { requireUser } from '@/auth'
-import { verifySmtp, sendMail } from '@/server/services/mailer'
+import { verifySmtpFor, sendMail } from '@/server/services/mailer'
+import { getAiFor, getSmtpFor } from '@/server/services/credentials'
 import { env } from '@/lib/env'
 
 export interface DiagResult { name: string; status: 'pass' | 'warn' | 'fail'; detail: string }
@@ -11,25 +12,26 @@ export async function runDiagnosticsAction(): Promise<{ results: DiagResult[] }>
   const r: DiagResult[] = []
   const pass = (name: string, detail = '') => r.push({ name, status: 'pass', detail })
   const warn = (name: string, detail: string) => r.push({ name, status: 'warn', detail })
-  const fail = (name: string, detail: string) => r.push({ name, status: 'fail', detail })
 
-  // SMTP
-  if (env.SMTP_USER && env.SMTP_PASS) {
-    const v = await verifySmtp()
-    if (v.ok) pass('SMTP', `Connected as ${env.SMTP_USER}`)
+  // SMTP — checks user creds, then env fallback
+  const smtp = await getSmtpFor(u.id)
+  if (smtp.source !== 'none') {
+    const v = await verifySmtpFor(u.id)
+    if (v.ok) pass('SMTP', `Connected as ${smtp.user} (${smtp.source === 'user' ? 'per-user' : 'env'})`)
     else warn('SMTP', v.error ?? 'verify failed')
-  } else warn('SMTP', 'Not configured (set SMTP_USER and SMTP_PASS)')
+  } else warn('SMTP', 'Not configured — Settings → Email')
 
   // Groq
-  if (env.GROQ_API_KEY) pass('AI (Groq)', `Model ${env.GROQ_MODEL}`)
-  else warn('AI (Groq)', 'GROQ_API_KEY not set — AI assist disabled')
+  const ai = await getAiFor(u.id)
+  if (ai.source !== 'none') pass('AI (Groq)', `Model ${ai.model} (${ai.source === 'user' ? 'per-user' : 'env'})`)
+  else warn('AI (Groq)', 'Not configured — Settings → AI')
 
   // OAuth
   if (env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) pass('Google OAuth', 'Configured')
-  else warn('Google OAuth', 'Not configured — magic-link only')
+  else warn('Google OAuth', 'Not configured (.env only, requires restart)')
 
-  // DNS / SPF / DMARC for the SMTP sender domain
-  const sender = env.SMTP_USER
+  // DNS / SPF / DMARC for the resolved sender domain
+  const sender = smtp.user
   if (sender && sender.includes('@')) {
     const domain = sender.split('@')[1]!.toLowerCase()
     try {
@@ -63,7 +65,7 @@ export async function sendSmtpTestAction() {
       subject: 'SMTP test — Email Automator',
       html: '<p>This is a test from Email Automator. If you got this, SMTP works.</p>',
       text: 'This is a test from Email Automator. If you got this, SMTP works.',
-    })
+    }, u.id)
     return { ok: true, to: u.email }
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'Send failed' }
