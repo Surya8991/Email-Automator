@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { Send, Trash2, Sparkles, SendHorizontal, Pencil, Save, X, CalendarClock, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { createDraftsAction, deleteDraftAction, sendAllAction, sendDraftAction, updateDraftAction, scheduleFollowupAction } from '@/server/actions/drafts'
+import { createDraftsAction, deleteDraftAction, sendAllAction, sendDraftAction, updateDraftAction, scheduleFollowupAction, sendSelectedDraftsAction } from '@/server/actions/drafts'
 import type { Draft } from '@/server/db/schema'
 import { useProgress } from '@/components/use-progress'
 
@@ -29,6 +29,9 @@ export function DraftsClient({ rows }: { rows: Draft[] }) {
         return d.toEmail.toLowerCase().includes(needle) || d.subject.toLowerCase().includes(needle)
       })
     : rows
+  // Per-row selection — drives the "Send selected" button. Cleared
+  // automatically after a send. Visible-row select-all only.
+  const [selected, setSelected] = useState<Set<number>>(new Set())
 
   return (
     <div>
@@ -52,6 +55,19 @@ export function DraftsClient({ rows }: { rows: Draft[] }) {
             <SendHorizontal className="mr-1.5 h-4 w-4" /> Send all
           </Button>
         ) : null}
+        {selected.size > 0 ? (
+          <Button variant="default" disabled={pending} onClick={() => start(async () => {
+            const ids = Array.from(selected)
+            if (!confirm(`Send ${ids.length} selected draft(s) now?`)) return
+            const r = await sendSelectedDraftsAction(ids)
+            if ('error' in r && r.error) { toast.error(r.error); return }
+            toast[r.failed ? 'warning' : 'success'](`Sent ${r.sent}${r.failed ? ` · ${r.failed} failed` : ''}`)
+            setSelected(new Set())
+            router.refresh()
+          })}>
+            <SendHorizontal className="mr-1.5 h-4 w-4" /> Send selected ({selected.size})
+          </Button>
+        ) : null}
         {progress ? (
           <div className="ml-auto flex items-center gap-3 text-sm text-muted-foreground" aria-live="polite">
             <span>{progress.processed ?? 0} / {progress.total ?? 0}</span>
@@ -63,8 +79,8 @@ export function DraftsClient({ rows }: { rows: Draft[] }) {
       </div>
 
       {rows.length > 0 ? (
-        <div className="border-b px-4 py-2">
-          <div className="relative max-w-sm">
+        <div className="border-b px-4 py-2 flex flex-wrap items-center gap-3">
+          <div className="relative max-w-sm flex-1">
             <Search className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               value={q} onChange={(e) => setQ(e.target.value)}
@@ -72,8 +88,22 @@ export function DraftsClient({ rows }: { rows: Draft[] }) {
               className="pl-8"
             />
           </div>
+          <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              className="h-4 w-4"
+              checked={filtered.length > 0 && filtered.every((d) => selected.has(d.id))}
+              onChange={(e) => {
+                const n = new Set(selected)
+                if (e.target.checked) for (const d of filtered) n.add(d.id)
+                else for (const d of filtered) n.delete(d.id)
+                setSelected(n)
+              }}
+            />
+            Select all visible
+          </label>
           {q.trim() ? (
-            <p className="mt-1 text-xs text-muted-foreground">{filtered.length} of {rows.length} drafts</p>
+            <span className="ml-auto text-xs text-muted-foreground">{filtered.length} of {rows.length} drafts</span>
           ) : null}
         </div>
       ) : null}
@@ -93,6 +123,21 @@ export function DraftsClient({ rows }: { rows: Draft[] }) {
             return (
             <li key={d.id} className="px-4 py-3">
               <div className="flex items-start gap-3">
+                {/* Selection checkbox — drives "Send selected (N)" above.
+                    Disabled while editing this row to avoid losing edits
+                    if the user picks "Send selected" by mistake. */}
+                <input
+                  type="checkbox"
+                  className="mt-1 h-4 w-4"
+                  aria-label={`Select ${d.toEmail}`}
+                  checked={selected.has(d.id)}
+                  disabled={isEditing}
+                  onChange={(e) => {
+                    const n = new Set(selected)
+                    if (e.target.checked) n.add(d.id); else n.delete(d.id)
+                    setSelected(n)
+                  }}
+                />
                 <div className="min-w-0 flex-1">
                   <div className="text-xs font-mono text-muted-foreground">{d.toEmail}</div>
                   {isEditing ? (

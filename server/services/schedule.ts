@@ -108,3 +108,24 @@ export async function cancelAll(userId: string): Promise<{ cancelled: number }> 
   }
   return { cancelled: rows.length }
 }
+
+/**
+ * Cancel a specific list of queued (Scheduled / Retrying) email_log rows.
+ * Multi-tenant safe: only rows owned by this userId can be cancelled,
+ * even if the caller passes IDs from another user's queue.
+ */
+export async function cancelByIds(userId: string, ids: number[]): Promise<{ cancelled: number }> {
+  if (!ids || ids.length === 0) return { cancelled: 0 }
+  const rows = await db.select().from(emailLog)
+    .where(and(eq(emailLog.userId, userId), sql`${emailLog.id} IN (${sql.join(ids.map((i) => sql`${i}`), sql`,`)})`))
+  let n = 0
+  for (const r of rows) {
+    if (r.status !== 'Scheduled' && r.status !== 'Retrying') continue
+    await db.update(emailLog).set({ status: 'Cancelled', lastResult: 'Cancelled' }).where(eq(emailLog.id, r.id))
+    if (r.contactId) {
+      await db.update(contacts).set({ emailStatus: 'Cancelled' }).where(eq(contacts.id, r.contactId))
+    }
+    n++
+  }
+  return { cancelled: n }
+}

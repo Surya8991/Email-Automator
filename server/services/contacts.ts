@@ -2,7 +2,10 @@ import { and, asc, count, desc, eq, inArray, like, or, sql } from 'drizzle-orm'
 import { db } from '@/server/db/client'
 import { contacts } from '@/server/db/schema'
 
-export interface ListOpts { page?: number; pageSize?: number; search?: string; tag?: string; status?: string }
+export interface ListOpts {
+  page?: number; pageSize?: number; search?: string; tag?: string; status?: string
+  company?: string; location?: string; platform?: string
+}
 
 export async function listContacts(userId: string, opts: ListOpts = {}) {
   const page = Math.max(1, opts.page ?? 1)
@@ -31,6 +34,11 @@ export async function listContacts(userId: string, opts: ListOpts = {}) {
     if (opts.status === 'pending') clauses.push(eq(contacts.emailStatus, ''))
     else clauses.push(like(contacts.emailStatus, `%${opts.status}%`))
   }
+  // Company / location / platform — exact match on the lowercase needle
+  // against the lowercase column. Indexed-friendly compared to LIKE %x%.
+  if (opts.company)  clauses.push(sql`LOWER(${contacts.company})  = LOWER(${opts.company})`)
+  if (opts.location) clauses.push(sql`LOWER(${contacts.location}) = LOWER(${opts.location})`)
+  if (opts.platform) clauses.push(sql`LOWER(${contacts.platform}) = LOWER(${opts.platform})`)
   const where = and(...clauses)
 
   const [rows, [totalRow]] = await Promise.all([
@@ -90,6 +98,16 @@ export async function listTags(userId: string): Promise<string[]> {
   const set = new Set<string>()
   for (const r of rows) for (const t of (r.tags || '').split(',')) { if (t) set.add(t) }
   return Array.from(set).sort()
+}
+
+/** Distinct non-empty values for a contact column. Used to populate the
+ *  company/location/platform filter dropdowns. Sorted ASCII. */
+export async function listDistinct(userId: string, field: 'company' | 'location' | 'platform'): Promise<string[]> {
+  const col = field === 'company' ? contacts.company : field === 'location' ? contacts.location : contacts.platform
+  const rows = await db.select({ v: col }).from(contacts).where(eq(contacts.userId, userId))
+  const set = new Set<string>()
+  for (const r of rows) { const v = (r.v ?? '').trim(); if (v) set.add(v) }
+  return Array.from(set).sort((a, b) => a.localeCompare(b))
 }
 
 export async function deleteContact(userId: string, id: number) {

@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray, sql } from 'drizzle-orm'
 import { db } from '@/server/db/client'
 import { drafts, contacts, emailLog, events, type Contact, type Template } from '@/server/db/schema'
 import { personalize } from '@/lib/escape'
@@ -57,6 +57,39 @@ export async function listDrafts(userId: string, page = 1, pageSize = 20) {
   const countRows = await db.select({ n: sql<number>`COUNT(*)` }).from(drafts)
     .where(and(eq(drafts.userId, userId), eq(drafts.status, 'draft')))
   return { rows, total: Number(countRows[0]?.n ?? 0), page, pageSize }
+}
+
+/**
+ * Create drafts for a SPECIFIC list of contact ids using the given
+ * template. Skips contacts already in Draft/Sent state (so re-running
+ * with overlapping selections doesn't double-up). Returns counters.
+ */
+export async function createDraftsForContacts(
+  userId: string, template: Template, contactIds: number[],
+): Promise<{ created: number; skipped: number }> {
+  if (contactIds.length === 0) return { created: 0, skipped: 0 }
+  const rows = await db.select().from(contacts).where(and(
+    eq(contacts.userId, userId),
+    inArray(contacts.id, contactIds),
+    sql`${contacts.recruiterEmail} != ''`,
+  ))
+  let created = 0, skipped = 0
+  for (const contact of rows) {
+    const st = contact.emailStatus
+    if (st && (st.includes('Draft Created') || st.startsWith('Sent') || st.includes('Sent ('))) {
+      skipped++; continue
+    }
+    const email = buildEmail(template, contact)
+    await db.insert(drafts).values({
+      userId, contactId: contact.id,
+      toEmail: email.to, subject: email.subject,
+      htmlBody: email.html, plainBody: email.text ?? '',
+    })
+    await db.update(contacts).set({ emailStatus: `Draft Created (${formatDate(new Date())})` })
+      .where(eq(contacts.id, contact.id))
+    created++
+  }
+  return { created, skipped }
 }
 
 export async function createDraftsBulk(userId: string, template: Template, max: number) {

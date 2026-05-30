@@ -103,17 +103,22 @@ Bob Smith,Globex,CTO,bob@globex.com,,,,
           <li>Search by name / company / email / role (top-left).</li>
           <li>Tag dropdown filters to one tag.</li>
           <li>Status dropdown filters by send state (Pending / Draft created / Scheduled / Sent / Replied / Bounced / Cancelled).</li>
-          <li>Filters compose; "Clear filters" resets both.</li>
+          <li>Company / Location / Platform dropdowns — populated from your actual data, exact match.</li>
+          <li>All filters compose with each other and with search; "Clear filters" resets them.</li>
         </ul>
 
         <h3 className="text-sm font-semibold mt-3">Bulk actions</h3>
         <p className="text-sm">Per-page select-all checkbox at the top of the table. With rows checked, a toolbar appears:</p>
         <ul className="list-disc pl-6 text-sm space-y-1">
+          <li><strong>Create drafts</strong> — creates drafts using your active template for just the selected contacts (cap 200). Skips anyone already drafted/sent.</li>
           <li><strong>Add tag</strong> / <strong>Remove tag</strong> — comma-separated; lower-cased automatically.</li>
           <li><strong>Reset status</strong> — makes them eligible for a fresh draft.</li>
           <li><strong>Block</strong> — adds emails to your blocklist <em>and</em> removes the contact rows.</li>
           <li><strong>Delete</strong> — permanent.</li>
         </ul>
+        <p className="text-sm mt-2 text-muted-foreground">
+          Tip: combine filters (e.g. <Code>company=Acme</Code> + <Code>status=Pending</Code>) → select-all → Create drafts — that's how you blast to one company without touching others.
+        </p>
         <p className="text-sm mt-2">Per-row icons:</p>
         <ul className="list-disc pl-6 text-sm space-y-1">
           <li><strong>Calendar clock</strong> — schedule a one-off follow-up using your active template (1-60 days out).</li>
@@ -175,12 +180,13 @@ Bob Smith,Globex,CTO,bob@globex.com,,,,
 
         <h3 className="text-sm font-semibold mt-3">In-row actions</h3>
         <ul className="list-disc pl-6 text-sm space-y-1">
+          <li><strong>Checkbox</strong> — select rows; a "Send selected (N)" button appears in the toolbar. Cap 100/batch.</li>
           <li><strong>Pencil</strong> — edit subject + HTML body inline before sending. No need to re-create from the template.</li>
           <li><strong>Send</strong> — Sends. If the same recipient was emailed in the last 7 days, a confirmation dialog shows the previous send timestamp; confirm to send anyway.</li>
           <li><strong>Calendar clock</strong> — schedules a follow-up for this contact (uses active template).</li>
           <li><strong>Trash</strong> — drops the draft.</li>
         </ul>
-        <p className="text-sm mt-2"><strong>Search</strong> box at the top of the list filters by recipient or subject.</p>
+        <p className="text-sm mt-2"><strong>Search</strong> box at the top of the list filters by recipient or subject. <strong>Select all visible</strong> checkbox to pick everything currently shown.</p>
       </Section>
 
       <Section id="schedule" title="6. Schedule (one-off blast)">
@@ -191,8 +197,8 @@ Bob Smith,Globex,CTO,bob@globex.com,,,,
           <li><strong>Schedule</strong> enqueues them all.</li>
           <li>Worker (<Code>npm run worker</Code>) ticks every 30 s and sends what's due. On Vercel, GitHub Actions cron pings every 5 min.</li>
         </ol>
-        <p className="text-sm"><strong>Cancel all</strong> flips Scheduled rows to Cancelled; already-sent rows stay.</p>
-        <p className="text-sm">The Queue table below the form supports search (recipient/subject) + status filter (Scheduled / Retrying). Each row shows attempts + last result so you can debug stuck retries.</p>
+        <p className="text-sm"><strong>Cancel all</strong> flips every Scheduled/Retrying row to Cancelled. <strong>Cancel selected (N)</strong> cancels only the checked rows. Already-sent rows stay either way.</p>
+        <p className="text-sm">The Queue table supports search (recipient/subject) + status filter (Scheduled / Retrying) + per-row checkbox. Each row shows attempts + last result so you can debug stuck retries (e.g. "Throttled: already sent within 30d on …" if you've set the per-recipient throttle in Settings).</p>
       </Section>
 
       <Section id="campaigns" title="7. Campaigns (multi-step sequences)">

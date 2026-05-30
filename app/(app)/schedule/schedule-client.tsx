@@ -5,7 +5,7 @@ import { CalendarClock, Eye, Play, X, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { cancelScheduleAction, enqueueScheduleAction, previewScheduleAction } from '@/server/actions/schedule'
+import { cancelScheduleAction, enqueueScheduleAction, previewScheduleAction, cancelSelectedAction } from '@/server/actions/schedule'
 import { useFormatDate, useTimezone } from '@/components/timezone-provider'
 
 interface QueueRow {
@@ -73,6 +73,7 @@ export function ScheduleClient({ queue, queueCount }: { queue: QueueRow[]; queue
   // (server-side). For thousands, push these to the server query.
   const [q, setQ] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'Scheduled' | 'Retrying'>('all')
+  const [selected, setSelected] = useState<Set<number>>(new Set())
   const filtered = queue.filter((r) => {
     if (statusFilter !== 'all' && r.status !== statusFilter) return false
     if (q.trim()) {
@@ -140,11 +141,23 @@ export function ScheduleClient({ queue, queueCount }: { queue: QueueRow[]; queue
         })}>
           <Play className="mr-1.5 h-4 w-4" /> Schedule
         </Button>
+        {selected.size > 0 ? (
+          <Button variant="destructive" disabled={pending} onClick={() => start(async () => {
+            const ids = Array.from(selected)
+            if (!confirm(`Cancel ${ids.length} selected scheduled email(s)?`)) return
+            const r = await cancelSelectedAction(ids)
+            if ('error' in r) { setMsg(r.error ?? 'Cancel failed'); return }
+            setMsg(`Cancelled ${r.cancelled}`); setSelected(new Set())
+            router.refresh()
+          })}>
+            <X className="mr-1.5 h-4 w-4" /> Cancel selected ({selected.size})
+          </Button>
+        ) : null}
         {queueCount > 0 ? (
           <Button variant="destructive" disabled={pending} onClick={() => start(async () => {
             if (!confirm(`Cancel all ${queueCount} scheduled emails?`)) return
             const r = await cancelScheduleAction()
-            setMsg(`Cancelled ${r.cancelled}`)
+            setMsg(`Cancelled ${r.cancelled}`); setSelected(new Set())
             router.refresh()
           })}>
             <X className="mr-1.5 h-4 w-4" /> Cancel all
@@ -213,6 +226,16 @@ export function ScheduleClient({ queue, queueCount }: { queue: QueueRow[]; queue
           <table className="w-full text-sm">
             <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
+                <th className="w-8 p-2">
+                  <input type="checkbox" aria-label="Select all visible queued rows"
+                    checked={filtered.length > 0 && filtered.every((r) => selected.has(r.id))}
+                    onChange={(e) => {
+                      const n = new Set(selected)
+                      if (e.target.checked) for (const r of filtered) n.add(r.id)
+                      else for (const r of filtered) n.delete(r.id)
+                      setSelected(n)
+                    }} />
+                </th>
                 <th className="p-2">Run at</th>
                 <th className="p-2">To</th>
                 <th className="p-2">Subject</th>
@@ -224,6 +247,15 @@ export function ScheduleClient({ queue, queueCount }: { queue: QueueRow[]; queue
             <tbody>
               {filtered.map((r) => (
                 <tr key={r.id} className="border-t">
+                  <td className="p-2">
+                    <input type="checkbox" aria-label={`Select scheduled email to ${r.email}`}
+                      checked={selected.has(r.id)}
+                      onChange={(e) => {
+                        const n = new Set(selected)
+                        if (e.target.checked) n.add(r.id); else n.delete(r.id)
+                        setSelected(n)
+                      }} />
+                  </td>
                   <td className="p-2 whitespace-nowrap">{formatDate(r.scheduledAt)}</td>
                   <td className="p-2 font-mono text-xs">{r.email}</td>
                   <td className="p-2 truncate max-w-xs">{r.subject}</td>

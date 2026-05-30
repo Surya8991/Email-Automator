@@ -1,7 +1,7 @@
 'use client'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useState, useTransition } from 'react'
-import { Trash2, ChevronLeft, ChevronRight, Search, History, X, Tag, Ban, RotateCcw, Plus, CalendarClock } from 'lucide-react'
+import { Trash2, ChevronLeft, ChevronRight, Search, History, X, Tag, Ban, RotateCcw, Plus, CalendarClock, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,10 +10,15 @@ import {
   deleteContactAction, deleteContactsBulkAction,
   bulkTagAction, bulkBlockAction, resetStatusAction,
 } from '@/server/actions/contacts'
-import { scheduleFollowupAction } from '@/server/actions/drafts'
+import { scheduleFollowupAction, createDraftsForSelectedAction } from '@/server/actions/drafts'
 import { ContactTimeline } from './contact-timeline'
 
-interface Props { rows: Contact[]; page: number; pages: number; search: string; tag: string; allTags: string[]; status?: string }
+interface Props {
+  rows: Contact[]; page: number; pages: number
+  search: string; tag: string; status?: string
+  company?: string; location?: string; platform?: string
+  allTags: string[]; companies?: string[]; locations?: string[]; platforms?: string[]
+}
 
 // Recognized status buckets for the filter dropdown. We match by substring
 // since the DB stores statuses as text ("Sent (5/30/2026, 7:14 PM)") —
@@ -29,7 +34,11 @@ const STATUS_OPTIONS = [
   { value: 'Cancelled', label: 'Cancelled' },
 ]
 
-export function ContactsTable({ rows, page, pages, search, tag, allTags, status = '' }: Props) {
+export function ContactsTable({
+  rows, page, pages, search, tag, allTags, status = '',
+  company = '', location = '', platform = '',
+  companies = [], locations = [], platforms = [],
+}: Props) {
   const router = useRouter()
   const sp = useSearchParams()
   const [pending, start] = useTransition()
@@ -65,14 +74,47 @@ export function ContactsTable({ rows, page, pages, search, tag, allTags, status 
           className="h-9 rounded-md border bg-background px-2 text-sm">
           {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
-        {tag || status ? (
-          <Button variant="ghost" size="sm" onClick={() => go({ tag: '', status: '', page: '1' })}>
+        {companies.length > 0 ? (
+          <select value={company} onChange={(e) => go({ company: e.target.value, page: '1' })}
+            className="h-9 rounded-md border bg-background px-2 text-sm max-w-[160px]">
+            <option value="">All companies</option>
+            {companies.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        ) : null}
+        {locations.length > 0 ? (
+          <select value={location} onChange={(e) => go({ location: e.target.value, page: '1' })}
+            className="h-9 rounded-md border bg-background px-2 text-sm max-w-[140px]">
+            <option value="">All locations</option>
+            {locations.map((l) => <option key={l} value={l}>{l}</option>)}
+          </select>
+        ) : null}
+        {platforms.length > 0 ? (
+          <select value={platform} onChange={(e) => go({ platform: e.target.value, page: '1' })}
+            className="h-9 rounded-md border bg-background px-2 text-sm max-w-[140px]">
+            <option value="">All platforms</option>
+            {platforms.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+        ) : null}
+        {tag || status || company || location || platform ? (
+          <Button variant="ghost" size="sm" onClick={() => go({ tag: '', status: '', company: '', location: '', platform: '', page: '1' })}>
             <X className="mr-1 h-3 w-3" /> Clear filters
           </Button>
         ) : null}
         {selected.size > 0 ? (
           <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/40 px-2 py-1 text-sm">
             <span className="px-1 font-medium">{selected.size} selected</span>
+            <Button variant="default" size="sm" disabled={pending} onClick={() => {
+              const ids = Array.from(selected)
+              if (!confirm(`Create drafts for ${ids.length} contact(s) using your active template?`)) return
+              start(async () => {
+                const r = await createDraftsForSelectedAction(ids)
+                if ('error' in r) { toast.error(r.error); return }
+                toast.success(`Created ${r.created} draft(s)${r.skipped ? ` · ${r.skipped} skipped (already drafted/sent)` : ''}`)
+                setSelected(new Set()); router.refresh()
+              })
+            }}>
+              <Sparkles className="mr-1 h-3.5 w-3.5" /> Create drafts
+            </Button>
             <Button variant="ghost" size="sm" disabled={pending} onClick={() => {
               const t = prompt('Tags to add (comma-separated):')?.trim()
               if (!t) return

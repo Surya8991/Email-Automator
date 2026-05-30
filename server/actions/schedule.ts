@@ -59,3 +59,12 @@ export async function cancelScheduleAction() {
   revalidatePath('/dashboard')
   return { ok: true, ...r }
 }
+
+export async function cancelSelectedAction(ids: number[]) {
+  const u = await requireUser()
+  if (!ids || ids.length === 0) return { error: 'No rows selected' }
+  const r = await svc.cancelByIds(u.id, ids)
+  revalidatePath('/schedule')
+  revalidatePath('/dashboard')
+  return { ok: true, ...r }
+}

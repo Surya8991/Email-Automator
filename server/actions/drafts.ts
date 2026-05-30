@@ -14,6 +14,23 @@ export async function createDraftsAction(count: number) {
   return { ok: true, ...r }
 }
 
+/**
+ * Create drafts for a user-picked subset of contacts (vs. createDraftsAction
+ * which auto-picks the first N eligible). Wired to the Contacts page bulk
+ * toolbar so the user can checkbox-select then "Create drafts for these N".
+ */
+export async function createDraftsForSelectedAction(contactIds: number[]) {
+  const u = await requireUser()
+  const tpl = await getActive(u.id)
+  if (!tpl) return { error: 'No active template — pick one in /templates first' }
+  if (!contactIds || contactIds.length === 0) return { error: 'No contacts selected' }
+  if (contactIds.length > 200) return { error: 'Pick at most 200 contacts at a time' }
+  const r = await drafts.createDraftsForContacts(u.id, tpl, contactIds)
+  revalidatePath('/contacts')
+  revalidatePath('/drafts')
+  return { ok: true, ...r }
+}
+
 export async function sendDraftAction(id: number, opts: { force?: boolean } = {}) {
   const u = await requireUser()
   // Duplicate-send guard. Look up the draft's recipient, check whether
@@ -77,6 +94,24 @@ export async function retryFailedAction() {
   const r = await drafts.sendAllDrafts(u.id, 50)
   revalidatePath('/drafts')
   return { ok: true, ...r }
+}
+
+/**
+ * Send only the user-selected draft ids. Mirrors sendAllDrafts but
+ * scoped to the picked set. Each failure is counted, none aborts.
+ */
+export async function sendSelectedDraftsAction(ids: number[]) {
+  const u = await requireUser()
+  if (!ids || ids.length === 0) return { error: 'No drafts selected' }
+  if (ids.length > 100) return { error: 'Pick at most 100 drafts at a time' }
+  let sent = 0, failed = 0
+  for (const id of ids) {
+    try { await drafts.sendDraft(u.id, id); sent++ }
+    catch { failed++ }
+  }
+  revalidatePath('/drafts')
+  revalidatePath('/dashboard')
+  return { ok: true, sent, failed }
 }
 
 export async function sendAllAction() {

@@ -18,7 +18,7 @@ Last refreshed: 2026-05-31.
 ## Contacts
 
 - **CRUD** — add one-by-one or import in bulk.
-- **Search + filter** — search by name/company/email/role · tag dropdown · status dropdown (Pending / Draft created / Scheduled / Sent / Replied / Bounced / Cancelled). Filters compose; URL-persisted.
+- **Search + filter** — search by name/company/email/role · tag · status (Pending / Draft created / Scheduled / Sent / Replied / Bounced / Cancelled) · **company** · **location** · **platform**. All dropdowns populated from your actual data. Filters compose; URL-persisted.
 - **CSV/Excel import with per-row error report** — bad rows aren't silently dropped: a collapsible panel lists every rejected row with line number + reason (missing email / invalid format / duplicate within file / already in your contacts). First 200 issues shown.
 - **Custom fields per contact** — keys declared in Settings (`region`, `tier`, `deal_stage`, etc.), values stored in `contacts.notes` as a JSON suffix (legacy plain-text notes still work). Insertable as `{{key}}` in templates, substituted at send time.
 - **One-click follow-up** — per-row "Schedule follow-up in N days" button. Pick a number, scheduler queues it.
@@ -26,7 +26,7 @@ Last refreshed: 2026-05-31.
 - **CSV export** of all your contacts.
 - **Tag filter** — comma-separated tags per contact; click a tag to filter, dropdown shows every tag you've used.
 - **Search** by name / company / email / role.
-- **Per-page select-all** + **bulk actions** — Add tag, Remove tag, Reset status, Block (one-step: add to blocklist + delete from contacts), Delete.
+- **Per-page select-all** + **bulk actions** — **Create drafts for selected** (uses active template, cap 200, skips already drafted/sent), Add tag, Remove tag, Reset status, Block (one-step: add to blocklist + delete from contacts), Delete.
 - **Per-contact timeline** — every event for this contact in one dialog.
 - **Status field** — auto-tracks `Draft Created`, `Scheduled for …`, `Sent (…)`, `Replied!`, `BOUNCED`.
 
@@ -44,7 +44,7 @@ Last refreshed: 2026-05-31.
 
 ## Drafts
 
-- **Search** — substring match on recipient + subject across the visible queue.
+- **Search + per-row selection** — substring match on recipient/subject; per-row checkbox + "Select all visible" + "Send selected (N)" (cap 100/batch).
 - **Bulk-create** drafts for every eligible contact (caps at 50/batch).
 - **Live progress** via SSE — see send count tick up in real time.
 - **Per-draft preview** — collapsible inline body view.
@@ -57,7 +57,7 @@ Last refreshed: 2026-05-31.
 
 ## Schedule
 
-- **Queue search + status filter** — search by recipient/subject, filter Scheduled vs Retrying.
+- **Queue search + status filter + per-row selection** — search by recipient/subject, filter Scheduled vs Retrying, per-row checkbox + "Cancel selected (N)" alongside "Cancel all".
 - **Pick start date + time** — IST by default; you change TZ in Settings.
 - **Configurable interval** — set min/max minutes between sends (default 3–5).
 - **Recurring presets** — Tomorrow 9:30 AM, Next weekday 10:00 AM, Next Monday 9:00 AM, In 3 days 11:00 AM, Tonight 7:00 PM.
