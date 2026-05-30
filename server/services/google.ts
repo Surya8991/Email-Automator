@@ -56,19 +56,28 @@ async function refreshAccessToken(userId: string, refreshToken: string): Promise
 /**
  * Returns a usable access_token for the user's Google account. Refreshes
  * it if it's expired (or within 60 s of expiry). Returns null if the user
- * isn't signed in via Google or the refresh fails.
+ * isn't signed in via Google or the refresh fails — and logs the cause
+ * so a "Gmail features stopped working" report is debuggable.
  */
 export async function getGoogleAccessToken(userId: string): Promise<string | null> {
   const t = await fetchTokensRow(userId)
-  if (!t) return null
-  const now = Math.floor(Date.now() / 1000)
-  const expiringSoon = t.expires_at && t.expires_at - now < 60
-  if (!expiringSoon) return t.access_token
-  if (!t.refresh_token) {
-    log.warn({}, 'google token expired and no refresh token on file')
+  if (!t) {
+    log.warn({ userId }, 'no google account on file — user signed in via magic-link?')
     return null
   }
-  return refreshAccessToken(userId, t.refresh_token)
+  const now = Math.floor(Date.now() / 1000)
+  const expiringSoon = t.expires_at !== null && t.expires_at - now < 60
+  if (!expiringSoon) return t.access_token
+  if (!t.refresh_token) {
+    // Happens when the user revoked consent in their Google account, or
+    // when a previous OAuth flow didn't grant offline access. They need
+    // to sign out + sign in again to re-grant.
+    log.warn({ userId }, 'google access_token expired and no refresh_token — user must re-auth')
+    return null
+  }
+  const refreshed = await refreshAccessToken(userId, t.refresh_token)
+  if (!refreshed) log.warn({ userId }, 'google token refresh returned null — user must re-auth')
+  return refreshed
 }
 
 interface GmailResponse { data?: unknown; status: number }
