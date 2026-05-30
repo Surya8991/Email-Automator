@@ -19,30 +19,7 @@ const upload = multer({ dest: path.join(__dirname, 'uploads'), limits: { fileSiz
 const templates = JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'templates.json'), 'utf8'));
 
 // ══════════ SECURITY MIDDLEWARE ══════════
-// CSP allows: self for everything; inline styles are needed because the SPA
-// uses inline style="..." liberally. JS is locked to 'self' so an injected
-// <script> tag cannot run. Update directives carefully if adding CDNs.
-app.use(helmet({
-  contentSecurityPolicy: {
-    useDefaults: true,
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc:  ["'self'"],
-      // Legacy SPA uses ~114 inline onclick= handlers and inline style=.
-      // We keep 'unsafe-inline' for ATTRIBUTES only (style + script attr) —
-      // the main script-src is still locked to 'self', so a smuggled
-      // <script> tag still can't run. The Next.js rewrite removes both.
-      scriptSrcAttr: ["'unsafe-inline'"],
-      styleSrc:   ["'self'", "'unsafe-inline'"],
-      imgSrc:     ["'self'", 'data:'],
-      connectSrc: ["'self'"],
-      objectSrc:  ["'none'"],
-      frameAncestors: ["'none'"],
-      baseUri:    ["'self'"],
-      formAction: ["'self'"]
-    }
-  }
-}));
+app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
@@ -55,34 +32,13 @@ app.use('/api/', apiLimiter);
 
 // Input sanitizer
 function sanitize(str) { if (!str || typeof str !== 'string') return str; return str.replace(/[<>]/g, '').trim(); }
-function clampInt(n, min, max, fallback) {
-  const x = parseInt(n, 10);
-  if (!Number.isFinite(x)) return fallback;
-  return Math.min(Math.max(x, min), max);
-}
 
-// SSE clients — tagged with the authenticated user id so progress events
-// fan out only to the user they belong to (no cross-tenant leaks).
-let sseClients = []; // [{ uid, res }, ...]
-function sendSSE(uid, data) {
-  const payload = 'data: ' + JSON.stringify(data) + '\n\n';
-  for (const c of sseClients) {
-    if (c.uid !== uid) continue;
-    try { c.res.write(payload); } catch (_) {}
-  }
-}
+// SSE clients
+let sseClients = [];
+function sendSSE(data) { sseClients.forEach(res => { try { res.write('data: ' + JSON.stringify(data) + '\n\n'); } catch (_) {} }); }
 
 // ══════════ AUTH: OTP LOGIN ══════════
-// Sentinel for the global blocklist row (suppressions apply to every user).
-const GLOBAL_UID = 0;
-
-// Returns the authenticated user id, or throws. Never falls back to 0 —
-// the historical fallback turned an unauth'd call into an admin/global query.
-function getUid(req) {
-  const id = req.session && req.session.user && req.session.user.id;
-  if (!id) throw new Error('getUid called without an authenticated session');
-  return id;
-}
+function getUid(req) { return (req.session.user && req.session.user.id) || 0; }
 function requireAuth(req, res, next) {
   if (!req.session.user) return res.status(401).json({ error: 'Login required', needLogin: true });
   next();
@@ -96,8 +52,8 @@ async function handleUnsubscribe(req, res) {
     return res.status(400).send('Invalid or expired unsubscribe link.');
   }
   await db.getDb();
-  if (!db.isBlocked(GLOBAL_UID, email)) db.addBlocklistEntry(GLOBAL_UID, email, 'email');
-  db.addAudit(GLOBAL_UID, 'UNSUBSCRIBE', email, req.ip);
+  if (!db.isBlocked(0, email)) db.addBlocklistEntry(0, email, 'email');
+  db.addAudit(0, 'UNSUBSCRIBE', email, req.ip);
   return email;
 }
 
@@ -129,8 +85,7 @@ app.post('/auth/send-otp', otpLimiter, async (req, res) => {
     const email = sanitize(req.body.email || '').toLowerCase();
     if (!email || !te.isValidEmail(email)) return res.json({ error: 'Enter a valid email address' });
 
-    // CSPRNG: crypto.randomInt is uniform and unguessable, unlike Math.random.
-    const otp = String(crypto.randomInt(100000, 1000000));
+    const otp = String(Math.floor(100000 + Math.random() * 900000));
     const expires = Date.now() + 5 * 60 * 1000; // 5 minutes
 
     let user = db.getUserByEmail(email);
@@ -143,10 +98,7 @@ app.post('/auth/send-otp', otpLimiter, async (req, res) => {
       db.addAudit(user.id, 'OTP_SENT', 'OTP sent to ' + email, req.ip);
       res.json({ success: true, message: 'OTP sent to ' + email });
     } catch (e) {
-      // Generic message to the caller; full error logged server-side only so
-      // SMTP creds / internals don't bleed into the response.
-      console.error('[OTP] send failed:', e.message);
-      res.json({ error: 'Failed to send OTP. Try again later.' });
+      res.json({ error: 'Failed to send OTP: ' + e.message + '. Check SMTP settings in .env' });
     }
   } catch (e) { res.json({ error: e.message }); }
 });
@@ -159,14 +111,9 @@ app.post('/auth/verify-otp', otpLimiter, async (req, res) => {
     if (!email || !otp) return res.json({ error: 'Email and OTP required' });
 
     const user = db.getUserByEmail(email);
-    // Always return the same generic error for unknown user / wrong OTP —
-    // otherwise verify-otp doubles as a user enumeration oracle.
-    const GENERIC = 'Invalid or expired OTP. Try again.';
-    if (!user) return res.json({ error: GENERIC });
+    if (!user) return res.json({ error: 'User not found. Send OTP first.' });
 
-    const result = db.verifyOtp(user.id, otp);
-    if (result === 'locked') return res.json({ error: 'Too many wrong codes. Try again later.' });
-    if (result !== 'ok') return res.json({ error: GENERIC });
+    if (!db.verifyOtp(user.id, otp)) return res.json({ error: 'Invalid or expired OTP. Try again.' });
 
     req.session.user = { id: user.id, email: user.email };
     db.addAudit(user.id, 'LOGIN', 'Logged in', req.ip);
@@ -197,28 +144,15 @@ app.get('/.env', (req, res) => res.status(403).send('Forbidden'));
 app.get('/data/*', (req, res) => res.status(403).send('Forbidden'));
 app.get('/*.db', (req, res) => res.status(403).send('Forbidden'));
 
-// Google OAuth — generate a per-session state token and check it on callback
-// (CSRF defense; without this an attacker could link their tokens to a victim).
+// Google OAuth
 app.get('/auth/google', (req, res) => {
-  const state = crypto.randomBytes(16).toString('hex');
-  req.session.oauthState = state;
-  const url = emailSender.getAuthUrl(state);
+  const url = emailSender.getAuthUrl();
   if (!url) return res.json({ error: 'OAuth not configured' });
   res.redirect(url);
 });
 
 app.get('/auth/google/callback', async (req, res) => {
   try {
-    const expected = req.session.oauthState;
-    const got = String(req.query.state || '');
-    // Constant-time compare to avoid leaking length / partial-match timing.
-    let ok = false;
-    if (expected && got && expected.length === got.length) {
-      try { ok = crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(got)); } catch (_) {}
-    }
-    delete req.session.oauthState;
-    if (!ok) return res.redirect('/?auth=error&msg=' + encodeURIComponent('OAuth state mismatch'));
-
     const tokens = await emailSender.getTokensFromCode(req.query.code);
     const gUser = await emailSender.getUserInfo(tokens);
     tokens.email = gUser.email;
@@ -232,17 +166,13 @@ app.get('/auth/google/callback', async (req, res) => {
   } catch (e) { res.redirect('/?auth=error&msg=' + encodeURIComponent(e.message)); }
 });
 
-// SSE — must be authenticated, and the connection is tagged with the user id
-// so sendSSE(uid, ...) only reaches that user's tabs.
-app.get('/api/progress', requireAuth, (req, res) => {
-  const uid = getUid(req);
+// SSE
+app.get('/api/progress', (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
-  const entry = { uid, res };
-  sseClients.push(entry);
-  req.on('close', () => { sseClients = sseClients.filter(c => c !== entry); });
+  sseClients.push(res);
+  req.on('close', () => { sseClients = sseClients.filter(c => c !== res); });
 });
 
 // ══════════ CONTACTS ══════════
@@ -365,12 +295,9 @@ function buildEmail(uid, contact, tokens) {
   pData.portfolio_link = db.getSetting('USER_PORTFOLIO_LINK', uid) || '';
   if (!pData.role_name) pData.role_name = db.getSetting('DEFAULT_ROLE_NAME', uid) || '[Role Name]';
   let htmlBody = te.personalizeMessage(tpl.initialMsg, pData) + sig;
-  // Inject unsubscribe link if enabled. User-controlled text is sanitized
-  // (plain text + <a>/<b>/<i>/<em>/<strong>/<br> only) so it cannot inject
-  // scripts or event handlers into the outgoing email.
+  // Inject unsubscribe link if enabled
   if (db.getSetting('UNSUBSCRIBE_ENABLED', uid) === 'true') {
-    const unsubRaw = db.getSetting('UNSUBSCRIBE_TEXT', uid) || 'If you no longer wish to receive these emails, please reply with "unsubscribe".';
-    const unsubText = te.sanitizeUnsubText(unsubRaw);
+    const unsubText = db.getSetting('UNSUBSCRIBE_TEXT', uid) || 'If you no longer wish to receive these emails, please reply with "unsubscribe".';
     htmlBody += '<p style="font-size:11px;color:#999;margin-top:20px;border-top:1px solid #eee;padding-top:10px">' + unsubText + '</p>';
   }
   return { to: contact.recruiter_email, subject: te.personalizeMessage(tpl.subject, pData, true), htmlBody, plainBody: te.stripHtml(te.personalizeMessage(tpl.initialMsg, pData)), pData };
@@ -416,9 +343,9 @@ app.post('/api/drafts/bulk', requireAuth, async (req, res) => {
     const contacts = db.getContactsForDrafts(uid, draftCount);
     if (!contacts.length) return res.json({ error: 'No contacts ready' });
     let processed = 0, errors = 0, skipped = 0;
-    sendSSE(uid, { type: 'draft_start', total: contacts.length });
+    sendSSE({ type: 'draft_start', total: contacts.length });
     for (const contact of contacts) {
-      if (scheduler.isStopRequested()) { sendSSE(uid, { type: 'draft_stopped' }); break; }
+      if (scheduler.isStopRequested()) { sendSSE({ type: 'draft_stopped' }); break; }
       if (!te.isValidEmail(contact.recruiter_email)) { db.updateContactStatus(contact.id, 'Invalid email'); skipped++; continue; }
       if (db.isBlocked(uid, contact.recruiter_email)) { db.updateContactStatus(contact.id, 'Blocklisted'); skipped++; continue; }
       try {
@@ -427,12 +354,12 @@ app.post('/api/drafts/bulk', requireAuth, async (req, res) => {
         if (result.local) db.addDraft(uid, contact.id, email.to, email.subject, email.htmlBody, email.plainBody);
         db.updateContactStatus(contact.id, 'Draft Created (' + new Date().toLocaleString() + ')');
         processed++;
-        sendSSE(uid, { type: 'draft_progress', processed, total: contacts.length, email: email.to });
+        sendSSE({ type: 'draft_progress', processed, total: contacts.length, email: email.to });
         await te.sleep(fast ? (2000 + Math.random() * 3000) : te.getRandomDelay());
       } catch (err) { db.updateContactStatus(contact.id, 'Error: ' + err.message); errors++; }
     }
     scheduler.clearStop();
-    sendSSE(uid, { type: 'draft_done', processed, errors, skipped });
+    sendSSE({ type: 'draft_done', processed, errors, skipped });
     db.addAudit(uid, 'BULK_DRAFT', processed + ' created, ' + errors + ' errors', req.ip);
     res.json({ success: true, processed, errors, skipped, total: contacts.length });
   } catch (e) { res.json({ error: e.message }); }
@@ -593,45 +520,18 @@ app.post('/api/drafts/followup', requireAuth, async (req, res) => {
     const gmail = google.gmail({ version: 'v1', auth: client });
     const sig = getSignature(uid, req.session.tokens);
     let processed = 0, noThread = 0, errors = 0;
-    // Build a follow-up draft in the existing Gmail thread. CRLF-validated.
-    function buildFollowupRaw(to, subj, msgId, body) {
-      te.assertNoCrlf('to', to);
-      te.assertNoCrlf('subject', subj);
-      te.assertNoCrlf('In-Reply-To', msgId);
-      return Buffer.from([
-        'To: ' + to,
-        'Subject: Re: ' + subj,
-        'In-Reply-To: ' + msgId,
-        'References: ' + msgId,
-        'Content-Type: text/html; charset=UTF-8',
-        '',
-        body
-      ].join('\r\n')).toString('base64url');
-    }
-    // Gmail search operators inside a quoted string: backslash-escape any `"`
-    // so attacker-controlled subject text can't escape the quoted segment.
-    const gmailQuote = (s) => '"' + String(s).replace(/[\\"]/g, '\\$&') + '"';
     for (const contact of sent) {
       try {
         const pData = te.getPersonalizationData(contact);
         pData.portfolio_link = db.getSetting('USER_PORTFOLIO_LINK', uid) || '';
-        const subject = te.stripCrlf(te.personalizeMessage(tpl.subject, pData, true));
-        const email = te.stripCrlf(contact.recruiter_email);
-        const searchRes = await gmail.users.messages.list({ userId: 'me', q: 'to:' + email + ' subject:' + gmailQuote(subject) + ' in:sent', maxResults: 1 });
+        const subject = te.personalizeMessage(tpl.subject, pData, true).replace(/[\r\n]+/g, ' ').trim();
+        const searchRes = await gmail.users.messages.list({ userId: 'me', q: 'to:' + contact.recruiter_email + ' subject:"' + subject + '" in:sent', maxResults: 1 });
         if (!searchRes.data.messages || !searchRes.data.messages.length) { noThread++; continue; }
         const threadId = (await gmail.users.messages.get({ userId: 'me', id: searchRes.data.messages[0].id })).data.threadId;
         const msgId = searchRes.data.messages[0].id;
         const draftsCreated = [];
-        if (req.body.includeFollow1 !== false && tpl.follow1Msg) {
-          const body = te.personalizeMessage(tpl.follow1Msg, pData) + sig;
-          await gmail.users.drafts.create({ userId: 'me', requestBody: { message: { threadId, raw: buildFollowupRaw(email, subject, msgId, body) } } });
-          draftsCreated.push('Follow-1');
-        }
-        if (req.body.includeLastFollow !== false && tpl.lastFollowMsg) {
-          const body = te.personalizeMessage(tpl.lastFollowMsg, pData) + sig;
-          await gmail.users.drafts.create({ userId: 'me', requestBody: { message: { threadId, raw: buildFollowupRaw(email, subject, msgId, body) } } });
-          draftsCreated.push('Last');
-        }
+        if (req.body.includeFollow1 !== false && tpl.follow1Msg) { const body = te.personalizeMessage(tpl.follow1Msg, pData) + sig; await gmail.users.drafts.create({ userId: 'me', requestBody: { message: { threadId, raw: Buffer.from(['To: ' + contact.recruiter_email, 'Subject: Re: ' + subject, 'In-Reply-To: ' + msgId, 'References: ' + msgId, 'Content-Type: text/html; charset=UTF-8', '', body].join('\r\n')).toString('base64url') } } }); draftsCreated.push('Follow-1'); }
+        if (req.body.includeLastFollow !== false && tpl.lastFollowMsg) { const body = te.personalizeMessage(tpl.lastFollowMsg, pData) + sig; await gmail.users.drafts.create({ userId: 'me', requestBody: { message: { threadId, raw: Buffer.from(['To: ' + contact.recruiter_email, 'Subject: Re: ' + subject, 'In-Reply-To: ' + msgId, 'References: ' + msgId, 'Content-Type: text/html; charset=UTF-8', '', body].join('\r\n')).toString('base64url') } } }); draftsCreated.push('Last'); }
         if (draftsCreated.length) { db.updateContactStatus(contact.id, 'Follow-ups: ' + draftsCreated.join(', ') + ' (' + new Date().toLocaleString() + ')'); processed++; }
         await te.sleep(te.getRandomDelay());
       } catch (err) { errors++; }
@@ -817,23 +717,12 @@ app.get('/api/diagnostic', requireAuth, async (req, res) => {
 app.get('/api/diagnostic/dns', requireAuth, async (req, res) => {
   const dns = require('dns/promises');
   const uid = getUid(req);
-  // Only allow lookups against the user's OWN email domain or the configured
-  // SMTP sender domain. Without this an attacker could turn the server into
-  // a DNS amplifier or use it to probe arbitrary names.
-  const allowedSet = new Set();
-  const userEmail = (req.session.user && req.session.user.email) || '';
-  if (userEmail.includes('@')) allowedSet.add(userEmail.split('@')[1].toLowerCase());
-  if (config.SMTP_USER && config.SMTP_USER.includes('@')) allowedSet.add(config.SMTP_USER.split('@')[1].toLowerCase());
-
   let domain = (req.query.domain || '').toString().trim().toLowerCase();
   if (!domain) {
-    const addr = userEmail || config.SMTP_USER || '';
+    const addr = (req.session.user && req.session.user.email) || config.SMTP_USER || '';
     domain = addr.includes('@') ? addr.split('@')[1] : '';
   }
   if (!domain) return res.status(400).json({ error: 'No domain provided and no send address on file' });
-  if (!allowedSet.has(domain)) return res.status(403).json({ error: 'Domain not allowed for this user' });
-  // Basic syntactic guard so we don't pass garbage to DNS.
-  if (!/^[a-z0-9.-]{1,253}$/.test(domain)) return res.status(400).json({ error: 'Invalid domain' });
 
   const spf = { found: false, record: '' };
   const dmarc = { found: false, record: '', policy: '' };
@@ -956,14 +845,8 @@ app.post('/api/replies/check', requireAuth, async (req, res) => {
     const client = emailSender.getOAuthClient(req.session.tokens);
     const gmail = google.gmail({ version: 'v1', auth: client });
     const sentContacts = db.getSentContacts(uid);
-    // Hard cap per call so a 10k-contact account doesn't fire 10k Gmail
-    // requests in one handler and time out. The UI can paginate by calling
-    // repeatedly with ?offset=.
-    const limit = clampInt(req.body && req.body.limit, 1, 50, 50);
-    const offset = Math.max(0, parseInt((req.body && req.body.offset) || 0, 10) || 0);
-    const slice = sentContacts.slice(offset, offset + limit);
     let replied = 0;
-    for (const c of slice) {
+    for (const c of sentContacts) {
       if (c.email_status && c.email_status.includes('Replied')) continue;
       try {
         const r = await gmail.users.messages.list({ userId: 'me', q: 'from:' + c.recruiter_email + ' in:inbox', maxResults: 1 });
@@ -974,7 +857,7 @@ app.post('/api/replies/check', requireAuth, async (req, res) => {
       } catch (_) {}
     }
     db.addAudit(uid, 'REPLY_CHECK', replied + ' replies detected', req.ip);
-    res.json({ success: true, checked: slice.length, total: sentContacts.length, offset, limit, replied });
+    res.json({ success: true, checked: sentContacts.length, replied });
   } catch (e) { res.json({ error: e.message }); }
 });
 
@@ -1080,9 +963,7 @@ app.get('/api/admin/users/:id', requireAdmin, async (req, res) => {
 app.get('/api/admin/users/:id/contacts', requireAdmin, async (req, res) => {
   await db.getDb();
   const uid = parseInt(req.params.id);
-  // Clamp limit so an admin can't accidentally pull 100k rows in one shot.
-  const page = clampInt(req.query.page, 1, 1_000_000, 1);
-  const limit = clampInt(req.query.limit, 1, 200, 50);
+  const page = parseInt(req.query.page || '1'), limit = parseInt(req.query.limit || '50');
   const contacts = db.getAllContacts(uid, limit, (page - 1) * limit);
   res.json({ contacts, total: db.countContacts(uid), page, pages: Math.ceil(db.countContacts(uid) / limit) });
 });

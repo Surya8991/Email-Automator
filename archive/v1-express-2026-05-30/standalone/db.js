@@ -18,40 +18,11 @@ async function getDb() {
   return db;
 }
 
-function _saveDbSync() {
+function saveDb() {
   if (!db) return;
   const data = db.export();
   fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-  const tmp = DB_PATH + '.tmp';
-  fs.writeFileSync(tmp, Buffer.from(data));
-  fs.renameSync(tmp, DB_PATH); // atomic on POSIX; best-effort on Windows
-}
-
-// Debounced flush — collapses bursts of writes into one fsync.
-// Falls back to a sync flush on SIGINT/SIGTERM/uncaught exit.
-let saveTimer = null;
-function saveDb() {
-  if (!db) return;
-  if (saveTimer) return;
-  saveTimer = setTimeout(() => {
-    saveTimer = null;
-    try { _saveDbSync(); } catch (e) { console.error('[db] flush failed:', e.message); }
-  }, 500);
-}
-
-function flushDbNow() {
-  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
-  _saveDbSync();
-}
-
-let _exitHooked = false;
-function _hookExit() {
-  if (_exitHooked) return;
-  _exitHooked = true;
-  const onExit = () => { try { flushDbNow(); } catch (_) {} };
-  process.once('SIGINT',  () => { onExit(); process.exit(0); });
-  process.once('SIGTERM', () => { onExit(); process.exit(0); });
-  process.once('beforeExit', onExit);
+  fs.writeFileSync(DB_PATH, Buffer.from(data));
 }
 
 function initSchema() {
@@ -171,11 +142,8 @@ function initSchema() {
   try { db.run(`ALTER TABLE email_log ADD COLUMN user_id INTEGER DEFAULT 0`); } catch (_) {}
   try { db.run(`ALTER TABLE email_log ADD COLUMN body TEXT DEFAULT ''`); } catch (_) {}
   try { db.run(`ALTER TABLE batch_log ADD COLUMN user_id INTEGER DEFAULT 0`); } catch (_) {}
-  try { db.run(`ALTER TABLE users ADD COLUMN otp_attempts INTEGER DEFAULT 0`); } catch (_) {}
-  try { db.run(`ALTER TABLE users ADD COLUMN otp_locked_until INTEGER DEFAULT 0`); } catch (_) {}
 
-  _hookExit();
-  _saveDbSync();
+  saveDb();
 }
 
 function sqlToObjects(result) {
@@ -206,40 +174,14 @@ function setOtp(userId, otp, expiresMs) {
   saveDb();
 }
 
-// Returns one of: 'ok' | 'locked' | 'expired' | 'mismatch'
-// Increments otp_attempts on mismatch; locks the account after 5 wrong attempts.
 function verifyOtp(userId, otp) {
-  const crypto = require('crypto');
-  const r = db.exec(`SELECT otp, otp_expires, otp_attempts, otp_locked_until FROM users WHERE id = ?`, [userId]);
-  if (!r.length || !r[0].values.length) return 'mismatch';
-  const [storedOtp, expires, attemptsRaw, lockedUntilRaw] = r[0].values[0];
-  const attempts = attemptsRaw || 0;
-  const lockedUntil = lockedUntilRaw || 0;
-  if (lockedUntil && Date.now() < lockedUntil) return 'locked';
-  if (!storedOtp || Date.now() > expires) return 'expired';
-
-  let match = false;
-  try {
-    const a = Buffer.from(String(storedOtp));
-    const b = Buffer.from(String(otp));
-    match = a.length === b.length && crypto.timingSafeEqual(a, b);
-  } catch (_) { match = false; }
-
-  if (!match) {
-    const next = attempts + 1;
-    // 5 wrong attempts → lock for 15 min * 2^(attempts-5) (capped at 1 hour)
-    const lockMs = next >= 5
-      ? Math.min(60 * 60 * 1000, 15 * 60 * 1000 * Math.pow(2, next - 5))
-      : 0;
-    db.run(`UPDATE users SET otp_attempts = ?, otp_locked_until = ? WHERE id = ?`,
-      [next, lockMs ? Date.now() + lockMs : 0, userId]);
-    saveDb();
-    return 'mismatch';
-  }
-
-  db.run(`UPDATE users SET otp = '', otp_expires = 0, otp_attempts = 0, otp_locked_until = 0, last_login = datetime('now') WHERE id = ?`, [userId]);
+  const r = db.exec(`SELECT otp, otp_expires FROM users WHERE id = ?`, [userId]);
+  if (!r.length || !r[0].values.length) return false;
+  const [storedOtp, expires] = r[0].values[0];
+  if (storedOtp !== otp || Date.now() > expires) return false;
+  db.run(`UPDATE users SET otp = '', otp_expires = 0, last_login = datetime('now') WHERE id = ?`, [userId]);
   saveDb();
-  return 'ok';
+  return true;
 }
 
 // ── Settings (per user) ──
@@ -349,20 +291,8 @@ function addEmailLog(userId, e) {
 }
 
 function getScheduledEmails(userId) {
-  // Strict: callers MUST pass an explicit user_id. The historical default of 0
-  // caused a cross-tenant data leak in the scheduler (all users' rows returned
-  // and processed under one daily quota). See plan Phase 1, #1.
-  if (userId === undefined || userId === null) {
-    throw new Error('getScheduledEmails: user_id is required');
-  }
-  const r = db.exec(`SELECT * FROM email_log WHERE user_id=? AND (status='Scheduled' OR status='Retrying') ORDER BY scheduled_at ASC`, [userId]);
+  const r = db.exec(`SELECT * FROM email_log WHERE user_id=? AND (status='Scheduled' OR status='Retrying') ORDER BY scheduled_at ASC`, [userId || 0]);
   return sqlToObjects(r);
-}
-
-// All user IDs in the system — used by the scheduler to iterate per-user.
-function getAllUserIds() {
-  const r = db.exec(`SELECT id FROM users ORDER BY id ASC`);
-  return sqlToObjects(r).map(u => u.id);
 }
 
 function cancelAllScheduled(userId) {
@@ -491,8 +421,8 @@ function countDrafts(userId) {
 }
 
 module.exports = {
-  getDb, saveDb, flushDbNow, sqlToObjects,
-  getUserByEmail, createUser, setOtp, verifyOtp, getAllUserIds,
+  getDb, saveDb, sqlToObjects,
+  getUserByEmail, createUser, setOtp, verifyOtp,
   getSetting, setSetting, deleteSetting,
   getAllContacts, getContactById, countContacts, countContactsSearch,
   getContactsForDrafts, getContactsForSchedule, getSentContacts,

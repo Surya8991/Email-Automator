@@ -2,7 +2,6 @@ const nodemailer = require('nodemailer');
 const { google } = require('googleapis');
 const crypto = require('crypto');
 const config = require('./config');
-const { assertNoCrlf } = require('./template-engine');
 
 // ── List-Unsubscribe (RFC 8058) ──
 function unsubToken(email) {
@@ -87,10 +86,10 @@ function getOAuthClient(tokens) {
   return client;
 }
 
-function getAuthUrl(state) {
+function getAuthUrl() {
   const client = getOAuthClient();
   if (!client) return null;
-  const opts = {
+  return client.generateAuthUrl({
     access_type: 'offline',
     prompt: 'consent',
     scope: [
@@ -100,9 +99,7 @@ function getAuthUrl(state) {
       'https://www.googleapis.com/auth/userinfo.email',
       'https://www.googleapis.com/auth/userinfo.profile'
     ]
-  };
-  if (state) opts.state = state;
-  return client.generateAuthUrl(opts);
+  });
 }
 
 async function getTokensFromCode(code) {
@@ -191,11 +188,6 @@ async function sendNow(tokens, to, subject, htmlBody, plainText) {
 
 // ── Build raw RFC 2822 message for Gmail API ──
 function makeRawEmail(from, to, subject, htmlBody) {
-  assertNoCrlf('from', from);
-  assertNoCrlf('to', to);
-  // Subject is base64-encoded below, so newlines inside it can't break headers —
-  // but reject anyway so an upstream bug surfaces loudly instead of silently.
-  assertNoCrlf('subject', subject);
   const boundary = 'boundary_' + Date.now();
   const lines = [
     'From: ' + from,
