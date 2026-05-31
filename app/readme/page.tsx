@@ -72,7 +72,7 @@ npm run worker                   # background scheduler / campaign advancer`}</p
 
         <h2 id="stack">Stack</h2>
         <ul>
-          <li><strong>Next.js 15</strong> App Router + TypeScript strict (<code>noUncheckedIndexedAccess</code>)</li>
+          <li><strong>Next.js 16</strong> App Router (Turbopack) + TypeScript strict (<code>noUncheckedIndexedAccess</code>)</li>
           <li><strong>Tailwind</strong> + shadcn-style components</li>
           <li><strong>Drizzle ORM</strong> on <strong>better-sqlite3</strong> (WAL, foreign keys on)</li>
           <li><strong>Auth.js v5</strong> — Email (magic link) + Google providers, DB-backed sessions</li>
@@ -118,7 +118,7 @@ npm run worker                   # background scheduler / campaign advancer`}</p
 
         <hr />
         <p className="text-xs text-muted-foreground">
-          Email Automator v2 · Next 15 · Drizzle · Auth.js · Groq · 100% self-hosted
+          Email Automator v2 · Next 16 · React 19 · Drizzle · Auth.js v5 · Groq · 100% self-hosted
         </p>
       </main>
     </div>

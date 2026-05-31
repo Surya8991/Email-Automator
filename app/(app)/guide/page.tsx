@@ -291,7 +291,10 @@ Bob Smith,Globex,CTO,bob@globex.com,,,,
               ['POST /api/dev-signin', 'dev-only', 'Issue a session for an allow-listed email'],
               ['GET /api/progress', 'user', 'SSE stream of draft progress events for the authed user'],
               ['GET /api/contacts/export', 'user', 'CSV of every contact you own'],
-              ['GET /api/csv-template', 'open', 'Empty starter CSV with the right headers'],
+              ['GET /api/audit/export', 'user', 'CSV of your full audit log (RFC 4180, IST timestamps)'],
+              ['GET /api/csv-template', 'open', 'Starter CSV with 5 realistic sample rows + canonical headers'],
+              ['GET /api/v1/contacts', 'API key', 'List your contacts (page, pageSize, search, tag)'],
+              ['POST /api/v1/contacts', 'API key', 'Create a contact. Body: {recruiterEmail, recruiterName?, company?, …}'],
               ['GET /api/backup', 'admin', 'Whole-DB .db file download (admin only)'],
               ['GET /api/track/open?eid=&t=', 'open (HMAC)', '1×1 GIF + records open event if HMAC verifies'],
               ['GET /api/track/click?eid=&u=&t=', 'open (HMAC)', '302 redirect + records click event'],
@@ -304,6 +307,14 @@ Bob Smith,Globex,CTO,bob@globex.com,,,,
           </tbody>
         </table>
         <p className="text-xs text-muted-foreground mt-2">Most mutations are <strong>Server Actions</strong> (in <Code>server/actions/*.ts</Code>) called directly from React components, not REST endpoints.</p>
+        <h3 className="text-sm font-semibold mt-3">Outbound webhooks</h3>
+        <p className="text-sm">Subscribe a URL in Settings → Webhooks to one or more event kinds (<Code>sent / open / click / reply / bounce / unsubscribe</Code>). Payload is POST JSON:</p>
+        <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs font-mono">{`{
+  "kind": "sent",
+  "payload": { ...event-specific... },
+  "ts": 1780000000000
+}`}</pre>
+        <p className="text-sm">Each request is HMAC-SHA256 signed with your per-subscription secret; verify the <Code>X-EA-Signature</Code> header.</p>
       </Section>
 
       <Section id="env" title="13. Environment variables (A–Z)">
@@ -316,7 +327,9 @@ Bob Smith,Globex,CTO,bob@globex.com,,,,
               ['APP_URL', 'http://localhost:3000', 'Used in tracking + unsubscribe URLs'],
               ['AUTH_SECRET', '(required)', 'Auth.js session secret + signs tracking/unsubscribe HMACs'],
               ['DAILY_SEND_LIMIT', '50', 'Hard cap per user per day; worker honors it'],
-              ['DATABASE_URL', './data/tracker.db', 'SQLite file path (or :memory: in tests)'],
+              ['DATABASE_URL', './data/tracker.db', 'SQLite file path locally, or a libsql:// URL (Turso) on Vercel. Driver picked from prefix.'],
+              ['TURSO_AUTH_TOKEN', '—', 'Auth token for the libSQL/Turso connection (Vercel only)'],
+              ['CRON_SECRET', '—', 'Bearer token GitHub Actions sends to /api/cron/tick'],
               ['DEV_BYPASS_EMAILS', 'test@gmail.com', 'Emails the dev sign-in route accepts'],
               ['EMAIL_FROM', '(falls back to SMTP_USER)', 'From: header on outgoing mail'],
               ['GOOGLE_CLIENT_ID', '—', 'Google OAuth — Continue-with-Google'],
@@ -432,7 +445,27 @@ docker run -d -p 3000:3000 -v $PWD/data:/app/data --env-file .env email-automato
           </div>
           <div>
             <dt className="font-medium">CSV import says "No valid rows"</dt>
-            <dd className="text-muted-foreground">No Email column detected. Make sure one header contains "email" (case-insensitive) and that values match <Code>x@y.z</Code>.</dd>
+            <dd className="text-muted-foreground">No Email column detected. Make sure one header contains "email" (case-insensitive) and that values match <Code>x@y.z</Code>. Check the import report (auto-shown after upload) for per-row reasons.</dd>
+          </div>
+          <div>
+            <dt className="font-medium">A queued row was marked "Cancelled" with "Throttled: already sent…"</dt>
+            <dd className="text-muted-foreground">The per-recipient throttle in <Link href="/settings" className="underline">Settings → General</Link> caught it (you set "max 1 per N days"). Set it to <Code>0</Code> to disable, or wait out the window.</dd>
+          </div>
+          <div>
+            <dt className="font-medium">A queued row's <em>Run at</em> keeps slipping forward by 1 hour</dt>
+            <dd className="text-muted-foreground">The per-domain daily cap (Settings → General) is deferring it because today's count for that domain hit the cap. It'll send on the next day with capacity.</dd>
+          </div>
+          <div>
+            <dt className="font-medium">"You already emailed X on …" confirmation when sending</dt>
+            <dd className="text-muted-foreground">Duplicate-send guard: this recipient was already emailed in the last 7 days. Confirm to send anyway, or cancel.</dd>
+          </div>
+          <div>
+            <dt className="font-medium">Worker isn't running on Vercel</dt>
+            <dd className="text-muted-foreground">Vercel is serverless — there's no long-running worker process. Instead, GitHub Actions cron (<Code>.github/workflows/cron-tick.yml</Code>) hits <Code>/api/cron/tick</Code> every 5 min. Verify <Code>CRON_SECRET</Code> matches in both Vercel env + GitHub Actions secrets.</dd>
+          </div>
+          <div>
+            <dt className="font-medium">Vercel deploy returns 500 on every route</dt>
+            <dd className="text-muted-foreground">Check Vercel Logs. The known traps: (1) <Code>"type":"module"</Code> in package.json — Vercel's CJS wrapper can't <Code>require()</Code> ESM page output; (2) missing <Code>TURSO_AUTH_TOKEN</Code> env in Production; (3) missing redirect URI in Google OAuth (<Code>https://yourapp.vercel.app/api/auth/callback/google</Code>).</dd>
           </div>
         </dl>
       </Section>
