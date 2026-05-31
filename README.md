@@ -47,30 +47,31 @@ You'll get a "Sign in as test@gmail.com (dev)" button on the login page.
 
 ## Features
 
+For the comprehensive list see **[FEATURES.md](FEATURES.md)**. The high-level surface:
+
 | Page | What it does |
 |---|---|
-| `/dashboard` | KPIs + recent activity + onboarding card when empty |
-| `/contacts` | Add/import/export, tags + filter, timeline modal, mobile card view |
-| `/templates` | Editor + live preview + variable autocomplete + A/B subject + AI Improve |
-| `/drafts` | Bulk create with SSE progress, individual + send-all, body preview |
-| `/dry-run` | First 100 contacts × active template (no email goes out) |
-| `/schedule` | Date/time picker, preview, queue table, cancel-all |
-| `/campaigns` | Multi-step sequences (drag-ordered, per-step delays, enroll by tag) |
-| `/analytics` | KPIs + 14-day chart (opens · clicks · replies · bounces) |
-| `/blocklist` | Per-user + global suppression; unsubscribe link auto-adds to global |
-| `/audit` | Last 500 actions per user |
-| `/diagnostic` | SMTP / Groq / OAuth / SPF / DMARC checks + send test |
-| `/profile` | Name, phone, signature, portfolio link |
-| `/settings` | 8 tabs: General · Email · AI · Auth · API keys · Webhooks · Data · Danger |
-| `/admin` | Per-user stats, delete user (cascades), full DB backup |
+| `/dashboard` | KPIs · **"Next send" card** (when + to whom) · recent activity with contact + campaign/step badges · onboarding when empty |
+| `/contacts` | CRUD · CSV/Excel import **with per-row error report** · per-page select-all + bulk actions (**Create drafts for selected**, Add/Remove tag, Reset status, Block, Delete) · 6 filters (search + tag + status + **company + location + platform**) · per-row follow-up · per-contact custom-field inputs · timeline modal |
+| `/templates` | 20 starter templates auto-seeded · sidebar search + category filter · live preview · A/B subject · AI Improve (Groq) · **Clone** · clickable variable + HTML-snippet palette + user-declared custom fields |
+| `/drafts` | Bulk create with SSE progress · inline edit subject/body · per-row select + Send selected · **duplicate-send confirmation** (last 7 days) · per-draft follow-up scheduler · search by recipient/subject |
+| `/schedule` | 5 recurring presets · configurable min/max gap · preview with spacing · queue search + status filter · select-to-cancel · per-row attempts + last-result · retry tinting |
+| `/campaigns` | Multi-step sequences · per-step delay + stop-on-reply · **step-level performance** (sent/open/click/reply/advanced %) · enroll by tag · search + status filter |
+| `/analytics` | 30-day KPIs · 14-day chart · breakdowns **by template / campaign / tag** (top 10) · **send-time heatmap** (7×24 IST grid) |
+| `/blocklist` | Per-user + global · single-add + **bulk paste-add** (auto-detects email vs domain) · search + type filter · auto-block on unsubscribe |
+| `/audit` | Last 500 actions · search + action filter + **date range** · **CSV export** |
+| `/diagnostic` | SMTP · AI · OAuth · DNS · SPF · DMARC · **MX** checks · per-row retry · provider-domain whitelist (no DMARC false-positives on gmail.com etc.) |
+| `/profile` | Name, phone, company, role, LinkedIn, signature (Gmail import), unsub text |
+| `/settings` | 8 tabs: General (TZ, throttle, domain caps, custom fields, pause-all) · Email · AI · Auth · API keys · Webhooks · Data · Danger |
+| `/admin` | Per-user stats · search + filter (Active/Suspended/Admins) · **Suspend/Resume** · Delete · full DB backup |
 | `/guide` | In-app 17-section manual |
 | `/readme` | Public landing page (no login required) |
 
-**API:** `/api/v1/contacts` (GET, POST) — Bearer auth via API keys you create
-in Settings → API keys.
+**API:** `/api/v1/contacts` (GET, POST) — Bearer auth via API keys created in Settings → API keys. `/api/audit/export` for CSV download.
 
-**Webhooks:** outbound POSTs on `sent` / `open` / `click` events with
-HMAC-SHA256 signatures. Configure in Settings → Webhooks.
+**Webhooks:** outbound POSTs on `sent / open / click / reply / bounce / unsubscribe` events with HMAC-SHA256 signatures (`X-EA-Signature` header). Configure in Settings → Webhooks.
+
+**Send safety:** per-user **daily limit** · **per-recipient throttle** (no double-tap from overlapping campaigns) · **per-domain daily cap** (defer over-cap rows by 1h, don't get flagged as a bulk sender) · **emergency Pause-all** kill switch · per-user TZ (IST default, 13-option dropdown).
 
 ---
 
@@ -79,36 +80,45 @@ HMAC-SHA256 signatures. Configure in Settings → Webhooks.
 ```
 .
 ├── app/                          # Next.js App Router
-│   ├── (auth)/login/
+│   ├── (auth)/login/             # Google primary CTA + magic link + (dev) dev-signin
 │   ├── (app)/                    # everything behind requireUser()
 │   │   ├── dashboard/  contacts/  templates/  drafts/  dry-run/
 │   │   ├── schedule/  campaigns/  analytics/  blocklist/  audit/
 │   │   ├── diagnostic/  profile/  settings/  guide/  admin/
 │   └── api/
 │       ├── auth/[...nextauth]/
-│       ├── cron/tick/            # Vercel cron target (worker tick)
+│       ├── cron/tick/            # /api/cron/tick — GitHub Actions cron target
 │       ├── dev-signin/           # opt-in dev session (ALLOW_DEV_SIGNIN)
-│       ├── v1/contacts/          # JSON API (Bearer auth)
+│       ├── v1/contacts/          # JSON API (Bearer auth via API keys)
 │       ├── progress/             # per-user SSE
+│       ├── audit/export/         # full-audit CSV download (per-user)
 │       ├── contacts/export/  csv-template/  backup/
 │       └── track/{open,click}/
 ├── components/                   # shadcn primitives + sidebar/topbar/palette/dialog
-├── lib/                          # env, escape, utils, logger, rate-limit, bearer-auth
+│                                 # + timezone-provider (React context for IST/TZ)
+├── lib/                          # env, escape, utils (formatDate),
+│                                 # logger, rate-limit, bearer-auth,
+│                                 # email-template (HTML wrapper), custom-fields
 ├── server/
 │   ├── db/                       # Drizzle schema + dual driver + migrations
 │   ├── services/                 # business logic, mockable in tests
 │   └── actions/                  # typed Server Actions (Zod-validated)
-├── workers/scheduler.ts          # long-running scheduler (Linux deploys)
+├── workers/scheduler.ts          # long-running scheduler (Linux/Docker deploys)
 ├── scripts/                      # migrate, seed-templates, seed-contacts, reset-db
 ├── test/{unit,integration,e2e}/
 ├── data/
 │   ├── seed-templates.json       # 20 starter templates (auto-seeded on first sign-in)
 │   └── tracker.db                # local SQLite (gitignored)
 ├── public/.well-known/security.txt
-├── vercel.json                   # Next.js preset + 1-min cron at /api/cron/tick
+├── .github/workflows/
+│   ├── ci.yml                    # typecheck + tests + npm audit (high+ blocks)
+│   └── cron-tick.yml             # every-5-min ping to /api/cron/tick (Vercel Hobby)
+├── vercel.json                   # Next.js preset (no crons — see GitHub Actions)
 ├── Dockerfile                    # multi-stage build, tini, /app/data volume
-├── SETUP.html                    # your personal deployment checklist
+├── SETUP.html                    # personal deployment checklist
 ├── DEPLOYMENT.md                 # Linux / Docker / Vercel paths
+├── FEATURES.md                   # comprehensive feature catalog
+├── AGENTS.md                     # working with AI agents in this repo
 └── .env.example
 ```
 
@@ -124,11 +134,13 @@ npm run e2e            # Playwright (chromium)
 
 | Layer | Coverage |
 |---|---|
-| Unit | `lib/escape` (12) · `analytics` math (2) · `drafts.buildEmail` (2) |
-| Integration | contacts (3) · services (4) · multi-tenant isolation (3) · worst-case regressions (12) · credentials (6) · onboarding (3) · api keys + webhooks (8) |
-| E2E (Playwright) | login renders · root redirect · protected pages redirect (3) |
+| Unit | `lib/escape` · `lib/custom-fields` (notes JSON suffix encode/decode + regression guards) · `analytics` math · `drafts.buildEmail` |
+| Integration | contacts (search/tag/status filters) · services · multi-tenant isolation · worst-case regressions · credentials · onboarding · api keys + webhooks · CSV importer (per-row error report) |
+| E2E (Playwright) | login renders · root redirect · protected pages redirect |
 
-Current: **52 unit + integration green** · strict TS clean · 22 routes build.
+Current: **57 unit + integration green** · strict TS clean · 30 routes build.
+
+CI blocks on high-severity `npm audit` findings (the same check Vercel runs at deploy), so a vulnerable dep can't land in `main`.
 
 ---
 
@@ -141,7 +153,10 @@ Current: **52 unit + integration green** · strict TS clean · 22 routes build.
 - Atomic template activation (single `CASE-WHEN` UPDATE) — no two-active race
 - `UNIQUE(campaign_id, contact_id)` — double-enroll is a no-op
 - Ownership re-check when attaching templates to campaign steps
-- 100k row hard cap on CSV/XLSX imports (no OOM)
+- Defense-in-depth: every contact UPDATE scoped `(id, userId)` even when ids come from a userId-filtered SELECT
+- Duplicate-send guard: sending to a recipient emailed in last 7d requires explicit confirmation
+- Per-recipient throttle (configurable days) + per-domain daily cap as send-side safety nets
+- 100k row hard cap on CSV/XLSX imports (no OOM); per-row error report on the bad ones
 - Strict CSP headers + `foreign_keys = ON` in SQLite
 - Per-user rate limits: AI (20/min), dev-signin (10/min), v1 API (60–120/min)
 - API keys stored as SHA-256 hash; plaintext shown once on creation
@@ -157,7 +172,7 @@ checklist tailored to a first-time deployer.
 
 | Target | Notes |
 |---|---|
-| **Vercel** (recommended) | Uses Turso (libSQL) + Vercel Cron. Zero code changes — the DB driver auto-detects from `DATABASE_URL`. |
+| **Vercel** (recommended, Hobby plan works) | Uses Turso (libSQL) for storage; **GitHub Actions cron** drives `/api/cron/tick` every 5 min (Vercel Hobby blocks sub-daily crons). Zero code changes — the DB driver auto-detects from `DATABASE_URL`. |
 | **Self-hosted Linux** | `pm2 start npm -- start` + `pm2 start npm -- run worker`. SQLite in `./data/`. Back up with rsync/restic. |
 | **Docker** | `Dockerfile` in repo root; mount `./data` as a volume. |
 
