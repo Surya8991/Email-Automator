@@ -173,8 +173,14 @@ export function ContactsTable({
       </div>
 
       {rows.length === 0 ? (
-        <div className="px-6 py-16 text-center text-sm text-muted-foreground">
-          No contacts yet. Click <strong>Add contact</strong> above or use Import.
+        <div className="px-6 py-16 text-center">
+          <Tag className="mx-auto mb-3 h-10 w-10 text-muted-foreground/50" />
+          <p className="text-sm text-muted-foreground">
+            {search || tag || status || company || location || platform
+              ? <>No contacts match the current filters. <button onClick={() => go({ search: '', tag: '', status: '', company: '', location: '', platform: '', page: '1' })} className="underline">Clear filters</button> to see them all.</>
+              : <>No contacts yet. Click <strong>Add contact</strong> above or use Import.</>
+            }
+          </p>
         </div>
       ) : (
         <>

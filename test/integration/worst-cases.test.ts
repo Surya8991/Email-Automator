@@ -178,4 +178,33 @@ describe('contacts service: tag filter', () => {
   })
 })
 
+describe('lib/custom-fields: notes JSON suffix encode/decode', () => {
+  it('round-trips an empty case', async () => {
+    const cf = await import('@/lib/custom-fields')
+    expect(cf.readCustomFields('')).toEqual({})
+    expect(cf.readCustomFields(null)).toEqual({})
+    expect(cf.readCustomFields('plain notes only')).toEqual({})
+    expect(cf.readNotesText('plain notes only')).toBe('plain notes only')
+  })
+  it('round-trips notes + custom fields', async () => {
+    const cf = await import('@/lib/custom-fields')
+    const enc = cf.writeCustomFields('Met at conf', { region: 'APAC', tier: 'A' })
+    expect(cf.readNotesText(enc)).toBe('Met at conf')
+    expect(cf.readCustomFields(enc)).toEqual({ region: 'APAC', tier: 'A' })
+  })
+  it('does NOT strip literal "@@CUSTOM@@" from freeform notes (regression guard)', async () => {
+    const cf = await import('@/lib/custom-fields')
+    // This used to false-positive — the old regex allowed zero-newline
+    // sentinels mid-string. The strict \n\n requirement on the writer
+    // side stops that.
+    const dangerous = 'Please mention @@CUSTOM@@ in your email'
+    expect(cf.readNotesText(dangerous)).toBe(dangerous)
+    expect(cf.readCustomFields(dangerous)).toEqual({})
+  })
+  it('drops invalid JSON in a malformed suffix', async () => {
+    const cf = await import('@/lib/custom-fields')
+    expect(cf.readCustomFields('notes\n\n@@CUSTOM@@{not json}')).toEqual({})
+  })
+})
+
 declare const vi: typeof import('vitest')['vi']

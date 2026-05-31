@@ -85,8 +85,12 @@ export async function createDraftsForContacts(
       toEmail: email.to, subject: email.subject,
       htmlBody: email.html, plainBody: email.text ?? '',
     })
+    // Defense-in-depth: scope the update by userId too. The contact rows
+    // came from a userId-filtered SELECT, so this is belt-and-braces, but
+    // it ensures a future code path that injects untrusted contact ids
+    // can't update another user's rows.
     await db.update(contacts).set({ emailStatus: `Draft Created (${formatDate(new Date())})` })
-      .where(eq(contacts.id, contact.id))
+      .where(and(eq(contacts.id, contact.id), eq(contacts.userId, userId)))
     created++
   }
   return { created, skipped }
@@ -137,10 +141,14 @@ export async function sendDraft(userId: string, draftId: number) {
 
   const html = instrumentHtml(draft.htmlBody, logId)
   await sendMail({ to: draft.toEmail, subject: draft.subject, html, text: draft.plainBody }, userId)
-  await db.update(drafts).set({ status: 'sent' }).where(eq(drafts.id, draft.id))
+  // Defense-in-depth: every mutation scoped to (userId, id) even though
+  // the SELECT above already filtered. Draft and contact ids are server-
+  // derived here; the guard catches future misuses.
+  await db.update(drafts).set({ status: 'sent' })
+    .where(and(eq(drafts.id, draft.id), eq(drafts.userId, userId)))
   if (draft.contactId) {
     await db.update(contacts).set({ emailStatus: `Sent (${formatDate(new Date())})` })
-      .where(eq(contacts.id, draft.contactId))
+      .where(and(eq(contacts.id, draft.contactId), eq(contacts.userId, userId)))
   }
   await db.insert(events).values({
     userId, contactId: draft.contactId ?? null, kind: 'sent',

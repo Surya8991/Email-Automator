@@ -25,7 +25,18 @@ export async function addContactAction(formData: FormData) {
   const parsed = NewContactSchema.safeParse(Object.fromEntries(formData))
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Invalid input' }
   if (await svc.emailExists(u.id, parsed.data.recruiterEmail)) return { error: 'This email already exists' }
-  await svc.addContact(u.id, parsed.data)
+  // Pick up any cf_<key> fields and bake them into notes as a JSON suffix.
+  // The dialog renders one input per user-declared custom field key.
+  const customFields: Record<string, string> = {}
+  for (const [k, v] of formData.entries()) {
+    if (k.startsWith('cf_') && typeof v === 'string' && v.trim()) {
+      customFields[k.slice(3)] = v.trim()
+    }
+  }
+  const notesWithCustom = Object.keys(customFields).length > 0
+    ? (await import('@/lib/custom-fields')).writeCustomFields(parsed.data.notes ?? '', customFields)
+    : parsed.data.notes
+  await svc.addContact(u.id, { ...parsed.data, notes: notesWithCustom })
   revalidatePath('/contacts')
   return { ok: true }
 }

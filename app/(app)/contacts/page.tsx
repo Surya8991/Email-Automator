@@ -1,6 +1,8 @@
 import { Suspense } from 'react'
 import { requireUser } from '@/auth'
 import { listContacts, listTags, listDistinct } from '@/server/services/contacts'
+import { getSetting } from '@/server/services/settings'
+import { parseCustomFieldKeys } from '@/lib/custom-fields'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ContactsTable } from './contacts-table'
@@ -10,7 +12,7 @@ import { ContactsToolbar } from './contacts-toolbar'
 export default async function ContactsPage(props: { searchParams: Promise<{ page?: string; search?: string; tag?: string; status?: string; company?: string; location?: string; platform?: string }> }) {
   const search = await props.searchParams
   const u = await requireUser()
-  const [data, allTags, companies, locations, platforms] = await Promise.all([
+  const [data, allTags, companies, locations, platforms, rawCfKeys] = await Promise.all([
     listContacts(u.id, {
       page: Number(search.page ?? 1),
       search: search.search ?? '',
@@ -24,7 +26,9 @@ export default async function ContactsPage(props: { searchParams: Promise<{ page
     listDistinct(u.id, 'company'),
     listDistinct(u.id, 'location'),
     listDistinct(u.id, 'platform'),
+    getSetting(u.id, 'CUSTOM_FIELD_KEYS'),
   ])
+  const customFieldKeys = parseCustomFieldKeys(rawCfKeys)
 
   const filterBadges = [
     search.tag ? `#${search.tag}` : null,
@@ -42,7 +46,7 @@ export default async function ContactsPage(props: { searchParams: Promise<{ page
         </div>
         <div className="flex items-center gap-2">
           <ContactsToolbar />
-          <AddContactDialog />
+          <AddContactDialog customFieldKeys={customFieldKeys} />
         </div>
       </div>
       <Card>

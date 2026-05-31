@@ -10,7 +10,12 @@
 // time by personalizeWithCustom() below.
 
 const SENTINEL = '@@CUSTOM@@'
-const BLOCK_RE = /\n*@@CUSTOM@@(\{[^\n]*\})\s*$/
+// Require \n\n before the sentinel (matches what writeCustomFields emits)
+// and end-of-string after the JSON. Without the \n\n guard, a user who
+// types "Please mention @@CUSTOM@@" anywhere in freeform notes would have
+// that text incorrectly stripped on every read/round-trip — silent data
+// loss for any contact with the sentinel as literal text.
+const BLOCK_RE = /\n\n@@CUSTOM@@(\{.*\})\s*$/
 
 export interface CustomFieldDef { key: string; label?: string }
 

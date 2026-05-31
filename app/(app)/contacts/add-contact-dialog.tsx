@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { addContactAction } from '@/server/actions/contacts'
 
-export function AddContactDialog() {
+export function AddContactDialog({ customFieldKeys = [] }: { customFieldKeys?: string[] }) {
   const [open, setOpen] = useState(false)
   const [pending, start] = useTransition()
   const [err, setErr] = useState<string | null>(null)
@@ -56,6 +56,26 @@ export function AddContactDialog() {
             <Label htmlFor="tags">Tags <span className="text-xs text-muted-foreground">(comma-separated)</span></Label>
             <Input id="tags" name="tags" placeholder="vc, priority-a, london" />
           </div>
+          {customFieldKeys.length > 0 ? (
+            <div className="rounded-md border bg-muted/30 p-3 space-y-2">
+              <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Custom fields
+              </div>
+              {/* Each key becomes a cf_<key> input. Server action picks
+                  those out and writes them as a JSON suffix on notes. */}
+              <div className="grid grid-cols-2 gap-3">
+                {customFieldKeys.map((k) => (
+                  <div key={k} className="grid gap-1">
+                    <Label htmlFor={`cf_${k}`} className="text-xs">{k}</Label>
+                    <Input id={`cf_${k}`} name={`cf_${k}`} placeholder={`{{${k}}}`} />
+                  </div>
+                ))}
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Declared in Settings → Custom contact fields. Substituted as <code>{'{{key}}'}</code> in templates.
+              </p>
+            </div>
+          ) : null}
           {err ? <p className="text-sm text-destructive">{err}</p> : null}
           <DialogFooter className="mt-2 gap-2">
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>

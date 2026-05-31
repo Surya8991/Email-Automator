@@ -30,6 +30,7 @@ const TOC = [
   ['analytics',   '8. Analytics & tracking'],
   ['blocklist',   '9. Blocklist & unsubscribe'],
   ['settings',    '10. Settings, profile, signature'],
+  ['custom-fields','10b. Custom contact fields'],
   ['admin',       '11. Admin (multi-user)'],
   ['api',         '12. API reference'],
   ['env',         '13. Environment variables (A–Z)'],
@@ -218,13 +219,20 @@ Bob Smith,Globex,CTO,bob@globex.com,,,,
         <p className="text-sm">Every send injects a 1×1 GIF at <Code>/api/track/open?eid=…&t=HMAC</Code>. When the recipient's client renders it (Gmail does), an <Code>open</Code> event lands in the DB.</p>
         <p className="text-sm">Every <Code>http(s)</Code> link is rewritten to <Code>/api/track/click?eid=…&u=&t=HMAC</Code> → records the click + 302-redirects to the real URL.</p>
         <p className="text-sm">Tokens are HMAC-SHA256 signed with <Code>AUTH_SECRET</Code>. Forgery requires that secret.</p>
-        <p className="text-sm">KPIs + 14-day chart on <Link href="/analytics" className="underline">/analytics</Link> read straight from the <Code>events</Code> table.</p>
+        <p className="text-sm">/analytics shows:</p>
+        <ul className="list-disc pl-6 text-sm space-y-1">
+          <li><strong>KPI cards</strong> — 30-day sent / open / click / reply rates.</li>
+          <li><strong>14-day chart</strong> — daily sent / open / click / reply / bounce.</li>
+          <li><strong>Three breakdown cards</strong> (30d, top 10) — by template, by campaign, by tag. Multi-tag contacts count for each tag they have.</li>
+          <li><strong>Send-time heatmap</strong> — 7-day × 24-hour grid bucketed in IST. Cell shade scales with send count; hover for open-rate. Opens are attributed back to the original send-hour so it actually answers "when should I send?"</li>
+        </ul>
       </Section>
 
       <Section id="blocklist" title="9. Blocklist & unsubscribe">
         <ul className="list-disc pl-6 text-sm space-y-1">
-          <li><strong>Per-user</strong> — add from <Link href="/blocklist" className="underline">/blocklist</Link>.</li>
+          <li><strong>Per-user</strong> — add from <Link href="/blocklist" className="underline">/blocklist</Link>. Single pattern or <strong>Bulk add</strong> paste-list (newline/comma; <Code>@</Code> autodetects email vs domain).</li>
           <li><strong>Global</strong> — auto-created when a recipient clicks unsubscribe.</li>
+          <li><strong>Search + type filter</strong> over the list.</li>
         </ul>
         <p className="text-sm">Matched recipients are silently skipped during draft/schedule/campaign sends.</p>
         <h3 className="text-sm font-semibold mt-3">Unsubscribe footer</h3>
@@ -234,16 +242,39 @@ Bob Smith,Globex,CTO,bob@globex.com,,,,
       <Section id="settings" title="10. Settings, profile, signature">
         <ul className="list-disc pl-6 text-sm space-y-1">
           <li><Link href="/profile" className="underline">/profile</Link> — name, phone, company, role, LinkedIn, signature, unsub text.</li>
-          <li><Link href="/settings" className="underline">/settings</Link> — tabbed: General · Email · AI · Auth · Data · <span className="text-destructive">Danger</span>.</li>
+          <li><Link href="/settings" className="underline">/settings</Link> — tabbed: General · Email · AI · Auth · API keys · Webhooks · Data · <span className="text-destructive">Danger</span>.</li>
+        </ul>
+        <h3 className="text-sm font-semibold mt-3">General tab fields</h3>
+        <ul className="list-disc pl-6 text-sm space-y-1">
+          <li><strong>Daily send limit</strong> — hard cap per user; worker enforces.</li>
+          <li><strong>Timezone</strong> — dropdown of 13 zones (IST default). Drives every visible timestamp in the UI.</li>
+          <li><strong>Per-recipient throttle (days)</strong> — worker cancels any queued send to a recipient already emailed in the window. <Code>0</Code> = off. Stops overlapping campaigns from double-tapping a contact.</li>
+          <li><strong>Custom contact fields</strong> — comma-separated keys (snake_case). Inputs appear in the AddContact dialog and chips appear in the template editor.</li>
+          <li><strong>Per-domain daily cap</strong> — <Code>gmail.com=50,outlook.com=30</Code> format. Worker <em>defers</em> (not cancels) over-cap rows by 1h.</li>
+          <li><strong>Default role / Portfolio link</strong> — fallbacks for <Code>{'{{role_name}}'}</Code> / <Code>{'{{portfolio_link}}'}</Code>.</li>
+          <li><strong>Unsubscribe footer + toggle</strong>.</li>
+          <li><strong>Emergency Pause sends</strong> — kill-switch; worker skips your queue while on.</li>
         </ul>
         <p className="text-sm">Danger tab supports scoped wipes (contacts / drafts / events / everything). Type <Code>DELETE</Code> to enable.</p>
+      </Section>
+
+      <Section id="custom-fields" title="10b. Custom contact fields">
+        <p className="text-sm">User-defined <Code>{'{{vars}}'}</Code> with zero schema migration. Two-step setup:</p>
+        <ol className="list-decimal pl-6 text-sm space-y-1">
+          <li>Settings → General → <strong>Custom contact fields</strong>: add keys, e.g. <Code>region, tier, deal_stage</Code>. Lowercase snake_case only.</li>
+          <li>When you click <strong>Add contact</strong>, a "Custom fields" section appears with one input per key. Values are saved as a JSON suffix on the contact's <Code>notes</Code> column (legacy plain-text notes still render).</li>
+          <li>In the template editor, your custom keys appear as a third row of clickable chips (primary tint). Click to insert <Code>{'{{region}}'}</Code> at cursor.</li>
+          <li>At send time, <Code>buildEmail()</Code> reads the JSON suffix and substitutes. Built-in vars (name/email/etc.) always win on key collision.</li>
+        </ol>
+        <p className="text-sm text-muted-foreground">Roadmap: schema-backed columns + per-contact edit UI. The current design intentionally avoids a migration so we can ship it today.</p>
       </Section>
 
       <Section id="admin" title="11. Admin (multi-user)">
         <p className="text-sm">Add comma-separated emails to <Code>ADMIN_EMAILS</Code> in <Code>.env</Code>. Admins:</p>
         <ul className="list-disc pl-6 text-sm space-y-1">
           <li>See the Admin sidebar entry.</li>
-          <li>Can list every user with per-user stats.</li>
+          <li>Can list every user with per-user stats + search/filter (All / Active / Suspended / Admins).</li>
+          <li>Can <strong>Suspend / Resume</strong> any non-admin user — reuses the same <Code>SENDS_PAUSED</Code> setting the user's own kill-switch toggles. Their data stays; the worker just stops sending for them.</li>
           <li>Can delete non-admin users (cascades through every table).</li>
           <li>Can download the whole DB at <Code>/api/backup</Code> (admin-only).</li>
         </ul>
