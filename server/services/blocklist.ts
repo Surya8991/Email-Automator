@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, or } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNull, or } from 'drizzle-orm'
 import { db } from '@/server/db/client'
 import { blocklist } from '@/server/db/schema'
 
@@ -15,6 +15,14 @@ export async function addEntry(userId: string, pattern: string, type: 'email' | 
 export async function removeEntry(userId: string, id: number) {
   // Per-user rows only — never let a user touch the global (null userId) list.
   await db.delete(blocklist).where(and(eq(blocklist.id, id), eq(blocklist.userId, userId)))
+}
+
+// Bulk remove. Same tenancy guard — global rows (userId=null) are untouched
+// because the WHERE pins userId. Returns the requested count for the toast.
+export async function removeEntries(userId: string, ids: number[]): Promise<number> {
+  if (!ids || ids.length === 0) return 0
+  await db.delete(blocklist).where(and(eq(blocklist.userId, userId), inArray(blocklist.id, ids)))
+  return ids.length
 }
 
 export async function isBlocked(userId: string, email: string): Promise<boolean> {

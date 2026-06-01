@@ -4,11 +4,20 @@ import { eq, sql } from 'drizzle-orm'
 import * as XLSX from 'xlsx'
 import { requireAdmin } from '@/auth'
 import { db } from '@/server/db/client'
-import { users, contacts } from '@/server/db/schema'
+import { users, contacts, auditLog } from '@/server/db/schema'
 import { adminEmails } from '@/lib/env'
 import { parseXlsx, parseCsv, type ImportedContact } from '@/server/services/importer'
 import { dupKey } from '@/server/services/contacts'
 import { emit } from '@/server/sse'
+
+// Tiny audit-log helper for admin actions. Keeps the call sites one-line
+// so contributors don't forget to log new admin operations. Errors are
+// swallowed so a logging failure can't block the action it's recording.
+async function logAdmin(actorId: string, action: string, detail = '') {
+  try {
+    await db.insert(auditLog).values({ userId: actorId, action, detail, ip: '' })
+  } catch { /* non-fatal */ }
+}
 
 export async function deleteUserAction(userId: string) {
   const me = await requireAdmin()
@@ -18,6 +27,7 @@ export async function deleteUserAction(userId: string) {
   if (adminEmails.includes((target.email ?? '').toLowerCase())) return { error: "Can't delete another admin from the UI" }
   // Cascading FKs handle contacts/templates/drafts/etc — see schema.ts.
   await db.delete(users).where(eq(users.id, userId))
+  await logAdmin(me.id, 'admin.delete_user', `target=${target.email ?? userId}`)
   revalidatePath('/admin')
   return { ok: true }
 }
@@ -35,6 +45,7 @@ export async function suspendUserAction(userId: string, suspend: boolean) {
   const [target] = await db.select().from(users).where(eq(users.id, userId))
   if (!target) return { error: 'User not found' }
   await setSetting(userId, 'SENDS_PAUSED', suspend ? 'true' : 'false')
+  await logAdmin(me.id, suspend ? 'admin.suspend_user' : 'admin.resume_user', `target=${target.email ?? userId}`)
   revalidatePath('/admin')
   return { ok: true, suspended: suspend }
 }
@@ -120,6 +131,7 @@ export async function adminImportContactsAction(fd: FormData) {
     rejected: parsed.errors.length,
   })
 
+  await logAdmin(me.id, 'admin.import_contacts', `file=${file.name} imported=${imported} dupes=${enriched.length - toInsert.length} rejected=${parsed.errors.length}`)
   revalidatePath('/admin')
   revalidatePath('/contacts')
   return {

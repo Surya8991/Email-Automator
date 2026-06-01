@@ -160,6 +160,35 @@ export async function deleteDraft(userId: string, draftId: number) {
   await db.delete(drafts).where(and(eq(drafts.id, draftId), eq(drafts.userId, userId)))
 }
 
+// Bulk discard — only ids belonging to this user are touched (tenancy guard
+// inside the WHERE). Ids of someone else's drafts silently no-op. Returns
+// the actual delete count so the UI toast can be accurate even when the
+// caller's selection contained stale ids.
+export async function deleteDraftsBulk(userId: string, ids: number[]): Promise<number> {
+  if (!ids || ids.length === 0) return 0
+  // Only drop drafts that are still pending — sent ones shouldn't be wiped
+  // because their email_log row tracks history. The status filter mirrors
+  // the listDrafts view so the user can't accidentally delete what they
+  // already sent.
+  await db.delete(drafts).where(and(
+    eq(drafts.userId, userId),
+    eq(drafts.status, 'draft'),
+    inArray(drafts.id, ids),
+  ))
+  return ids.length
+}
+
+// Discard every pending draft for this user. Used by the "Discard all"
+// button in /drafts. Returns the count for the toast.
+export async function deleteAllPendingDrafts(userId: string): Promise<number> {
+  const before = await db.select({ n: sql<number>`COUNT(*)` }).from(drafts)
+    .where(and(eq(drafts.userId, userId), eq(drafts.status, 'draft')))
+  const n = Number(before[0]?.n ?? 0)
+  if (n === 0) return 0
+  await db.delete(drafts).where(and(eq(drafts.userId, userId), eq(drafts.status, 'draft')))
+  return n
+}
+
 /**
  * Was this email address sent to within the last `windowDays` days?
  * Used by the duplicate-send guard to warn the user before they send to

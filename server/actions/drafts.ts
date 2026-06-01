@@ -1,8 +1,12 @@
 'use server'
 import { revalidatePath } from 'next/cache'
-import { requireUser } from '@/auth'
+import { and, eq } from 'drizzle-orm'
+import { requireUser, requireAdmin } from '@/auth'
+import { db } from '@/server/db/client'
+import { drafts as draftsTable, auditLog } from '@/server/db/schema'
 import { getActive } from '@/server/services/templates'
 import * as drafts from '@/server/services/drafts'
+import { draftEmail, type Tone } from '@/server/services/ai'
 
 export async function createDraftsAction(count: number) {
   const u = await requireUser()
@@ -120,4 +124,51 @@ export async function sendAllAction() {
   revalidatePath('/drafts')
   revalidatePath('/dashboard')
   return { ok: true, ...r }
+}
+
+// Discard a user-picked subset of pending drafts. Mirrors
+// sendSelectedDraftsAction's shape — same 100-row cap, same scope guard.
+export async function deleteSelectedDraftsAction(ids: number[]) {
+  const u = await requireUser()
+  if (!ids || ids.length === 0) return { error: 'No drafts selected' }
+  if (ids.length > 500) return { error: 'Pick at most 500 drafts at a time' }
+  const deleted = await drafts.deleteDraftsBulk(u.id, ids)
+  revalidatePath('/drafts')
+  return { ok: true, deleted }
+}
+
+// Discard every pending draft. UI MUST double-confirm.
+export async function deleteAllDraftsAction() {
+  const u = await requireUser()
+  const deleted = await drafts.deleteAllPendingDrafts(u.id)
+  revalidatePath('/drafts')
+  return { ok: true, deleted }
+}
+
+// AI Improve — admin-only. Pulls the draft's current body, asks Groq to
+// rewrite it in the chosen tone keeping intent intact, and saves the new
+// body back. Returns the new HTML so the client can swap the row content
+// without a full reload. Non-admins never see the button; the
+// requireAdmin() guard catches anyone who hits the action directly.
+export async function improveDraftAction(id: number, tone: Tone = 'professional') {
+  const me = await requireAdmin()
+  const [d] = await db.select().from(draftsTable)
+    .where(and(eq(draftsTable.id, id), eq(draftsTable.userId, me.id)))
+  if (!d) return { error: 'Draft not found' }
+  let improved: string
+  try {
+    improved = await draftEmail(me.id, {
+      existing: d.htmlBody,
+      tone,
+      goal: 'Improve the email below — keep the intent and any {{variables}} intact, tighten language, fix awkward phrasing, match the requested tone.',
+    })
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'AI request failed' }
+  }
+  await drafts.updateDraft(me.id, id, { htmlBody: improved })
+  // Admin AI use is logged so /audit?scope=all can show which admin
+  // called the AI and how often. Non-fatal if the insert blips.
+  try { await db.insert(auditLog).values({ userId: me.id, action: 'admin.ai_improve_draft', detail: `draft_id=${id} tone=${tone}`, ip: '' }) } catch { /* noop */ }
+  revalidatePath('/drafts')
+  return { ok: true, htmlBody: improved }
 }

@@ -1,6 +1,7 @@
 import { Suspense } from 'react'
 import { requireUser } from '@/auth'
 import { listContacts, listTags, listDistinct } from '@/server/services/contacts'
+import { listCampaigns } from '@/server/services/campaigns'
 import { getSetting } from '@/server/services/settings'
 import { parseCustomFieldKeys } from '@/lib/custom-fields'
 import { Card, CardContent } from '@/components/ui/card'
@@ -18,7 +19,7 @@ export default async function ContactsPage(props: { searchParams: Promise<{ page
   const u = await requireUser()
   const requestedSize = Number(search.pageSize ?? 50)
   const pageSize = PAGE_SIZES.includes(requestedSize) ? requestedSize : 50
-  const [data, allTags, companies, locations, platforms, rawCfKeys] = await Promise.all([
+  const [data, allTags, companies, locations, platforms, rawCfKeys, allCampaigns] = await Promise.all([
     listContacts(u.id, {
       page: Number(search.page ?? 1),
       pageSize,
@@ -34,7 +35,12 @@ export default async function ContactsPage(props: { searchParams: Promise<{ page
     listDistinct(u.id, 'location'),
     listDistinct(u.id, 'platform'),
     getSetting(u.id, 'CUSTOM_FIELD_KEYS'),
+    listCampaigns(u.id),
   ])
+  // Only enrollable campaigns end up in the picker — active or draft.
+  const enrollableCampaigns = allCampaigns
+    .filter((c) => c.status === 'active' || c.status === 'draft')
+    .map((c) => ({ id: c.id, name: c.name, status: c.status }))
   const customFieldKeys = parseCustomFieldKeys(rawCfKeys)
 
   const filterBadges = [
@@ -75,6 +81,7 @@ export default async function ContactsPage(props: { searchParams: Promise<{ page
               companies={companies}
               locations={locations}
               platforms={platforms}
+              campaigns={enrollableCampaigns}
             />
           </Suspense>
         </CardContent>

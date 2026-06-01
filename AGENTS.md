@@ -34,9 +34,10 @@ The local dev cookie is set by `POST /api/dev-signin {email}` when
    by `userId`. The v1 scheduler bug that omitted this leaked sends across
    tenants. New queries get a `where(eq(table.userId, …))` or they don't ship.
 2. **Email body composition** goes through [lib/escape.ts](lib/escape.ts):
-   `personalize()` for `{{var}}` substitution, `assertNoCrlf()` for any value
-   that becomes a header. Raw string concatenation into outgoing mail is
-   forbidden — it has bitten us with HTML injection and BCC-injection before.
+   `personalize()` for `{{var}}` and `{{var|fallback}}` substitution,
+   `assertNoCrlf()` for any value that becomes a header. Raw string
+   concatenation into outgoing mail is forbidden — it has bitten us with
+   HTML injection and BCC-injection before.
 3. **No `eslint-disable`, no `@ts-ignore`, no `any` casts to silence the
    compiler.** Fix the type. Strict mode is on for a reason.
 4. **Never run `npm audit fix --force`** — it downgrades Next.js to the v9
@@ -60,6 +61,21 @@ The local dev cookie is set by `POST /api/dev-signin {email}` when
 10. **Per-user kill-switch** — `settings.SENDS_PAUSED=true` makes the worker
     skip a user. Honored in `scheduler-tick.ts`. Used by both the user-facing
     "Pause sends" toggle and the admin "Suspend user" toggle.
+11. **Admin gates** — `ADMIN_EMAILS` in env. `auth.ts:requireAdmin()` is the
+    one true entry point; never gate by checking `adminEmails.includes()`
+    inline elsewhere. Admin-exclusive seed data lives in
+    `data/seed-templates.admin.json` and is merged on top of the public
+    `data/seed-templates.json` only when the signed-in email matches.
+12. **Duplicate-contact key is `(name + email)`** — case- and whitespace-
+    insensitive, both must match for a row to be considered a duplicate.
+    Implemented as `dupKey(name, email)` in [server/services/contacts.ts](server/services/contacts.ts).
+    Single-add, both XLSX import paths (`adminImportContactsAction` +
+    `importContactsAction`), the CLI, and `dedupeContacts()` all use this
+    same key. Same email under a different name is intentionally allowed.
+13. **Admin write actions log to `auditLog`** — every action behind
+    `requireAdmin()` should write a row so the cross-user audit view
+    (`/audit?scope=all`) records who did what. See the `logAdmin()` helper
+    in [server/actions/admin.ts](server/actions/admin.ts).
 
 ## Architecture
 

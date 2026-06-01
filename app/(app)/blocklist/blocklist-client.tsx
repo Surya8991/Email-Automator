@@ -5,7 +5,7 @@ import { Trash2, Upload, Search } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { addBlocklistAction, removeBlocklistAction, bulkAddBlocklistAction } from '@/server/actions/blocklist'
+import { addBlocklistAction, removeBlocklistAction, bulkAddBlocklistAction, bulkRemoveBlocklistAction } from '@/server/actions/blocklist'
 import { useFormatDate } from '@/components/timezone-provider'
 
 interface Row { id: number; userId: string | null; pattern: string; type: string; createdAt: Date }
@@ -21,6 +21,9 @@ export function BlocklistClient({ rows }: { rows: Row[] }) {
   const [bulkText, setBulkText] = useState('')
   const [q, setQ] = useState('')
   const [typeFilter, setTypeFilter] = useState<'all' | 'email' | 'domain'>('all')
+  // Bulk selection — only user-owned rows are checkable. Global (userId
+  // === null) entries are read-only here.
+  const [selected, setSelected] = useState<Set<number>>(new Set())
   const filtered = rows.filter((r) => {
     if (typeFilter !== 'all' && r.type !== typeFilter) return false
     if (q.trim() && !r.pattern.toLowerCase().includes(q.toLowerCase())) return false
@@ -83,6 +86,19 @@ export function BlocklistClient({ rows }: { rows: Row[] }) {
             <option value="email">Email</option>
             <option value="domain">Domain</option>
           </select>
+          {selected.size > 0 ? (
+            <Button variant="destructive" size="sm" disabled={pending} onClick={() => start(async () => {
+              const ids = Array.from(selected)
+              if (!confirm(`Remove ${ids.length} pattern${ids.length === 1 ? '' : 's'} from your blocklist?`)) return
+              const r = await bulkRemoveBlocklistAction(ids)
+              if ('error' in r && r.error) { toast.error(r.error); return }
+              if ('removed' in r) toast.success(`Removed ${r.removed}`)
+              setSelected(new Set())
+              router.refresh()
+            })}>
+              <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Remove selected ({selected.size})
+            </Button>
+          ) : null}
           <span className="ml-auto text-xs text-muted-foreground">
             {filtered.length === rows.length ? `${rows.length}` : `${filtered.length}/${rows.length}`}
           </span>
@@ -96,6 +112,28 @@ export function BlocklistClient({ rows }: { rows: Row[] }) {
         <table className="w-full text-sm">
           <thead className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
             <tr>
+              <th className="w-8 px-3 py-2">
+                {/* Select-all-visible — skips global rows since they're
+                    read-only. Toggling it on with an empty selection
+                    selects every user-owned visible row. */}
+                <input
+                  type="checkbox"
+                  aria-label="Select all visible"
+                  className="h-4 w-4"
+                  checked={(() => {
+                    const selectable = filtered.filter((r) => r.userId !== null)
+                    return selectable.length > 0 && selectable.every((r) => selected.has(r.id))
+                  })()}
+                  onChange={(e) => {
+                    const n = new Set(selected)
+                    for (const r of filtered) {
+                      if (r.userId === null) continue
+                      if (e.target.checked) n.add(r.id); else n.delete(r.id)
+                    }
+                    setSelected(n)
+                  }}
+                />
+              </th>
               <th className="px-3 py-2">Pattern</th>
               <th className="px-3 py-2">Type</th>
               <th className="px-3 py-2">Scope</th>
@@ -106,6 +144,21 @@ export function BlocklistClient({ rows }: { rows: Row[] }) {
           <tbody>
             {filtered.map((r) => (
               <tr key={r.id} className="border-t">
+                <td className="px-3 py-2">
+                  {r.userId !== null ? (
+                    <input
+                      type="checkbox"
+                      aria-label={`Select ${r.pattern}`}
+                      className="h-4 w-4"
+                      checked={selected.has(r.id)}
+                      onChange={(e) => {
+                        const n = new Set(selected)
+                        if (e.target.checked) n.add(r.id); else n.delete(r.id)
+                        setSelected(n)
+                      }}
+                    />
+                  ) : null}
+                </td>
                 <td className="px-3 py-2 font-mono text-xs">{r.pattern}</td>
                 <td className="px-3 py-2">{r.type}</td>
                 <td className="px-3 py-2 text-muted-foreground">{r.userId === null ? 'global' : 'you'}</td>

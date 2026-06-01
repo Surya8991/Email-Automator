@@ -52,18 +52,18 @@ For the comprehensive list see **[FEATURES.md](FEATURES.md)**. The high-level su
 | Page | What it does |
 |---|---|
 | `/dashboard` | KPIs · **"Next send" card** (when + to whom) · recent activity with contact + campaign/step badges · onboarding when empty |
-| `/contacts` | CRUD · CSV/Excel import **with per-row error report** · per-page select-all + bulk actions (**Create drafts for selected**, Add/Remove tag, Reset status, Block, Delete) · 6 filters (search + tag + status + **company + location + platform**) · per-row follow-up · per-contact custom-field inputs · timeline modal |
-| `/templates` | 20 starter templates auto-seeded · sidebar search + category filter · live preview · A/B subject · AI Improve (Groq) · **Clone** · clickable variable + HTML-snippet palette + user-declared custom fields |
-| `/drafts` | Bulk create with SSE progress · inline edit subject/body · per-row select + Send selected · **duplicate-send confirmation** (last 7 days) · per-draft follow-up scheduler · search by recipient/subject |
+| `/contacts` | CRUD · CSV/Excel import **with SSE progress bar** · per-row error report · per-page select-all + bulk actions (**Create drafts for selected**, Add/Remove tag, Reset status, Block, Delete) · **Dedupe / Delete matching / Delete all** toolbar · **page-size selector (50/100/500/1000)** · 6 filters (search + tag + status + company + location + platform) · per-row follow-up · per-contact custom-field inputs · timeline modal |
+| `/templates` | Public starter set (5 generic) auto-seeded for every user; **admin overlay (23 personalised)** seeded only for ADMIN_EMAILS addresses · sidebar search + category filter · live preview · A/B subject · AI Improve (Groq) · **Clone** · clickable variable + HTML-snippet palette + user-declared custom fields · `{{var\|fallback}}` syntax for empty values |
+| `/drafts` | Bulk create with SSE progress · **rich-text editor with HTML source toggle** · per-row select + Send selected / **Discard selected / Discard all** · **AI Improve per draft (admin-only)** · duplicate-send confirmation (last 7 days) · per-draft follow-up scheduler · search by recipient/subject |
 | `/schedule` | 5 recurring presets · configurable min/max gap · preview with spacing · queue search + status filter · select-to-cancel · per-row attempts + last-result · retry tinting |
 | `/campaigns` | Multi-step sequences · per-step delay + stop-on-reply · **step-level performance** (sent/open/click/reply/advanced %) · enroll by tag · search + status filter |
 | `/analytics` | 30-day KPIs · 14-day chart · breakdowns **by template / campaign / tag** (top 10) · **send-time heatmap** (7×24 IST grid) |
-| `/blocklist` | Per-user + global · single-add + **bulk paste-add** (auto-detects email vs domain) · search + type filter · auto-block on unsubscribe |
-| `/audit` | Last 500 actions · search + action filter + **date range** · **CSV export** |
+| `/blocklist` | Per-user + global · single-add + **bulk paste-add** · **row checkboxes + Remove selected** · search + type filter · auto-block on unsubscribe |
+| `/audit` | Last 500 actions · search + action filter + **date range** · CSV export · **`?scope=all` cross-user view for admins** with User column + Mine/All toggle |
 | `/diagnostic` | SMTP · AI · OAuth · DNS · SPF · DMARC · **MX** checks · per-row retry · provider-domain whitelist (no DMARC false-positives on gmail.com etc.) |
 | `/profile` | Name, phone, company, role, LinkedIn, signature (Gmail import), unsub text |
 | `/settings` | 8 tabs: General (TZ, throttle, domain caps, custom fields, pause-all) · Email · AI · Auth · API keys · Webhooks · Data · Danger |
-| `/admin` | Per-user stats · search + filter (Active/Suspended/Admins) · **Suspend/Resume** · Delete · full DB backup |
+| `/admin` | **System-wide stats card** (Users/Contacts/Templates/Drafts/Sent 30d/Active campaigns) · **Runtime configuration card** (env values, secrets shown as set/unset only) · **Bulk import contacts card** (XLSX/CSV upload with SSE progress) · admin emails list · per-user stats · search + filter (Active/Suspended/Admins) · Suspend/Resume · Delete · full DB backup |
 | `/guide` | In-app 17-section manual |
 | `/readme` | Public landing page (no login required) |
 
@@ -104,10 +104,11 @@ For the comprehensive list see **[FEATURES.md](FEATURES.md)**. The high-level su
 │   ├── services/                 # business logic, mockable in tests
 │   └── actions/                  # typed Server Actions (Zod-validated)
 ├── workers/scheduler.ts          # long-running scheduler (Linux/Docker deploys)
-├── scripts/                      # migrate, seed-templates, seed-contacts, reset-db
+├── scripts/                      # migrate, seed-templates, seed-contacts, import-admin-contacts, reset-db
 ├── test/{unit,integration,e2e}/
 ├── data/
-│   ├── seed-templates.json       # 20 starter templates (auto-seeded on first sign-in)
+│   ├── seed-templates.json       # Public starter set (5 generic — every user gets these)
+│   ├── seed-templates.admin.json # Admin overlay (23 personalised templates seeded only for ADMIN_EMAILS)
 │   └── tracker.db                # local SQLite (gitignored)
 ├── public/.well-known/security.txt
 ├── .github/workflows/

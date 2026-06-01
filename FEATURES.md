@@ -26,13 +26,18 @@ Last refreshed: 2026-05-31.
 - **CSV export** of all your contacts.
 - **Tag filter** — comma-separated tags per contact; click a tag to filter, dropdown shows every tag you've used.
 - **Search** by name / company / email / role.
-- **Per-page select-all** + **bulk actions** — **Create drafts for selected** (uses active template, cap 200, skips already drafted/sent), Add tag, Remove tag, Reset status, Block (one-step: add to blocklist + delete from contacts), Delete.
+- **Per-page select-all** + **bulk actions** — **Create drafts for selected** · **Schedule…** (date/time + gap, calls the scheduler with just your selection) · **Enroll in campaign…** (drop-down of your active/draft campaigns) · Add tag · Remove tag · Reset status · Block (one-step: add to blocklist + delete from contacts) · Delete.
+- **Dedupe toolbar** — Dedupe (removes rows where both name + email match an existing row, keeping the oldest), Delete matching (scoped to current filter set), Delete all (requires typing `DELETE ALL`).
+- **Page-size selector** — 50 / 100 / 500 / 1000. Server cap at 1000.
+- **SSE import progress bar** — both the per-user CSV upload and the admin bulk-import card stream `contact_import_progress` events so you watch the bar move instead of staring at a spinner.
 - **Per-contact timeline** — every event for this contact in one dialog.
 - **Status field** — auto-tracks `Draft Created`, `Scheduled for …`, `Sent (…)`, `Replied!`, `BOUNCED`.
+- **Duplicate detection** — single-add + every import path key on `(name + email)`, case- and whitespace-insensitive. Same email under a different name is allowed (shared inboxes, name updates across imports).
 
 ## Templates
 
-- **20 starter templates** auto-seeded on first sign-in — 4 categories (Growth, Performance, SEO, Digital) × 5 tones (Formal, Friendly, Job-post, Referral, LinkedIn).
+- **Split seed sets** — every new user gets a **public starter set of 5 generic templates** auto-seeded on first sign-in. Accounts whose email is in `ADMIN_EMAILS` additionally receive a **23-template admin overlay** with role-targeted copy (Growth / Performance / SEO / Digital × 5 styles + 3 universal). The split lives in `data/seed-templates.json` (public) and `data/seed-templates.admin.json` (admin overlay).
+- **`{{var|fallback}}` syntax** in `personalize()` — `{{name|there}}` renders "there" when the CSV row's name is empty, so "Hi ," never happens.
 - **Sidebar search + category filter** for picking among your templates.
 - **Clickable variable palette** — recipient fields (`{{name}}`, `{{company}}`, `{{role_name}}`, `{{email}}`, `{{location}}`, `{{platform}}`) plus HTML snippets (salutation, paragraph, bullet list, sign-off, divider) plus any **user-declared custom fields** (Settings → Custom contact fields). Click → token lands at cursor.
 - **Live preview** — see how the email looks against a sample contact.
@@ -44,11 +49,11 @@ Last refreshed: 2026-05-31.
 
 ## Drafts
 
-- **Search + per-row selection** — substring match on recipient/subject; per-row checkbox + "Select all visible" + "Send selected (N)" (cap 100/batch).
-- **Bulk-create** drafts for every eligible contact (caps at 50/batch).
-- **Live progress** via SSE — see send count tick up in real time.
-- **Per-draft preview** — collapsible inline body view.
-- **Inline edit** — fix subject + HTML body before sending without recreating from template.
+- **Search + per-row selection** — substring match on recipient/subject; per-row checkbox + "Select all visible".
+- **Bulk-create** drafts for every eligible contact (caps at 50/batch). Live SSE progress.
+- **Rich-text editor** — default Rich tab renders the htmlBody as formatted text in a `contentEditable` view with a Bold / Italic / List / Link toolbar (Ctrl+B, Ctrl+I shortcuts). HTML tab still available for power-users; both modes stay in sync on save.
+- **AI Improve (admin only)** — per-row Sparkles button picks a tone (professional / friendly / concise / enthusiastic / formal) and rewrites the draft via Groq, then opens the editor so the admin reviews before sending. Audit-logged.
+- **Send selected (N)** + **Discard selected (N)** + **Discard all** — `Discard all` requires typing `DISCARD ALL` to confirm.
 - **Duplicate-send guard** — sending to a recipient you already emailed in the last 7 days surfaces a confirmation dialog with the previous send date.
 - **One-click follow-up** — per draft, "Schedule follow-up in N days" button uses the active template + queues it in /schedule.
 - **Send one** or **Send all**.
@@ -81,6 +86,7 @@ Last refreshed: 2026-05-31.
 ## Analytics
 
 - **KPIs (30d)** — sent, open rate, click rate, reply rate.
+- **Admin-only pipeline row** — Total applied / Active pipeline / Offers / Response rate / Rejections derived from `contacts.status`. Only renders when `session.user.isAdmin`.
 - **14-day line chart** — sent / open / click / reply / bounce by day.
 - **Breakdown by template** (top 10, 30d) — sent count + open/click/reply rates.
 - **Breakdown by campaign** (top 10, 30d).
@@ -112,12 +118,14 @@ Last refreshed: 2026-05-31.
 - **Last 500 events** with action / detail / IP / timestamp.
 - **Search + action filter + date range** — substring across all columns, dropdown of distinct action types, From/To date inputs (inclusive at day granularity).
 - **CSV export** of the entire log.
+- **Cross-user scope (admin only)** — `?scope=all` toggles a Mine | All users pill; the table adds a User column populated via a LEFT JOIN on `users.email`. The CSV export mirrors the flag and prepends a `user` column. Admin write actions (delete user, suspend/resume, contact import, AI Improve) are auto-logged so the All-users view records who did what.
 
 ## Blocklist
 
 - **Search + type filter** (Email / Domain).
 - **Per-user + global** patterns — email or domain.
 - **Single add** or **bulk add** (paste a list, newline or comma separated; `@` autodetects type).
+- **Row checkboxes + Remove selected** — pick multiple rows and drop them in one click. Global rows (admin-set) stay read-only and aren't selectable.
 - **Auto-block** on unsubscribe click.
 - **Auto-block** from the Contacts bulk-action toolbar.
 
@@ -148,11 +156,19 @@ Last refreshed: 2026-05-31.
 
 ## Admin
 
+- **Admin badge** in the topbar whenever the signed-in email is in `ADMIN_EMAILS`.
+- **System-wide stats card** — instance-wide totals: Users, Contacts, Templates, Drafts pending, Sent (30d), Active campaigns. Fired in parallel; non-`admin` users never see the card.
+- **Runtime configuration card** — env values that matter to instance operators: `DAILY_SEND_LIMIT`, `TIMEZONE`, `SMTP_HOST`, `EMAIL_FROM`, `ALLOW_DEV_SIGNIN` (red when `true`), `CRON_SECRET` / `GROQ_API_KEY` / `GOOGLE_CLIENT_ID` shown as set/unset only (never the raw value), `DATABASE_URL` shape (libsql vs file).
+- **Bulk import contacts card** — admin-only XLSX/CSV upload with SSE progress bar. Same parser as the CLI; tags imported rows `crm-import,job-tracker`. Idempotent (skips on (name + email) match).
 - **Search + status filter** — search by email/name, filter All / Active / Suspended / Admins.
-- **User table** — email, name, contacts/drafts/events counts, joined-at.
+- **User table** — email, name, contacts/drafts/events counts, joined-at. Counts use 3 grouped queries instead of the prior N+1 loop.
 - **Suspend / Resume** any non-admin user — soft-pause their worker tick (queue stays intact).
 - **Delete user** — cascades to all their data.
-- **Admin badge** on rows + admin list card.
+- **Audit logging** — every admin write action (delete user, suspend/resume, contact import, AI Improve) writes a row to `auditLog` so the cross-user audit view captures the trail.
+
+### `npm run import:admin-contacts -- <file>`
+
+CLI alternative to the upload card. Refuses to run unless `ADMIN_EMAILS` is set and the target user matches. Idempotent. Same (name + email) dedupe rule. Tracks db-dupes vs in-file-dupes separately in the summary.
 
 ## Deployment / Ops
 

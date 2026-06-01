@@ -12,7 +12,7 @@ export default async function DraftsPage() {
         <h1 className="text-2xl font-semibold tracking-tight">Drafts</h1>
         <p className="text-sm text-muted-foreground">{total} pending</p>
       </div>
-      <Card><CardContent className="p-0"><DraftsClient rows={rows} /></CardContent></Card>
+      <Card><CardContent className="p-0"><DraftsClient rows={rows} isAdmin={Boolean(u.isAdmin)} /></CardContent></Card>
     </div>
   )
 }

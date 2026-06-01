@@ -118,6 +118,25 @@ describe('contacts dedupe + delete-all', () => {
     expect(await services.nameAndEmailExists(u, 'Jane Doe', 'jane@other.com')).toBe(false)
   })
 
+  it('privacy regression — u1 mutations leave u2 rows untouched', async () => {
+    const u1 = await newUser()
+    const u2 = await newUser()
+    // Same email tuple in both tenants — distinct rows.
+    await services.addContact(u1, { recruiterEmail: 'shared@x.co', recruiterName: 'Shared' })
+    await services.addContact(u2, { recruiterEmail: 'shared@x.co', recruiterName: 'Shared' })
+    // u1 can't see u2's row in any list path
+    expect((await services.listContacts(u1)).total).toBe(1)
+    expect((await services.listContacts(u2)).total).toBe(1)
+    // u1's dedupe doesn't touch u2's row
+    const dedupe = await services.dedupeContacts(u1)
+    expect(dedupe.removed).toBe(0)
+    expect((await services.listContacts(u2)).total).toBe(1)
+    // u1's delete-all leaves u2 intact
+    await services.deleteAllContacts(u1)
+    expect((await services.listContacts(u1)).total).toBe(0)
+    expect((await services.listContacts(u2)).total).toBe(1)
+  })
+
   it('deleteAllContacts wipes everything for the user but spares other users', async () => {
     const u1 = await newUser()
     const u2 = await newUser()
@@ -215,6 +234,77 @@ describe('templates → drafts pipeline', () => {
     await services.drafts.sendDraft(u, byEmail['c1@x.co']!.id)
     const evts = await db.select().from(schema.events).where(eq(schema.events.userId, u))
     expect(evts[0]?.kind).toBe('sent')
+  })
+})
+
+describe('drafts bulk delete', () => {
+  it('deleteDraftsBulk respects tenancy + status guard', async () => {
+    const u1 = await newUser()
+    const u2 = await newUser()
+    // Two drafts for u1, one sent draft (protected), one draft for u2.
+    const d1 = (await db.insert(schema.drafts).values({ userId: u1, toEmail: 'a@x.co', subject: 's', htmlBody: 'b' }).returning())[0]!
+    const d2 = (await db.insert(schema.drafts).values({ userId: u1, toEmail: 'b@x.co', subject: 's', htmlBody: 'b' }).returning())[0]!
+    const dSent = (await db.insert(schema.drafts).values({ userId: u1, toEmail: 'c@x.co', subject: 's', htmlBody: 'b', status: 'sent' }).returning())[0]!
+    const dOther = (await db.insert(schema.drafts).values({ userId: u2, toEmail: 'd@x.co', subject: 's', htmlBody: 'b' }).returning())[0]!
+
+    await services.drafts.deleteDraftsBulk(u1, [d1.id, d2.id, dSent.id, dOther.id])
+    // The two pending drafts for u1 are gone.
+    const remainingU1 = await db.select().from(schema.drafts).where(eq(schema.drafts.userId, u1))
+    // Sent row survives (status guard); pending rows wiped.
+    expect(remainingU1.map((r) => r.id).sort()).toEqual([dSent.id].sort())
+    // u2's draft untouched.
+    const u2Rows = await db.select().from(schema.drafts).where(eq(schema.drafts.userId, u2))
+    expect(u2Rows.length).toBe(1)
+    expect(u2Rows[0]!.id).toBe(dOther.id)
+  })
+
+  it('deleteAllPendingDrafts removes only drafts, not sent rows', async () => {
+    const u = await newUser()
+    await db.insert(schema.drafts).values({ userId: u, toEmail: 'a@x.co', subject: 's', htmlBody: 'b' })
+    await db.insert(schema.drafts).values({ userId: u, toEmail: 'b@x.co', subject: 's', htmlBody: 'b', status: 'sent' })
+    const n = await services.drafts.deleteAllPendingDrafts(u)
+    expect(n).toBe(1)
+    const rows = await db.select().from(schema.drafts).where(eq(schema.drafts.userId, u))
+    expect(rows.length).toBe(1)
+    expect(rows[0]!.status).toBe('sent')
+  })
+})
+
+describe('blocklist bulk remove', () => {
+  it('removeEntries respects tenancy + leaves globals alone', async () => {
+    const u1 = await newUser()
+    const u2 = await newUser()
+    const r1 = (await db.insert(schema.blocklist).values({ userId: u1, pattern: 'spam1@x.co', type: 'email' }).returning())[0]!
+    const r2 = (await db.insert(schema.blocklist).values({ userId: u2, pattern: 'spam2@x.co', type: 'email' }).returning())[0]!
+    const rGlobal = (await db.insert(schema.blocklist).values({ userId: null, pattern: 'global.com', type: 'domain' }).returning())[0]!
+    const { removeEntries } = await import('@/server/services/blocklist')
+    // u1 attempts to remove all three — only its own row should go.
+    await removeEntries(u1, [r1.id, r2.id, rGlobal.id])
+    const remaining = await db.select().from(schema.blocklist)
+    const ids = remaining.map((r) => r.id).sort()
+    expect(ids).toEqual([r2.id, rGlobal.id].sort())
+  })
+})
+
+describe('schedule enqueueContacts', () => {
+  it('only enqueues the passed ids that belong to the caller', async () => {
+    const u1 = await newUser()
+    const u2 = await newUser()
+    // Active template for u1 (required by enqueueContacts)
+    const tpl = await services.templates.upsertTemplate(u1, 'k', { subject: 'Hi {{name}}', initialMsg: 'b' })
+    await services.templates.activate(u1, tpl.id)
+    // 2 eligible contacts for u1, 1 for u2
+    await services.addContact(u1, { recruiterEmail: 'a@x.co', recruiterName: 'A' })
+    await services.addContact(u1, { recruiterEmail: 'b@x.co', recruiterName: 'B' })
+    await services.addContact(u2, { recruiterEmail: 'c@x.co', recruiterName: 'C' })
+    const u1Contacts = await db.select({ id: schema.contacts.id }).from(schema.contacts).where(eq(schema.contacts.userId, u1))
+    const u2Contacts = await db.select({ id: schema.contacts.id }).from(schema.contacts).where(eq(schema.contacts.userId, u2))
+    const ids = [...u1Contacts.map((r) => r.id), ...u2Contacts.map((r) => r.id)]
+    const { enqueueContacts } = await import('@/server/services/schedule')
+    const r = await enqueueContacts(u1, ids, Date.now() + 60_000)
+    // Only u1's 2 rows enqueued; u2's row counted as "skipped" (not eligible).
+    expect(r.scheduled).toBe(2)
+    expect(r.skipped).toBe(1)
   })
 })
 

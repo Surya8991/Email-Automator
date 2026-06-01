@@ -1,8 +1,20 @@
 # Admin & Feature Roadmap
 
-> Captured from the 2026-06-01 audit. Pick items off as priorities shift.
+> Last updated 2026-06-01. Pick items off as priorities shift. Items already shipped this session were removed.
 
-## Admin enhancements (deferred)
+## Recently shipped (for reference — do not re-implement)
+
+- Public/admin seed template split, `{{var|fallback}}` syntax
+- Admin contact bulk-import CLI + `/admin` upload card with SSE progress, (name+email) dedupe
+- `/admin` system stats card + runtime configuration card + N+1 fix
+- `/analytics` admin-only pipeline KPI row
+- `/audit` cross-user view (`?scope=all`) + admin CSV export scope
+- `/audit` records every admin write action (delete user, suspend, import, AI Improve)
+- `/contacts`: Dedupe, Delete matching, Delete all, page-size selector (50/100/500/1000), **Schedule…** + **Enroll in campaign…** bulk buttons
+- `/drafts`: rich-text editor + HTML toggle, Discard selected, Discard all, AI Improve (admin-only)
+- `/blocklist`: row checkboxes + Remove selected
+
+## Admin enhancements (still deferred)
 
 - **Bulk user actions** — checkbox column on `/admin`'s user table; suspend/resume many at once. Useful for trial expiration or onboarding-batch cleanup. File: `app/(app)/admin/admin-table.tsx`.
 - **CSV export of users list** — new `/api/admin/users/export` route, mirrors the existing `/api/audit/export` pattern.
@@ -11,6 +23,9 @@
 - **Send-rate quotas per user** — replace the global `DAILY_SEND_LIMIT` with a per-user override stored in a new `user_quotas` table. Needed once the instance has paying tiers.
 - **`/admin` sub-routes** — split into `/admin/users`, `/admin/system`, `/admin/audit-all`, `/admin/imports` once the page grows past ~500 lines. Currently fine.
 - **Diagnostic page admin-richer** — add cron-secret-valid, libsql-reachable, ADMIN_EMAILS-populated checks. File: `app/(app)/diagnostic/`.
+- **Rate-limit admin write actions** — apply `lib/rate-limit.ts` (60/min/userId) to `deleteUserAction`, `suspendUserAction`, `adminImportContactsAction`, `improveDraftAction`.
+- **`/api/backup` download → auditLog** — currently fires silently; should write a row capturing the admin who downloaded.
+- **Sticky banner for `ALLOW_DEV_SIGNIN=true` in non-local env** — already shown red on `/admin`, promote to app-wide banner so it can't be left on in prod by accident.
 
 ## Workbook Phase B features (from the Universal Job Tracker xlsx)
 

@@ -1,4 +1,4 @@
-import { and, asc, eq, or, sql } from 'drizzle-orm'
+import { and, asc, eq, inArray, or, sql } from 'drizzle-orm'
 import { db } from '@/server/db/client'
 import { contacts, emailLog, type Contact, type Template } from '@/server/db/schema'
 import { getActive } from './templates'
@@ -90,6 +90,53 @@ export async function enqueue(userId: string, startMs: number, opt: IntervalOpt 
     scheduled++
   }
   return { scheduled }
+}
+
+// Like enqueue() but only for the explicitly-provided contact ids.
+// Tenancy: the SELECT filters by userId so a leaked id from another
+// tenant gets silently skipped. Status guard mirrors eligibleContacts.
+export async function enqueueContacts(
+  userId: string,
+  contactIds: number[],
+  startMs: number,
+  opt: IntervalOpt = {},
+): Promise<{ scheduled: number; skipped: number }> {
+  if (!contactIds || contactIds.length === 0) return { scheduled: 0, skipped: 0 }
+  const tpl = await getActive(userId)
+  if (!tpl) throw new Error('No active template')
+  const eligible = await db.select().from(contacts).where(and(
+    eq(contacts.userId, userId),
+    inArray(contacts.id, contactIds),
+    sql`${contacts.recruiterEmail} != ''`,
+    sql`${contacts.emailStatus} NOT LIKE '%Draft Created%'`,
+    sql`${contacts.emailStatus} NOT LIKE '%Sent%'`,
+    sql`${contacts.emailStatus} NOT LIKE '%Scheduled%'`,
+    sql`${contacts.emailStatus} NOT LIKE '%BOUNCED%'`,
+  ))
+  const skipped = contactIds.length - eligible.length
+  if (eligible.length === 0) return { scheduled: 0, skipped }
+
+  const minM = opt.intervalMin ?? DEFAULT_INTERVAL.min
+  const maxM = opt.intervalMax ?? DEFAULT_INTERVAL.max
+  let next = startMs, scheduled = 0
+  for (const contact of eligible) {
+    const e = buildEmail(tpl, contact)
+    await db.insert(emailLog).values({
+      userId, contactId: contact.id,
+      scheduleId: `sched_${next}_${contact.id}`,
+      email: contact.recruiterEmail, subject: e.subject, body: e.html,
+      scheduledAt: next, status: 'Scheduled',
+    })
+    const d = new Date(next)
+    await db.update(contacts).set({
+      emailStatus: `Scheduled for ${formatDate(d)}`,
+      scheduleDate: d.toLocaleDateString('en-IN', { timeZone: APP_TZ }),
+      scheduleTime: d.toLocaleTimeString('en-IN', { timeZone: APP_TZ, hour: '2-digit', minute: '2-digit' }),
+    }).where(and(eq(contacts.id, contact.id), eq(contacts.userId, userId)))
+    next += staggerMs(minM, maxM)
+    scheduled++
+  }
+  return { scheduled, skipped }
 }
 
 export async function listScheduled(userId: string) {

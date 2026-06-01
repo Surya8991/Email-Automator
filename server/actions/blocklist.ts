@@ -25,6 +25,18 @@ export async function removeBlocklistAction(id: number) {
   return { ok: true }
 }
 
+// Bulk remove — used by the "Remove selected" toolbar action on /blocklist.
+// Tenancy guard lives in the service (WHERE userId = u.id), so a passed-in
+// global-row id is silently a no-op.
+export async function bulkRemoveBlocklistAction(ids: number[]) {
+  const u = await requireUser()
+  if (!ids || ids.length === 0) return { error: 'No rows selected' }
+  if (ids.length > 1000) return { error: 'Pick at most 1000 rows at a time' }
+  const removed = await svc.removeEntries(u.id, ids)
+  revalidatePath('/blocklist')
+  return { ok: true, removed }
+}
+
 // Bulk import — paste a newline/comma-separated list. Anything containing
 // "@" is treated as an email, otherwise as a domain. Skips duplicates and
 // empty lines silently; returns counters.

@@ -52,6 +52,32 @@ export async function enqueueScheduleAction(input: z.infer<typeof Schema>) {
   }
 }
 
+// Schedule the explicitly-selected contact ids — used by the /contacts
+// bulk toolbar's "Schedule…" button. Tenancy enforced inside the service.
+const SelectedSchema = Schema.extend({
+  contactIds: z.array(z.number().int().positive()).min(1).max(2000),
+})
+export async function enqueueSelectedScheduleAction(input: z.infer<typeof SelectedSchema>) {
+  const u = await requireUser()
+  const parsed = SelectedSchema.safeParse(input)
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Invalid input' }
+  const start = parseStart(parsed.data)
+  if (!start) return { error: 'Invalid date/time' }
+  if (start <= Date.now()) return { error: 'Start time must be in the future' }
+  try {
+    const r = await svc.enqueueContacts(u.id, parsed.data.contactIds, start, {
+      intervalMin: parsed.data.intervalMin,
+      intervalMax: parsed.data.intervalMax,
+    })
+    revalidatePath('/schedule')
+    revalidatePath('/contacts')
+    revalidatePath('/dashboard')
+    return { ok: true, ...r }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Schedule failed' }
+  }
+}
+
 export async function cancelScheduleAction() {
   const u = await requireUser()
   const r = await svc.cancelAll(u.id)

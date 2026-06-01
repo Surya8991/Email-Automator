@@ -5,11 +5,18 @@ import { toast } from 'sonner'
 import { Send, Trash2, Sparkles, SendHorizontal, Pencil, Save, X, CalendarClock, Search, Bold, Italic, Link as LinkIcon, List, Code } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { createDraftsAction, deleteDraftAction, sendAllAction, sendDraftAction, updateDraftAction, scheduleFollowupAction, sendSelectedDraftsAction } from '@/server/actions/drafts'
+import {
+  createDraftsAction, deleteDraftAction, sendAllAction, sendDraftAction,
+  updateDraftAction, scheduleFollowupAction, sendSelectedDraftsAction,
+  deleteSelectedDraftsAction, deleteAllDraftsAction,
+  improveDraftAction,
+} from '@/server/actions/drafts'
 import type { Draft } from '@/server/db/schema'
 import { useProgress } from '@/components/use-progress'
 
-export function DraftsClient({ rows }: { rows: Draft[] }) {
+type Tone = 'professional' | 'friendly' | 'concise' | 'enthusiastic' | 'formal'
+
+export function DraftsClient({ rows, isAdmin = false }: { rows: Draft[]; isAdmin?: boolean }) {
   const router = useRouter()
   const [count, setCount] = useState(10)
   const [pending, start] = useTransition()
@@ -25,6 +32,10 @@ export function DraftsClient({ rows }: { rows: Draft[] }) {
   // Switching modes syncs editBody in both directions.
   const [editMode, setEditMode] = useState<'rich' | 'html'>('rich')
   const richRef = useRef<HTMLDivElement | null>(null)
+  // AI Improve UI state — admin-only. Per-row tone picker; null = closed.
+  const [aiRowId, setAiRowId] = useState<number | null>(null)
+  const [aiTone, setAiTone] = useState<Tone>('professional')
+  const [aiBusy, setAiBusy] = useState<number | null>(null)
   // Client-side search — substring match against recipient + subject.
   // Cheap because draft list is capped at 50 rows server-side.
   const [q, setQ] = useState('')
@@ -71,6 +82,34 @@ export function DraftsClient({ rows }: { rows: Draft[] }) {
             router.refresh()
           })}>
             <SendHorizontal className="mr-1.5 h-4 w-4" /> Send selected ({selected.size})
+          </Button>
+        ) : null}
+        {selected.size > 0 ? (
+          <Button variant="destructive" disabled={pending} onClick={() => start(async () => {
+            const ids = Array.from(selected)
+            if (!confirm(`Discard ${ids.length} selected draft(s)? Sent emails are untouched.`)) return
+            const r = await deleteSelectedDraftsAction(ids)
+            if ('error' in r && r.error) { toast.error(r.error); return }
+            if ('deleted' in r) toast.success(`Discarded ${r.deleted} draft${r.deleted === 1 ? '' : 's'}`)
+            setSelected(new Set())
+            router.refresh()
+          })}>
+            <Trash2 className="mr-1.5 h-4 w-4" /> Discard selected ({selected.size})
+          </Button>
+        ) : null}
+        {rows.length > 0 ? (
+          <Button variant="ghost" disabled={pending}
+            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+            onClick={() => start(async () => {
+              if (!confirm(`Discard ALL ${rows.length} pending drafts? Sent emails are untouched.`)) return
+              const phrase = prompt('Type DISCARD ALL to confirm:')
+              if (phrase !== 'DISCARD ALL') { toast('Cancelled'); return }
+              const r = await deleteAllDraftsAction()
+              if ('deleted' in r) toast.success(`Discarded ${r.deleted} draft${r.deleted === 1 ? '' : 's'}`)
+              setSelected(new Set())
+              router.refresh()
+            })}>
+            <Trash2 className="mr-1.5 h-4 w-4" /> Discard all
           </Button>
         ) : null}
         {progress ? (
@@ -231,6 +270,57 @@ export function DraftsClient({ rows }: { rows: Draft[] }) {
                     </details>
                   )}
                 </div>
+                {/* Admin-only AI Improve trigger — opens an inline tone
+                    picker. Hidden mid-edit because the rewrite would
+                    overwrite unsaved changes. */}
+                {isAdmin && !isEditing ? (
+                  <div className="relative">
+                    <Button variant="ghost" size="icon" aria-label="AI Improve" disabled={pending || aiBusy === d.id}
+                      title="AI Improve (admin)"
+                      onClick={() => setAiRowId(aiRowId === d.id ? null : d.id)}>
+                      <Sparkles className={`h-4 w-4 ${aiBusy === d.id ? 'animate-pulse text-primary' : ''}`} />
+                    </Button>
+                    {aiRowId === d.id ? (
+                      <div className="absolute right-0 top-9 z-10 w-56 space-y-2 rounded-md border bg-popover p-2 text-sm shadow-md">
+                        <label className="block text-xs font-medium text-muted-foreground">Tone</label>
+                        <select
+                          value={aiTone}
+                          onChange={(e) => setAiTone(e.target.value as Tone)}
+                          className="block w-full rounded-md border bg-background px-2 py-1 text-xs"
+                        >
+                          <option value="professional">Professional</option>
+                          <option value="friendly">Friendly</option>
+                          <option value="concise">Concise</option>
+                          <option value="enthusiastic">Enthusiastic</option>
+                          <option value="formal">Formal</option>
+                        </select>
+                        <div className="flex justify-end gap-1">
+                          <Button variant="ghost" size="sm" onClick={() => setAiRowId(null)}>
+                            Cancel
+                          </Button>
+                          <Button size="sm" disabled={aiBusy === d.id} onClick={() => {
+                            const draftId = d.id
+                            setAiBusy(draftId); setAiRowId(null)
+                            start(async () => {
+                              const r = await improveDraftAction(draftId, aiTone)
+                              setAiBusy(null)
+                              if ('error' in r && r.error) { toast.error(r.error); return }
+                              toast.success('Draft improved — review before sending')
+                              // Open the editor on the improved body so the
+                              // admin reviews/edits before send.
+                              if ('htmlBody' in r && typeof r.htmlBody === 'string') {
+                                setEditId(draftId); setEditSubject(d.subject); setEditBody(r.htmlBody); setEditMode('rich')
+                              }
+                              router.refresh()
+                            })
+                          }}>
+                            <Sparkles className="mr-1 h-3.5 w-3.5" /> Improve
+                          </Button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
                 {isEditing ? (
                   <>
                     <Button variant="ghost" size="icon" aria-label="Save" disabled={pending}
