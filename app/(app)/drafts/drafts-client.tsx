@@ -1,8 +1,8 @@
 'use client'
-import { useState, useTransition } from 'react'
+import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Send, Trash2, Sparkles, SendHorizontal, Pencil, Save, X, CalendarClock, Search } from 'lucide-react'
+import { Send, Trash2, Sparkles, SendHorizontal, Pencil, Save, X, CalendarClock, Search, Bold, Italic, Link as LinkIcon, List, Code } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { createDraftsAction, deleteDraftAction, sendAllAction, sendDraftAction, updateDraftAction, scheduleFollowupAction, sendSelectedDraftsAction } from '@/server/actions/drafts'
@@ -20,6 +20,11 @@ export function DraftsClient({ rows }: { rows: Draft[] }) {
   const [editId, setEditId] = useState<number | null>(null)
   const [editSubject, setEditSubject] = useState('')
   const [editBody, setEditBody] = useState('')
+  // Editor mode for the body — 'rich' shows a contentEditable WYSIWYG view
+  // (default; what users want), 'html' drops to raw HTML for power-users.
+  // Switching modes syncs editBody in both directions.
+  const [editMode, setEditMode] = useState<'rich' | 'html'>('rich')
+  const richRef = useRef<HTMLDivElement | null>(null)
   // Client-side search — substring match against recipient + subject.
   // Cheap because draft list is capped at 50 rows server-side.
   const [q, setQ] = useState('')
@@ -141,16 +146,77 @@ export function DraftsClient({ rows }: { rows: Draft[] }) {
                 <div className="min-w-0 flex-1">
                   <div className="text-xs font-mono text-muted-foreground">{d.toEmail}</div>
                   {isEditing ? (
-                    // Inline editor — subject Input + plain HTML textarea.
-                    // Saves overwrite both subject + htmlBody; plainBody is
+                    // Inline editor — subject Input + tabbed body editor.
+                    // Default 'rich' is a contentEditable view so non-
+                    // technical users edit formatted text directly. Power
+                    // users can flip to 'html' for raw markup. Saves
+                    // overwrite both subject + htmlBody; plainBody is
                     // recomputed lazily next time the user toggles preview.
                     <div className="mt-2 space-y-2">
                       <Input value={editSubject} onChange={(e) => setEditSubject(e.target.value)}
                         className="font-medium" placeholder="Subject" />
-                      <textarea value={editBody} onChange={(e) => setEditBody(e.target.value)}
-                        rows={12}
-                        className="w-full rounded-md border bg-background px-3 py-2 font-mono text-xs"
-                        placeholder="HTML body" />
+                      <div className="flex flex-wrap items-center gap-1 rounded-md border bg-muted/30 p-1">
+                        <div className="inline-flex overflow-hidden rounded-md border bg-background text-xs">
+                          <button type="button"
+                            className={`px-2 py-1 ${editMode === 'rich' ? 'bg-muted font-medium' : 'text-muted-foreground hover:bg-accent'}`}
+                            onClick={() => {
+                              // Pull latest from textarea before switching to rich.
+                              setEditMode('rich')
+                              // editBody is the source of truth; the rich div is
+                              // populated from it via dangerouslySetInnerHTML on mount.
+                            }}>
+                            <Pencil className="mr-1 inline h-3 w-3" /> Rich
+                          </button>
+                          <button type="button"
+                            className={`border-l px-2 py-1 ${editMode === 'html' ? 'bg-muted font-medium' : 'text-muted-foreground hover:bg-accent'}`}
+                            onClick={() => {
+                              // Pull latest from contentEditable before showing the textarea.
+                              if (richRef.current) setEditBody(richRef.current.innerHTML)
+                              setEditMode('html')
+                            }}>
+                            <Code className="mr-1 inline h-3 w-3" /> HTML
+                          </button>
+                        </div>
+                        {editMode === 'rich' ? (
+                          <div className="ml-2 inline-flex items-center gap-0.5">
+                            <ToolbarBtn label="Bold (Ctrl+B)" onClick={() => exec('bold')}><Bold className="h-3.5 w-3.5" /></ToolbarBtn>
+                            <ToolbarBtn label="Italic (Ctrl+I)" onClick={() => exec('italic')}><Italic className="h-3.5 w-3.5" /></ToolbarBtn>
+                            <ToolbarBtn label="Bullet list" onClick={() => exec('insertUnorderedList')}><List className="h-3.5 w-3.5" /></ToolbarBtn>
+                            <ToolbarBtn label="Link" onClick={() => {
+                              const url = prompt('URL:')?.trim()
+                              if (url) exec('createLink', url)
+                            }}><LinkIcon className="h-3.5 w-3.5" /></ToolbarBtn>
+                          </div>
+                        ) : null}
+                      </div>
+                      {editMode === 'rich' ? (
+                        <div
+                          ref={richRef}
+                          contentEditable
+                          suppressContentEditableWarning
+                          className="prose prose-sm dark:prose-invert min-h-[12rem] max-w-none rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                          // eslint-disable-next-line react/no-danger
+                          dangerouslySetInnerHTML={{ __html: editBody }}
+                          // Sync to editBody on blur so the Save button always
+                          // has the latest content even if the user clicks
+                          // Save before clicking elsewhere.
+                          onBlur={(e) => setEditBody((e.target as HTMLDivElement).innerHTML)}
+                          onKeyDown={(e) => {
+                            // Common keyboard shortcuts. execCommand is
+                            // deprecated but still ubiquitously supported and
+                            // covers our needs without a real rich-text dep.
+                            if (e.ctrlKey || e.metaKey) {
+                              if (e.key === 'b') { e.preventDefault(); exec('bold') }
+                              else if (e.key === 'i') { e.preventDefault(); exec('italic') }
+                            }
+                          }}
+                        />
+                      ) : (
+                        <textarea value={editBody} onChange={(e) => setEditBody(e.target.value)}
+                          rows={12}
+                          className="w-full rounded-md border bg-background px-3 py-2 font-mono text-xs"
+                          placeholder="HTML body" />
+                      )}
                     </div>
                   ) : (
                     <details className="group">
@@ -169,7 +235,11 @@ export function DraftsClient({ rows }: { rows: Draft[] }) {
                   <>
                     <Button variant="ghost" size="icon" aria-label="Save" disabled={pending}
                       onClick={() => start(async () => {
-                        await updateDraftAction(d.id, { subject: editSubject, htmlBody: editBody })
+                        // Pull latest from the active editor before saving.
+                        const latestBody = editMode === 'rich' && richRef.current
+                          ? richRef.current.innerHTML
+                          : editBody
+                        await updateDraftAction(d.id, { subject: editSubject, htmlBody: latestBody })
                         setEditId(null); toast.success('Draft updated'); router.refresh()
                       })}>
                       <Save className="h-4 w-4" />
@@ -181,7 +251,10 @@ export function DraftsClient({ rows }: { rows: Draft[] }) {
                   </>
                 ) : (
                   <Button variant="ghost" size="icon" aria-label="Edit"
-                    onClick={() => { setEditId(d.id); setEditSubject(d.subject); setEditBody(d.htmlBody) }}>
+                    onClick={() => {
+                      setEditId(d.id); setEditSubject(d.subject); setEditBody(d.htmlBody)
+                      setEditMode('rich')
+                    }}>
                     <Pencil className="h-4 w-4" />
                   </Button>
                 )}
@@ -234,5 +307,32 @@ export function DraftsClient({ rows }: { rows: Draft[] }) {
         </ul>
       )}
     </div>
+  )
+}
+
+// Thin wrapper around document.execCommand for the formatting toolbar.
+// execCommand is deprecated but every shipping browser still honors it for
+// these basic operations, and avoiding a real rich-text dep keeps the
+// bundle small. The contenteditable div picks up the changes immediately.
+function exec(cmd: string, value?: string) {
+  try {
+    document.execCommand(cmd, false, value)
+  } catch {
+    /* old Safari quirk — ignore */
+  }
+}
+
+function ToolbarBtn({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      onMouseDown={(e) => e.preventDefault()} // keep contenteditable selection
+      onClick={onClick}
+      className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+    >
+      {children}
+    </button>
   )
 }
