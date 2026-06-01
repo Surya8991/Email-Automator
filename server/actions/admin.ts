@@ -8,6 +8,7 @@ import { users, contacts } from '@/server/db/schema'
 import { adminEmails } from '@/lib/env'
 import { parseXlsx, parseCsv, type ImportedContact } from '@/server/services/importer'
 import { dupKey } from '@/server/services/contacts'
+import { emit } from '@/server/sse'
 
 export async function deleteUserAction(userId: string) {
   const me = await requireAdmin()
@@ -96,6 +97,9 @@ export async function adminImportContactsAction(fd: FormData) {
 
   // Chunked inserts. No transaction wrapper — see server/db/client.ts;
   // the dual-driver setup means transaction APIs differ across drivers.
+  // SSE events go to the admin's open tabs so the upload card can render
+  // a live progress bar.
+  emit(me.id, { type: 'contact_import_start', total: toInsert.length })
   const CHUNK = 500
   let imported = 0
   for (let i = 0; i < toInsert.length; i += CHUNK) {
@@ -107,7 +111,14 @@ export async function adminImportContactsAction(fd: FormData) {
     }))
     await db.insert(contacts).values(slice)
     imported += slice.length
+    emit(me.id, { type: 'contact_import_progress', processed: imported, total: toInsert.length })
   }
+  emit(me.id, {
+    type: 'contact_import_done',
+    processed: imported, total: toInsert.length,
+    duplicates: enriched.length - toInsert.length,
+    rejected: parsed.errors.length,
+  })
 
   revalidatePath('/admin')
   revalidatePath('/contacts')

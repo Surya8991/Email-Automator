@@ -7,6 +7,7 @@ import { db } from '@/server/db/client'
 import { contacts, blocklist } from '@/server/db/schema'
 import * as svc from '@/server/services/contacts'
 import { parseCsv, parseXlsx } from '@/server/services/importer'
+import { emit } from '@/server/sse'
 
 const NewContactSchema = z.object({
   recruiterEmail: z.string().email(),
@@ -172,6 +173,10 @@ export async function importContactsAction(fd: FormData) {
   const existing = await db.select({ name: contacts.recruiterName, email: contacts.recruiterEmail })
     .from(contacts).where(eq(contacts.userId, u.id))
   const have = new Set(existing.map((r) => svc.dupKey(String(r.name ?? ''), String(r.email ?? ''))))
+  // Tell the UI how much work is ahead. Emit progress every ~50 rows so a
+  // 2k-row CSV gets ~40 updates and the bar moves smoothly.
+  emit(u.id, { type: 'contact_import_start', total: parsed.contacts.length })
+  const TICK = 50
   let imported = 0, duplicates = 0
   for (const c of parsed.contacts) {
     const key = svc.dupKey(c.recruiterName, c.recruiterEmail)
@@ -183,7 +188,18 @@ export async function importContactsAction(fd: FormData) {
     have.add(key)
     await svc.addContact(u.id, c)
     imported++
+    if ((imported + duplicates) % TICK === 0) {
+      emit(u.id, {
+        type: 'contact_import_progress',
+        processed: imported + duplicates, total: parsed.contacts.length,
+      })
+    }
   }
+  emit(u.id, {
+    type: 'contact_import_done',
+    processed: imported, total: parsed.contacts.length,
+    duplicates, rejected: parsed.errors.length,
+  })
   revalidatePath('/contacts')
   revalidatePath('/dashboard')
   return {

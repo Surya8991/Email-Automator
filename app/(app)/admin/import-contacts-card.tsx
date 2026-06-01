@@ -5,6 +5,7 @@ import { Upload, Check, AlertTriangle } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { adminImportContactsAction } from '@/server/actions/admin'
+import { useProgress } from '@/components/use-progress'
 
 interface Result {
   imported: number; duplicates: number; rejected: number; total: number
@@ -18,6 +19,15 @@ export function AdminImportContactsCard() {
   const [err, setErr] = useState<string | null>(null)
   const [result, setResult] = useState<Result | null>(null)
   const [fileName, setFileName] = useState<string | null>(null)
+  // Listen to SSE-streamed import progress from the server action so the
+  // UI shows a live bar instead of a spinner that hangs for 30+ seconds
+  // on a 2k-row import.
+  const progress = useProgress()
+  const isImportEvent = progress?.type?.startsWith('contact_import_')
+  const pct = (isImportEvent && progress && progress.total && progress.total > 0)
+    ? Math.min(100, Math.round(((progress.processed ?? 0) / progress.total) * 100))
+    : 0
+  const showBar = pending || (isImportEvent && progress?.type !== 'contact_import_done')
 
   return (
     <Card>
@@ -63,6 +73,25 @@ export function AdminImportContactsCard() {
           </Button>
           {fileName ? <span className="text-xs text-muted-foreground">{fileName}</span> : null}
         </div>
+        {showBar ? (
+          <div className="space-y-1">
+            <div className="h-2 overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full bg-primary transition-all duration-200"
+                style={{ width: `${pct}%` }}
+                role="progressbar"
+                aria-valuenow={pct}
+                aria-valuemin={0}
+                aria-valuemax={100}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {isImportEvent && progress?.total
+                ? `${progress.processed ?? 0} / ${progress.total} rows · ${pct}%`
+                : 'Parsing file…'}
+            </p>
+          </div>
+        ) : null}
         {err ? (
           <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-sm text-destructive">
             <AlertTriangle className="mt-0.5 h-4 w-4" />

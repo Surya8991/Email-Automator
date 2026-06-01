@@ -4,7 +4,15 @@ import { useEffect, useState } from 'react'
 // useProgress() opens an SSE connection to /api/progress and surfaces the
 // most recent event. Auto-reconnects on close with a short backoff so a
 // browser hiccup doesn't strand the UI.
-export interface ProgressEvent { type: string; processed?: number; total?: number; email?: string }
+export interface ProgressEvent {
+  type: string
+  processed?: number
+  total?: number
+  email?: string
+  // Contact-import events only — populated on contact_import_done.
+  duplicates?: number
+  rejected?: number
+}
 
 export function useProgress(): ProgressEvent | null {
   const [evt, setEvt] = useState<ProgressEvent | null>(null)

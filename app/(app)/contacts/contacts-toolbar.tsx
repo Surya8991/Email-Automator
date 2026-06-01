@@ -8,6 +8,7 @@ import {
   importContactsAction, resetStatusAction,
   dedupeContactsAction, deleteAllContactsAction, deleteFilteredContactsAction,
 } from '@/server/actions/contacts'
+import { useProgress } from '@/components/use-progress'
 
 interface ImportReport {
   imported: number; duplicates: number; rejected: number; total: number
@@ -23,6 +24,15 @@ export function ContactsToolbar() {
   // Detailed report from the last import. Shown as a collapsible card so
   // the user can see exactly which rows the parser rejected and why.
   const [report, setReport] = useState<ImportReport | null>(null)
+
+  // SSE-streamed import progress — surface as a bar under the toolbar
+  // once an import is in flight.
+  const progress = useProgress()
+  const isImportEvent = progress?.type?.startsWith('contact_import_')
+  const importPct = (isImportEvent && progress && progress.total && progress.total > 0)
+    ? Math.min(100, Math.round(((progress.processed ?? 0) / progress.total) * 100))
+    : 0
+  const showImportBar = pending || (isImportEvent && progress?.type !== 'contact_import_done')
 
   // Snapshot the current filter set so "Delete matching" targets exactly
   // what the user sees, not the whole table.
@@ -142,6 +152,26 @@ export function ContactsToolbar() {
       </Button>
       {msg ? <span className="text-xs text-muted-foreground">{msg}</span> : null}
       </div>
+      {showImportBar ? (
+        <div className="space-y-1">
+          <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full bg-primary transition-all duration-200"
+              style={{ width: `${importPct}%` }}
+              role="progressbar"
+              aria-valuenow={importPct}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label="Import progress"
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {isImportEvent && progress?.total
+              ? `Importing ${progress.processed ?? 0} / ${progress.total} rows · ${importPct}%`
+              : 'Parsing file…'}
+          </p>
+        </div>
+      ) : null}
       {report && report.errors.length > 0 ? (
         <details className="rounded-md border bg-muted/30 p-2 text-xs" open>
           <summary className="cursor-pointer font-medium">
