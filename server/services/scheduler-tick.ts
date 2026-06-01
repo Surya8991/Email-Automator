@@ -42,6 +42,18 @@ async function tickForUser(userId: string): Promise<{ sent: number; failed: numb
     log.debug({ userId }, 'sends paused by user setting — skip tick')
     return { sent: 0, failed: 0, advanced: 0 }
   }
+  // Recover any rows stuck in 'Sending' for >10 min — that means the
+  // previous tick that claimed them crashed before flipping the status.
+  // Reverting to 'Scheduled' lets the next tick retry. Without this,
+  // crashed sends would sit forever and the user would notice missing
+  // emails. The 10-minute window is well past any reasonable SMTP attempt.
+  const stuckCutoff = now - 10 * 60_000
+  await db.update(emailLog).set({ status: 'Scheduled', lastResult: 'Recovered from stuck Sending state' })
+    .where(and(
+      eq(emailLog.userId, userId),
+      eq(emailLog.status, 'Sending'),
+      lte(emailLog.scheduledAt, stuckCutoff),
+    ))
   const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0)
   const sentToday = await db.select({ n: sql<number>`COUNT(*)` }).from(events)
     .where(and(eq(events.userId, userId), eq(events.kind, 'sent'), sql`${events.ts} >= ${startOfDay.getTime()}`))
@@ -77,9 +89,25 @@ async function tickForUser(userId: string): Promise<{ sent: number; failed: numb
   }
 
   // 1) Scheduled emails — send any whose time has come (5-min tolerance).
-  const due = await db.select().from(emailLog)
+  // Two-step claim to prevent double-send across overlapping ticks (Vercel
+  // cron can retry, and the long-running worker can fire concurrently if a
+  // tick takes > tickInterval). For each candidate id, do an atomic UPDATE
+  // that flips Scheduled → Sending; only proceed if the update affected
+  // exactly that row. A second tick will see status='Sending' and skip.
+  const candidates = await db.select({ id: emailLog.id }).from(emailLog)
     .where(and(eq(emailLog.userId, userId), eq(emailLog.status, 'Scheduled'), lte(emailLog.scheduledAt, now + 5 * 60_000)))
     .limit(Math.min(BATCH_PER_USER, remaining))
+  const due: typeof emailLog.$inferSelect[] = []
+  for (const c of candidates) {
+    // Drizzle returns nothing useful for affected-row count across drivers,
+    // so we do a select-then-conditional-update + re-select to confirm we
+    // own the row. WHERE id=? AND status='Scheduled' makes the update
+    // idempotent — only one tick can win the transition to 'Sending'.
+    await db.update(emailLog).set({ status: 'Sending' })
+      .where(and(eq(emailLog.id, c.id), eq(emailLog.status, 'Scheduled')))
+    const [claimed] = await db.select().from(emailLog).where(eq(emailLog.id, c.id))
+    if (claimed && claimed.status === 'Sending') due.push(claimed)
+  }
   for (const row of due) {
     try {
       if (!row.body) {

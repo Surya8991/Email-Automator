@@ -1,10 +1,10 @@
 'use server'
 import { revalidatePath } from 'next/cache'
-import { eq, sql } from 'drizzle-orm'
+import { and, eq, inArray, sql } from 'drizzle-orm'
 import * as XLSX from 'xlsx'
 import { requireAdmin } from '@/auth'
 import { db } from '@/server/db/client'
-import { users, contacts, auditLog } from '@/server/db/schema'
+import { users, contacts, auditLog, settings } from '@/server/db/schema'
 import { adminEmails } from '@/lib/env'
 import { parseXlsx, parseCsv, type ImportedContact } from '@/server/services/importer'
 import { dupKey } from '@/server/services/contacts'
@@ -37,7 +37,7 @@ export async function deleteUserAction(userId: string) {
 // without losing data. Their session keeps working — they can sign in,
 // view their data, even add contacts — but the worker won't send
 // anything until an admin un-suspends them.
-import { setSetting, getSetting } from '@/server/services/settings'
+import { setSetting } from '@/server/services/settings'
 
 export async function suspendUserAction(userId: string, suspend: boolean) {
   const me = await requireAdmin()
@@ -180,9 +180,13 @@ function warmthAndLastContact(buf: ArrayBuffer): Map<string, string> {
 
 export async function getUserSuspensions(userIds: string[]): Promise<Record<string, boolean>> {
   const out: Record<string, boolean> = {}
-  for (const id of userIds) {
-    const v = await getSetting(id, 'SENDS_PAUSED').catch(() => null)
-    out[id] = v === 'true'
-  }
+  if (userIds.length === 0) return out
+  // One query instead of N — read every SENDS_PAUSED row for the given
+  // user set in a single scan.
+  const rows = await db.select({ uid: settings.userId, value: settings.value })
+    .from(settings)
+    .where(and(inArray(settings.userId, userIds), eq(settings.key, 'SENDS_PAUSED')))
+  for (const id of userIds) out[id] = false
+  for (const r of rows) out[String(r.uid)] = r.value === 'true'
   return out
 }

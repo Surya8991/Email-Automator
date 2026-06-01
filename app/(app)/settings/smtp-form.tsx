@@ -12,9 +12,13 @@ import { sendSmtpTestAction } from '@/server/actions/diagnostic'
 interface Props {
   initial: { SMTP_HOST?: string; SMTP_PORT?: string; SMTP_USER?: string; SMTP_PASS?: string; EMAIL_FROM?: string }
   source: 'user' | 'env' | 'none'
+  // True when an encrypted SMTP_PASS exists server-side. The page never
+  // sends the actual ciphertext or plaintext to the client; this flag is
+  // the only signal that "leave blank to keep current" is available.
+  passSaved?: boolean
 }
 
-export function SmtpForm({ initial, source }: Props) {
+export function SmtpForm({ initial, source, passSaved = false }: Props) {
   const router = useRouter()
   const [pending, start] = useTransition()
   const [show, setShow] = useState(false)
@@ -29,7 +33,12 @@ export function SmtpForm({ initial, source }: Props) {
 
   return (
     <form className="grid gap-4 sm:grid-cols-2" action={() => start(async () => {
-      const r = await saveSmtpAction(s)
+      // If the user left the password blank AND a saved one exists,
+      // omit it from the payload so the server keeps the current value
+      // instead of clobbering it with "".
+      const payload = { ...s }
+      if (passSaved && !s.SMTP_PASS) delete (payload as Partial<typeof s>).SMTP_PASS
+      const r = await saveSmtpAction(payload as typeof s)
       if ('error' in r && r.error) { toast.error(r.error); return }
       if ('warning' in r && r.warning) toast.warning(r.warning)
       else toast.success('SMTP saved')
@@ -53,7 +62,7 @@ export function SmtpForm({ initial, source }: Props) {
         <div className="relative">
           <Input id="SMTP_PASS" type={show ? 'text' : 'password'} autoComplete="off"
             value={s.SMTP_PASS} onChange={(e) => set('SMTP_PASS')(e.target.value)}
-            placeholder={initial.SMTP_USER ? '••••••• (saved)' : 'Gmail App Password'} />
+            placeholder={passSaved ? '••••••• (saved — leave blank to keep)' : 'Gmail App Password'} />
           <button type="button" onClick={() => setShow((v) => !v)}
             className="absolute right-2 top-2 text-muted-foreground hover:text-foreground" aria-label="Toggle password visibility">
             {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}

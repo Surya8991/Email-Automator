@@ -11,6 +11,9 @@ import { clearAiAction, saveAiAction } from '@/server/actions/credentials'
 interface Props {
   initial: { GROQ_API_KEY?: string; GROQ_MODEL?: string }
   source: 'user' | 'env' | 'none'
+  // True when an encrypted API key already exists server-side. Form shows
+  // the placeholder and lets the user save other fields without re-typing.
+  keySaved?: boolean
 }
 
 const MODELS = [
@@ -21,7 +24,7 @@ const MODELS = [
   'gemma2-9b-it',
 ] as const
 
-export function AiForm({ initial, source }: Props) {
+export function AiForm({ initial, source, keySaved = false }: Props) {
   const router = useRouter()
   const [pending, start] = useTransition()
   const [show, setShow] = useState(false)
@@ -33,7 +36,11 @@ export function AiForm({ initial, source }: Props) {
 
   return (
     <form className="grid gap-4 sm:grid-cols-2" action={() => start(async () => {
-      const r = await saveAiAction(s)
+      // Same "leave blank to keep current" pattern as SmtpForm — omit
+      // the key field when blank and a saved one exists.
+      const payload = { ...s }
+      if (keySaved && !s.GROQ_API_KEY) delete (payload as Partial<typeof s>).GROQ_API_KEY
+      const r = await saveAiAction(payload as typeof s)
       if ('error' in r && r.error) { toast.error(r.error); return }
       toast.success('Groq key saved')
       router.refresh()
@@ -43,7 +50,7 @@ export function AiForm({ initial, source }: Props) {
         <div className="relative">
           <Input id="GROQ_API_KEY" type={show ? 'text' : 'password'} autoComplete="off"
             value={s.GROQ_API_KEY} onChange={(e) => set('GROQ_API_KEY')(e.target.value)}
-            placeholder={initial.GROQ_API_KEY ? '••••••• (saved)' : 'gsk_…'} />
+            placeholder={keySaved ? '••••••• (saved — leave blank to keep)' : 'gsk_…'} />
           <button type="button" onClick={() => setShow((v) => !v)}
             className="absolute right-2 top-2 text-muted-foreground hover:text-foreground" aria-label="Toggle visibility">
             {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}

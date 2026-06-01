@@ -50,13 +50,16 @@ export function buildEmail(template: Template, contact: Contact, signature = '')
   }
 }
 
-export async function listDrafts(userId: string, page = 1, pageSize = 20) {
-  const offset = (page - 1) * pageSize
+export async function listDrafts(userId: string, page = 1, pageSize = 50) {
+  // Cap at 1000 to match the /contacts page-size selector — server hard
+  // limit so a bad ?pageSize= URL can't over-fetch.
+  const cappedSize = Math.min(1000, Math.max(1, pageSize))
+  const offset = (page - 1) * cappedSize
   const rows = await db.select().from(drafts).where(and(eq(drafts.userId, userId), eq(drafts.status, 'draft')))
-    .orderBy(desc(drafts.id)).limit(pageSize).offset(offset)
+    .orderBy(desc(drafts.id)).limit(cappedSize).offset(offset)
   const countRows = await db.select({ n: sql<number>`COUNT(*)` }).from(drafts)
     .where(and(eq(drafts.userId, userId), eq(drafts.status, 'draft')))
-  return { rows, total: Number(countRows[0]?.n ?? 0), page, pageSize }
+  return { rows, total: Number(countRows[0]?.n ?? 0), page, pageSize: cappedSize }
 }
 
 /**

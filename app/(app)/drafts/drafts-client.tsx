@@ -1,8 +1,8 @@
 'use client'
 import { useRef, useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
-import { Send, Trash2, Sparkles, SendHorizontal, Pencil, Save, X, CalendarClock, Search, Bold, Italic, Link as LinkIcon, List, Code } from 'lucide-react'
+import { Send, Trash2, Sparkles, SendHorizontal, Pencil, Save, X, CalendarClock, Search, Bold, Italic, Link as LinkIcon, List, Code, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -16,8 +16,31 @@ import { useProgress } from '@/components/use-progress'
 
 type Tone = 'professional' | 'friendly' | 'concise' | 'enthusiastic' | 'formal'
 
-export function DraftsClient({ rows, isAdmin = false }: { rows: Draft[]; isAdmin?: boolean }) {
+const PAGE_SIZE_OPTIONS = [50, 100, 500, 1000]
+
+interface DraftsClientProps {
+  rows: Draft[]
+  isAdmin?: boolean
+  page?: number
+  pages?: number
+  pageSize?: number
+  total?: number
+}
+
+export function DraftsClient({
+  rows, isAdmin = false,
+  page = 1, pages = 1, pageSize = 50, total = 0,
+}: DraftsClientProps) {
   const router = useRouter()
+  const sp = useSearchParams()
+  // Helper to merge URL params (page, pageSize, …) without losing the rest.
+  function go(updates: Record<string, string>) {
+    const next = new URLSearchParams(sp.toString())
+    for (const [k, v] of Object.entries(updates)) {
+      if (v) next.set(k, v); else next.delete(k)
+    }
+    router.push(`/drafts?${next.toString()}`)
+  }
   const [count, setCount] = useState(10)
   const [pending, start] = useTransition()
   const progress = useProgress()
@@ -396,6 +419,37 @@ export function DraftsClient({ rows, isAdmin = false }: { rows: Draft[]; isAdmin
           })}
         </ul>
       )}
+
+      {total > 0 ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t px-4 py-3 text-sm">
+          <span className="text-muted-foreground">
+            Page {page} of {pages} · {total} total
+          </span>
+          <div className="flex items-center gap-2">
+            <label className="flex items-center gap-1 text-xs text-muted-foreground" htmlFor="drafts-page-size">
+              Rows
+              <select
+                id="drafts-page-size"
+                value={pageSize}
+                onChange={(e) => go({ pageSize: e.target.value, page: '1' })}
+                className="h-8 rounded-md border bg-background px-2 text-xs"
+              >
+                {PAGE_SIZE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </label>
+            <button type="button" disabled={page <= 1}
+              onClick={() => go({ page: String(page - 1) })}
+              className="inline-flex h-8 items-center rounded-md border bg-background px-2 text-xs disabled:opacity-50">
+              <ChevronLeft className="h-4 w-4" /> Prev
+            </button>
+            <button type="button" disabled={page >= pages}
+              onClick={() => go({ page: String(page + 1) })}
+              className="inline-flex h-8 items-center rounded-md border bg-background px-2 text-xs disabled:opacity-50">
+              Next <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

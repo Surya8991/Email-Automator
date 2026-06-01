@@ -8,6 +8,7 @@
 // the "is this configured?" UI status checks the same logic the worker
 // uses at send time.
 import { getMany } from './settings'
+import { decryptString } from '@/lib/crypto'
 
 export interface SmtpCreds {
   host: string
@@ -32,7 +33,10 @@ const KEYS = [
 export async function getSmtpFor(userId: string): Promise<SmtpCreds> {
   const u = await getMany(userId, KEYS as unknown as string[])
   const user = (u.SMTP_USER ?? '').trim()
-  const pass = (u.SMTP_PASS ?? '').trim()
+  // SMTP_PASS may be stored encrypted (enc:v1:...) or plaintext (legacy
+  // rows from before encryption-at-rest). decryptString passes plaintext
+  // through unchanged — graceful migration without a schema change.
+  const pass = decryptString((u.SMTP_PASS ?? '').trim())
   if (user && pass) {
     return {
       host: u.SMTP_HOST?.trim() || 'smtp.gmail.com',
@@ -58,8 +62,11 @@ export async function getSmtpFor(userId: string): Promise<SmtpCreds> {
 
 export async function getAiFor(userId: string): Promise<AiCreds> {
   const u = await getMany(userId, KEYS as unknown as string[])
-  if (u.GROQ_API_KEY?.trim()) {
-    return { apiKey: u.GROQ_API_KEY.trim(), model: u.GROQ_MODEL?.trim() || 'llama-3.3-70b-versatile', source: 'user' }
+  // Same plaintext-fallback pattern as SMTP_PASS — decrypt if encrypted,
+  // otherwise treat the stored value as plaintext.
+  const userApiKey = decryptString((u.GROQ_API_KEY ?? '').trim())
+  if (userApiKey) {
+    return { apiKey: userApiKey, model: u.GROQ_MODEL?.trim() || 'llama-3.3-70b-versatile', source: 'user' }
   }
   if (process.env.GROQ_API_KEY?.trim()) {
     return { apiKey: process.env.GROQ_API_KEY, model: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile', source: 'env' }

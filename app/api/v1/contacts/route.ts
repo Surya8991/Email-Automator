@@ -2,8 +2,8 @@
 // Authenticate with: Authorization: Bearer ea_…
 import { NextResponse } from 'next/server'
 import { requireBearer } from '@/lib/bearer-auth'
-import { rateLimit, clientKey } from '@/lib/rate-limit'
-import { addContact, listContacts } from '@/server/services/contacts'
+import { rateLimit } from '@/lib/rate-limit'
+import { addContact, listContacts, nameAndEmailExists } from '@/server/services/contacts'
 
 export async function GET(req: Request) {
   const auth = await requireBearer(req)
@@ -31,10 +31,18 @@ export async function POST(req: Request) {
     jobTitle?: string; location?: string; platform?: string; notes?: string; tags?: string
   } | null
   if (!body?.recruiterEmail) return NextResponse.json({ error: 'recruiterEmail required' }, { status: 400 })
+  // Dedupe by (name + email) — matches every other entry point. Return
+  // 200 with skipped=true rather than 400 so bulk POSTs don't fail
+  // mid-stream on a row that already exists.
+  if (await nameAndEmailExists(auth.userId, body.recruiterName ?? '', body.recruiterEmail)) {
+    return NextResponse.json({ ok: true, skipped: true, reason: 'duplicate (name + email)' })
+  }
   try {
     await addContact(auth.userId, body as { recruiterEmail: string })
     return NextResponse.json({ ok: true })
-  } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'Insert failed' }, { status: 400 })
+  } catch {
+    // Don't echo the raw DB error to API clients — log on the server,
+    // return a generic message. Same hardening that addresses L7.
+    return NextResponse.json({ error: 'Insert failed' }, { status: 400 })
   }
 }

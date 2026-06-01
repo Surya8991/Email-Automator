@@ -33,6 +33,9 @@ playwright-report
 test-results
 coverage
 
+# TS incremental build cache
+*.tsbuildinfo
+
 # Sub-agent ephemeral scratch (created by code-review tooling)
 .agentmaster/
 

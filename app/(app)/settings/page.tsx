@@ -39,6 +39,16 @@ export default async function SettingsPage() {
     getSmtpFor(u.id), getAiFor(u.id), listKeys(u.id), listWebhooks(u.id),
   ])
 
+  // SECURITY: never send the encrypted secret strings to the client. Use
+  // empty inputs paired with a "•••••• (saved)" placeholder when a value
+  // exists. The forms already render the placeholder when initial value
+  // is empty AND a `passSaved` / `keySaved` flag is true.
+  const safeCur = { ...cur }
+  const hadSmtpPass = Boolean(cur.SMTP_PASS)
+  const hadGroqKey  = Boolean(cur.GROQ_API_KEY)
+  if (hadSmtpPass) safeCur.SMTP_PASS = ''
+  if (hadGroqKey)  safeCur.GROQ_API_KEY = ''
+
   return (
     <div className="space-y-6 max-w-4xl">
       <div>
@@ -62,7 +72,7 @@ export default async function SettingsPage() {
         <TabsContent value="general">
           <Card>
             <CardHeader><CardTitle>General</CardTitle><CardDescription>Defaults applied across drafts and campaigns.</CardDescription></CardHeader>
-            <CardContent><SettingsForm initial={cur} /></CardContent>
+            <CardContent><SettingsForm initial={safeCur} /></CardContent>
           </Card>
         </TabsContent>
 
@@ -73,7 +83,7 @@ export default async function SettingsPage() {
               <CardTitle className="flex items-center gap-2"><Mail className="h-4 w-4" /> Outbound SMTP</CardTitle>
               <CardDescription>Your SMTP credentials. Used for magic-link login and every outgoing draft.</CardDescription>
             </CardHeader>
-            <CardContent><SmtpForm initial={cur} source={smtp.source} /></CardContent>
+            <CardContent><SmtpForm initial={safeCur} source={smtp.source} passSaved={hadSmtpPass} /></CardContent>
           </Card>
         </TabsContent>
 
@@ -84,7 +94,7 @@ export default async function SettingsPage() {
               <CardTitle className="flex items-center gap-2"><Bot className="h-4 w-4" /> AI provider (Groq)</CardTitle>
               <CardDescription>Powers the "AI Improve" button in the template editor.</CardDescription>
             </CardHeader>
-            <CardContent><AiForm initial={cur} source={ai.source} /></CardContent>
+            <CardContent><AiForm initial={safeCur} source={ai.source} keySaved={hadGroqKey} /></CardContent>
           </Card>
         </TabsContent>
 
