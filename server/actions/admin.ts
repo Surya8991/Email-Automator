@@ -7,6 +7,7 @@ import { db } from '@/server/db/client'
 import { users, contacts } from '@/server/db/schema'
 import { adminEmails } from '@/lib/env'
 import { parseXlsx, parseCsv, type ImportedContact } from '@/server/services/importer'
+import { dupKey } from '@/server/services/contacts'
 
 export async function deleteUserAction(userId: string) {
   const me = await requireAdmin()
@@ -73,12 +74,20 @@ export async function adminImportContactsAction(fd: FormData) {
     return { ...c, notes: `${c.notes}${sep}${more}` }
   })
 
-  // Dedupe against admin's existing rows. Pull all emails once — single
-  // tenant scan beats a 2k-arg IN clause.
-  const existing = await db.select({ e: contacts.recruiterEmail })
+  // Dedupe against admin's existing rows. Key is (name, email) — same
+  // email under a different name is allowed. Pull all rows once; single
+  // tenant scan beats a 2k-arg IN clause and lets us also catch
+  // duplicates *within* the upload file in one pass.
+  const existing = await db.select({ n: contacts.recruiterName, e: contacts.recruiterEmail })
     .from(contacts).where(eq(contacts.userId, me.id))
-  const have = new Set(existing.map((r) => String(r.e).toLowerCase()))
-  const toInsert = enriched.filter((c) => !have.has(c.recruiterEmail.toLowerCase()))
+  const have = new Set(existing.map((r) => dupKey(String(r.n ?? ''), String(r.e ?? ''))))
+  const toInsert: ImportedContact[] = []
+  for (const c of enriched) {
+    const key = dupKey(c.recruiterName, c.recruiterEmail)
+    if (have.has(key)) continue
+    have.add(key) // catches within-file dupes too
+    toInsert.push(c)
+  }
 
   // Pre-compute starting num so the import lands as a contiguous block.
   const maxRow = await db.select({ maxNum: sql<number>`COALESCE(MAX(${contacts.num}), 0)` })

@@ -24,7 +24,10 @@ export async function addContactAction(formData: FormData) {
   const u = await requireUser()
   const parsed = NewContactSchema.safeParse(Object.fromEntries(formData))
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Invalid input' }
-  if (await svc.emailExists(u.id, parsed.data.recruiterEmail)) return { error: 'This email already exists' }
+  // Dedupe by (name, email) — same email with a different name is allowed.
+  if (await svc.nameAndEmailExists(u.id, parsed.data.recruiterName ?? '', parsed.data.recruiterEmail)) {
+    return { error: 'A contact with this name + email already exists' }
+  }
   // Pick up any cf_<key> fields and bake them into notes as a JSON suffix.
   // The dialog renders one input per user-declared custom field key.
   const customFields: Record<string, string> = {}
@@ -161,17 +164,23 @@ export async function importContactsAction(fd: FormData) {
   }
 
   // Errors that survived parsing also survive the insert phase — only
-  // append "already exists" failures here.
+  // append "already exists" failures here. Duplicate detection keys on
+  // (name + email) so the same email can appear under different names.
   const errors = [...parsed.errors]
+  // Snapshot existing (name, email) tuples once so we don't fire 2k
+  // queries inside the loop.
+  const existing = await db.select({ name: contacts.recruiterName, email: contacts.recruiterEmail })
+    .from(contacts).where(eq(contacts.userId, u.id))
+  const have = new Set(existing.map((r) => svc.dupKey(String(r.name ?? ''), String(r.email ?? ''))))
   let imported = 0, duplicates = 0
   for (const c of parsed.contacts) {
-    if (await svc.emailExists(u.id, c.recruiterEmail)) {
+    const key = svc.dupKey(c.recruiterName, c.recruiterEmail)
+    if (have.has(key)) {
       duplicates++
-      // Only report the first 50 duplicates verbatim so a 10k-row CSV
-      // with 9k existing contacts doesn't return a megabyte of errors.
-      if (errors.length < 200) errors.push({ line: 0, reason: `Already in your contacts: ${c.recruiterEmail}` })
+      if (errors.length < 200) errors.push({ line: 0, reason: `Already in your contacts: ${c.recruiterName || '(no name)'} <${c.recruiterEmail}>` })
       continue
     }
+    have.add(key)
     await svc.addContact(u.id, c)
     imported++
   }

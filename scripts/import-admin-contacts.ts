@@ -15,6 +15,7 @@ import { db } from '../server/db/client'
 import { contacts, users } from '../server/db/schema'
 import { adminEmails } from '../lib/env'
 import { parseXlsx, type ImportedContact } from '../server/services/importer'
+import { dupKey } from '../server/services/contacts'
 
 interface Args { file: string; email?: string; dryRun: boolean }
 
@@ -103,20 +104,32 @@ async function main() {
   const extras = extraNotesFromSheet(args.file)
   const enriched = parsed.contacts.map((c) => foldExtras(c, extras))
 
-  // Dedupe against existing rows for this admin user. SELECT all emails
-  // already in the user's table and filter in JS — cheaper than a 2k-arg
-  // IN clause and trivial on a single-tenant scan.
+  // Dedupe against existing rows for this admin user. Key is (name, email)
+  // so the same email can appear under different names. SELECT all rows
+  // once and filter in JS — cheaper than a 2k-arg IN clause on a single-
+  // tenant scan, and lets us catch within-file dupes in the same pass.
   const existing = await db
-    .select({ e: contacts.recruiterEmail })
+    .select({ n: contacts.recruiterName, e: contacts.recruiterEmail })
     .from(contacts)
     .where(eq(contacts.userId, user.id))
-  const alreadyHave = new Set(existing.map((r) => String(r.e).toLowerCase()))
-  const toInsert = enriched.filter((c) => !alreadyHave.has(c.recruiterEmail.toLowerCase()))
+  const inDb = new Set(existing.map((r) => dupKey(String(r.n ?? ''), String(r.e ?? ''))))
+  const seenInBatch = new Set<string>()
+  const toInsert: ImportedContact[] = []
+  let dbDupes = 0, fileDupes = 0
+  for (const c of enriched) {
+    const key = dupKey(c.recruiterName, c.recruiterEmail)
+    if (inDb.has(key)) { dbDupes++; continue }
+    if (seenInBatch.has(key)) { fileDupes++; continue }
+    seenInBatch.add(key)
+    toInsert.push(c)
+  }
 
   console.log(`[import] file: ${args.file}`)
   console.log(`[import] admin: ${targetEmail}`)
   console.log(`[import] parsed: ${parsed.contacts.length} valid, ${parsed.errors.length} rejected`)
-  console.log(`[import] skipping ${enriched.length - toInsert.length} already in DB`)
+  console.log(`[import] dedupe key: (name + email), case- and whitespace-insensitive`)
+  console.log(`[import] already in DB: ${dbDupes} skipped`)
+  console.log(`[import] within-file dupes: ${fileDupes} skipped`)
   console.log(`[import] to insert: ${toInsert.length}`)
   if (parsed.errors.length) {
     console.log('[import] sample rejections:')
@@ -160,7 +173,7 @@ async function main() {
     process.stdout.write(`\r[import] inserted ${inserted}/${toInsert.length}`)
   }
   process.stdout.write('\n')
-  console.log(`[import] done — ${inserted} inserted, ${enriched.length - toInsert.length} dupes, ${parsed.errors.length} rejected`)
+  console.log(`[import] done — ${inserted} inserted, ${dbDupes + fileDupes} dupes (${dbDupes} db + ${fileDupes} in-file), ${parsed.errors.length} rejected`)
 }
 
 main().catch((e) => { console.error('[import]', e); process.exit(1) })

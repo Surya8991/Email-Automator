@@ -89,20 +89,33 @@ describe('contacts service', () => {
 })
 
 describe('contacts dedupe + delete-all', () => {
-  it('dedupeContacts keeps the oldest row per email and removes the rest', async () => {
+  it('dedupeContacts keeps oldest row per (name, email) tuple', async () => {
     const u = await newUser()
-    // Three rows for the same email (different case) + one unique.
-    await db.insert(schema.contacts).values({ userId: u, recruiterEmail: 'dup@x.co', recruiterName: 'first' })
-    await db.insert(schema.contacts).values({ userId: u, recruiterEmail: 'DUP@x.co', recruiterName: 'second' })
-    await db.insert(schema.contacts).values({ userId: u, recruiterEmail: 'dup@x.co', recruiterName: 'third' })
-    await db.insert(schema.contacts).values({ userId: u, recruiterEmail: 'unique@x.co', recruiterName: 'solo' })
+    // Two rows with identical (name, email) → second is a dupe.
+    // Two rows with same email but different names → both kept.
+    await db.insert(schema.contacts).values({ userId: u, recruiterEmail: 'a@x.co', recruiterName: 'Alice' })
+    await db.insert(schema.contacts).values({ userId: u, recruiterEmail: 'A@X.CO', recruiterName: 'alice' }) // dupe (case-insensitive)
+    await db.insert(schema.contacts).values({ userId: u, recruiterEmail: 'a@x.co', recruiterName: 'Bob' })  // same email, different name → KEEP
+    await db.insert(schema.contacts).values({ userId: u, recruiterEmail: 'unique@x.co', recruiterName: 'Solo' })
     const r = await services.dedupeContacts(u)
-    expect(r.removed).toBe(2)
+    expect(r.removed).toBe(1)
     expect(r.affectedEmails).toBe(1)
     const rows = await db.select().from(schema.contacts).where(eq(schema.contacts.userId, u))
-    expect(rows.length).toBe(2)
-    // The oldest row (recruiterName 'first') survived.
-    expect(rows.find((c) => c.recruiterEmail === 'dup@x.co')?.recruiterName).toBe('first')
+    expect(rows.length).toBe(3)
+    // Alice's original row + Bob + Solo survive. The 'alice' (lowercase) row was removed.
+    const names = rows.map((r) => r.recruiterName).sort()
+    expect(names).toEqual(['Alice', 'Bob', 'Solo'])
+  })
+
+  it('nameAndEmailExists is case- and whitespace-insensitive', async () => {
+    const u = await newUser()
+    await services.addContact(u, { recruiterEmail: 'jane@acme.com', recruiterName: 'Jane Doe' })
+    expect(await services.nameAndEmailExists(u, 'jane doe', 'JANE@ACME.COM')).toBe(true)
+    expect(await services.nameAndEmailExists(u, '  Jane Doe  ', '  jane@acme.com  ')).toBe(true)
+    // Same email, different name → not a duplicate
+    expect(await services.nameAndEmailExists(u, 'Other Person', 'jane@acme.com')).toBe(false)
+    // Same name, different email → not a duplicate
+    expect(await services.nameAndEmailExists(u, 'Jane Doe', 'jane@other.com')).toBe(false)
   })
 
   it('deleteAllContacts wipes everything for the user but spares other users', async () => {
