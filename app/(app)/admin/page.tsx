@@ -3,6 +3,7 @@ import { db } from '@/server/db/client'
 import { users } from '@/server/db/schema'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { AdminTable } from './admin-table'
+import { AdminImportContactsCard } from './import-contacts-card'
 import { adminEmails } from '@/lib/env'
 import { env } from '@/lib/env'
 import { getUserSuspensions } from '@/server/actions/admin'
@@ -98,6 +99,8 @@ export default async function AdminPage() {
           </p>
         </CardContent>
       </Card>
+
+      <AdminImportContactsCard />
 
       <Card>
         <CardHeader><CardTitle>Users</CardTitle></CardHeader>
