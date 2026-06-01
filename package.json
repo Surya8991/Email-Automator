@@ -17,6 +17,7 @@
     "worker": "tsx workers/scheduler.ts",
     "seed:templates": "tsx scripts/seed-templates.ts",
     "seed:contacts": "tsx scripts/seed-contacts.ts",
+    "import:admin-contacts": "tsx scripts/import-admin-contacts.ts",
     "db:reset": "tsx scripts/reset-db.ts"
   },
   "dependencies": {

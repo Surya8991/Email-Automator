@@ -1,162 +1,42 @@
 {
-  "growth_formal": {
-    "category": "Growth Marketer",
-    "label": "Professional & Formal",
-    "subject": "Application for Growth Marketing Role at {{company}}",
-    "initialMsg": "<p>Dear {{name}},</p><p>I am writing to express my interest in the Growth Marketing position at <b>{{company}}</b>. With experience driving full-funnel growth, I am confident in my ability to contribute meaningfully to your team.</p><p>Key achievements include:</p><ul><li>[Your key achievement #1]</li><li>[Your key achievement #2]</li><li>[Your key achievement #3]</li></ul><p>I would welcome the opportunity to discuss how my experience in demand generation, conversion optimisation, and retention marketing can support <b>{{company}}</b>'s growth objectives.</p><p>Thank you for considering my application.</p>",
-    "follow1Msg": "<p>Hi {{name}},</p><p>I wanted to follow up on my email from a few days ago regarding the Growth Marketing opportunity at <b>{{company}}</b>.</p><p>I understand you're busy, but I'm genuinely excited about the possibility of contributing to your team.</p><p>Would you have 15 minutes this week for a quick conversation?</p>",
-    "lastFollowMsg": "<p>Hi {{name}},</p><p>I hope this email finds you well. I wanted to send one final follow-up regarding my interest in the Growth Marketing role at <b>{{company}}</b>.</p><p>If now isn't the right time, I completely understand. I'd still love to connect on LinkedIn and stay in touch for future opportunities.</p>"
+  "starter_formal_app": {
+    "category": "Starter",
+    "label": "Formal Application",
+    "subject": "Application — {{role_name|the open role}} at {{company}}",
+    "initialMsg": "<p>Hi {{name|there}},</p><p>I'd like to apply for the <b>{{role_name|open role}}</b> at <b>{{company}}</b>. My background looks like a strong fit, and I've attached my resume for your review.</p><p>Happy to share more context whenever it's useful.</p>",
+    "follow1Msg": "<p>Hi {{name|there}},</p><p>Following up on my note about the <b>{{role_name|open role}}</b> at <b>{{company}}</b>. Is there a good time this week or next for a short call?</p>",
+    "lastFollowMsg": "<p>Hi {{name|there}},</p><p>One last note — if the timing isn't right at <b>{{company}}</b>, no problem. Happy to circle back next quarter.</p>"
   },
-  "growth_friendly": {
-    "category": "Growth Marketer",
-    "label": "Friendly & Conversational",
-    "subject": "Passionate About Growth – Would Love to Connect!",
-    "initialMsg": "<p>Hi {{name}},</p>\n<p>I came across {{company}} recently and got genuinely excited about what you're building.</p>\n<p>A bit about me — I've spent the last few years obsessing over full-funnel growth. From driving organic traffic increases to generating qualified leads, I've had the chance to work across the entire growth spectrum — SEO, paid media, CRO, and retention.</p>\n<p>What gets me out of bed? Figuring out what makes users tick, running experiments, and watching the numbers move.</p>\n<p>I'd love to learn more about your growth challenges and explore if there's a fit. No pressure — just a conversation!</p>",
-    "follow1Msg": "<p>Hi {{name}},</p>\n<p>I wanted to follow up on my email from a few days ago. I'm genuinely excited about what {{company}} is building and would love to chat about growth challenges.</p>\n<p>Would you have 15 minutes this week?</p>",
-    "lastFollowMsg": "<p>Hi {{name}},</p>\n<p>I've reached out a couple of times about opportunities at {{company}} and haven't heard back – which is totally fine, I know how busy things get.</p>\n<p>I don't want to keep cluttering your inbox, so I'll assume the timing isn't right. If things change in the future, I'd love to hear from you.</p>\n<p>Wishing you and the team all the best!</p>"
+  "starter_friendly_intro": {
+    "category": "Starter",
+    "label": "Friendly Intro",
+    "subject": "Quick intro — would love to connect",
+    "initialMsg": "<p>Hi {{name|there}},</p><p>I've been following <b>{{company}}</b> and wanted to introduce myself. I think there's overlap between what you're building and what I work on.</p><p>Open to a quick chat?</p>",
+    "follow1Msg": "<p>Hi {{name|there}},</p><p>Bumping this up. Any 15-min window that works for you in the next week or two?</p>",
+    "lastFollowMsg": "<p>Hi {{name|there}},</p><p>Last note from me — if now isn't the right time, no worries. I'll keep an eye on <b>{{company}}</b>.</p>"
   },
-  "growth_jobpost": {
-    "category": "Growth Marketer",
-    "label": "Specific Job Posting Response",
-    "subject": "Application for {{role_name}} at {{company}}",
-    "initialMsg": "<p>Dear {{name}},</p><p>I am writing to apply for the <b>{{role_name}}</b> position at <b>{{company}}</b>, as advertised on <b>{{platform}}</b>. After reviewing the job description, I am excited about the opportunity as my experience aligns closely with your requirements.</p><p>I have attached my resume for your review and would welcome the opportunity to discuss how I can contribute to <b>{{company}}</b>'s growth objectives.</p><p>My portfolio: {{portfolio_link}}</p>",
-    "follow1Msg": "<p>Hi {{name}},</p><p>I wanted to follow up on my application for the <b>{{role_name}}</b> position at <b>{{company}}</b>.</p><p>I'm genuinely excited about this opportunity and believe my experience would be a strong fit.</p><p>Would you have 15 minutes for a quick conversation?</p>",
-    "lastFollowMsg": "<p>Hi {{name}},</p><p>I wanted to send one final follow-up regarding the <b>{{role_name}}</b> role at <b>{{company}}</b>. If now isn't the right time, I completely understand.</p><p>Wishing you and the team all the best!</p>"
+  "starter_jobpost_reply": {
+    "category": "Starter",
+    "label": "Job Posting Reply",
+    "subject": "{{role_name|Applicant}} — applying via {{platform|your posting}}",
+    "initialMsg": "<p>Hi {{name|there}},</p><p>I came across the <b>{{role_name|open role}}</b> posting on <b>{{platform|your careers page}}</b> and would like to apply. Resume attached, portfolio at {{portfolio_link|the link in my signature}}.</p><p>Open to a short conversation about the role whenever it's useful.</p>",
+    "follow1Msg": "<p>Hi {{name|there}},</p><p>Checking in on my application for <b>{{role_name|the open role}}</b>. Happy to share more detail on anything that would help.</p>",
+    "lastFollowMsg": "<p>Hi {{name|there}},</p><p>Final note on the <b>{{role_name|open role}}</b> — if the role's been filled or the timing's off, no problem.</p>"
   },
-  "growth_referral": {
-    "category": "Growth Marketer",
-    "label": "Referral Based",
-    "subject": "Referred for Growth Marketing Opportunity at {{company}}",
-    "initialMsg": "<p>Dear {{name}},</p><p>I was referred regarding growth marketing opportunities at <b>{{company}}</b>. Having relevant experience, I thought my background would be a strong fit for your team.</p><p>A bit about me — I'm a Growth Marketer with experience driving full-funnel growth:</p><ul><li>[Your key achievement #1]</li><li>[Your key achievement #2]</li><li>[Your key achievement #3]</li></ul><p>Would you be open to a brief conversation?</p>",
-    "follow1Msg": "<p>Hi {{name}},</p><p>I wanted to follow up on my earlier email about growth marketing opportunities at <b>{{company}}</b>. I'd love the chance to discuss how my experience can help drive results.</p>",
-    "lastFollowMsg": "<p>Hi {{name}},</p><p>Final follow-up from me regarding opportunities at <b>{{company}}</b>. If the timing isn't right, no worries at all. My inbox is always open.</p>"
+  "starter_referral": {
+    "category": "Starter",
+    "label": "Referral",
+    "subject": "Referred to you — quick hello",
+    "initialMsg": "<p>Hi {{name|there}},</p><p>I was pointed your way regarding opportunities at <b>{{company}}</b>. Resume attached for context.</p><p>Would a brief call this week or next work on your side?</p>",
+    "follow1Msg": "<p>Hi {{name|there}},</p><p>Following up on the referral note. Any time this week or next that works?</p>",
+    "lastFollowMsg": "<p>Hi {{name|there}},</p><p>Closing the loop on this — if nothing's open at <b>{{company}}</b> right now, no worries.</p>"
   },
-  "growth_linkedin": {
-    "category": "Growth Marketer",
-    "label": "LinkedIn Post Follow-up",
-    "subject": "Loved Your Post – Growth Marketer Interested in Connecting",
-    "initialMsg": "<p>Hi {{name}},</p><p>I came across your recent LinkedIn post and it really resonated with me.</p><p>I'm a Growth Marketer and I've been following <b>{{company}}</b>'s journey with interest.</p><p>I'd love to connect and learn more about the growth challenges at <b>{{company}}</b>.</p>",
-    "follow1Msg": "<p>Hi {{name}},</p><p>Just following up on my note. Would love to connect and learn more about what you're building at <b>{{company}}</b>.</p>",
-    "lastFollowMsg": "<p>Hi {{name}},</p><p>Last note from me – if <b>{{company}}</b> ever needs growth marketing support, feel free to reach out anytime.</p>"
-  },
-  "perf_formal": {
-    "category": "Performance Marketing",
-    "label": "Professional & Formal",
-    "subject": "Application for Performance Marketing Role at {{company}}",
-    "initialMsg": "<p>Dear {{name}},</p><p>I am writing to express my interest in the Performance Marketing position at <b>{{company}}</b>. With experience managing paid media campaigns across Google Ads, Meta Ads, and LinkedIn Ads, I have consistently delivered measurable ROI improvements.</p><p>Notable accomplishments include:</p><ul><li>[Your paid media achievement #1]</li><li>[Your paid media achievement #2]</li><li>[Your analytics achievement]</li></ul><p>I would appreciate the opportunity to discuss how my performance marketing expertise can drive results for <b>{{company}}</b>.</p>",
-    "follow1Msg": "<p>Hi {{name}},</p><p>I wanted to follow up on my application for the Performance Marketing role at <b>{{company}}</b>.</p><p>Would you have 15 minutes this week?</p>",
-    "lastFollowMsg": "<p>Hi {{name}},</p><p>One final follow-up regarding the Performance Marketing opportunity at <b>{{company}}</b>. If now isn't the right time, I completely understand.</p>"
-  },
-  "perf_friendly": {
-    "category": "Performance Marketing",
-    "label": "Friendly & Conversational",
-    "subject": "Performance Marketing Enthusiast – Let's Chat!",
-    "initialMsg": "<p>Hey {{name}},</p><p>I hope this email finds you well! I've been following <b>{{company}}</b>'s journey, and I'm impressed by how you're scaling.</p><p>I'm a performance marketer who genuinely loves the craft — there's something satisfying about watching a well-optimised campaign hit its targets.</p><p>If you're looking for someone who's both data-driven and genuinely passionate about performance marketing, I'd love to grab a virtual coffee and chat.</p>",
-    "follow1Msg": "<p>Hi {{name}},</p><p>Just bumping my earlier email. Would love to chat about performance marketing at <b>{{company}}</b>. No pressure!</p>",
-    "lastFollowMsg": "<p>Hi {{name}},</p><p>I've reached out a couple of times and haven't heard back – totally fine! I'll close the loop on my end. If things change, my inbox is always open.</p>"
-  },
-  "perf_jobpost": {
-    "category": "Performance Marketing",
-    "label": "Specific Job Posting Response",
-    "subject": "Application for {{role_name}} at {{company}}",
-    "initialMsg": "<p>Dear {{name}},</p><p>I am writing to apply for the <b>{{role_name}}</b> position at <b>{{company}}</b>, as advertised on <b>{{platform}}</b>. The role's focus immediately caught my attention.</p><p>I have attached my resume and would be delighted to discuss how my performance marketing expertise can contribute to <b>{{company}}</b>'s growth.</p><p>Portfolio: {{portfolio_link}}</p>",
-    "follow1Msg": "<p>Hi {{name}},</p><p>Following up on my application for the <b>{{role_name}}</b> at <b>{{company}}</b>. I'd love the chance to discuss further.</p>",
-    "lastFollowMsg": "<p>Hi {{name}},</p><p>Final follow-up regarding the <b>{{role_name}}</b> role. If the timing isn't right, I completely understand.</p>"
-  },
-  "perf_referral": {
-    "category": "Performance Marketing",
-    "label": "Referral Based",
-    "subject": "Referred for Performance Marketing Opportunity at {{company}}",
-    "initialMsg": "<p>Dear {{name}},</p><p>I'm reaching out as my background in performance marketing might be a good fit for <b>{{company}}</b>.</p><ul><li>[Your paid media achievement #1]</li><li>[Your paid media achievement #2]</li><li>[Your analytics achievement]</li></ul><p>Would you be open to a brief call?</p>",
-    "follow1Msg": "<p>Hi {{name}},</p><p>Following up on my note about performance marketing at <b>{{company}}</b>. Would love to connect.</p>",
-    "lastFollowMsg": "<p>Hi {{name}},</p><p>Last follow-up from me. If the timing isn't right, no worries. Wishing <b>{{company}}</b> all the best!</p>"
-  },
-  "perf_linkedin": {
-    "category": "Performance Marketing",
-    "label": "LinkedIn Post Follow-up",
-    "subject": "Your Post Resonated – Performance Marketer Here",
-    "initialMsg": "<p>Hi {{name}},</p><p>I just read your LinkedIn post and found myself nodding along.</p><p>I'm a Performance Marketer with experience managing paid media across Google and Meta Ads.</p><p>I'd love to connect and learn more about what you're building at <b>{{company}}</b>.</p>",
-    "follow1Msg": "<p>Hi {{name}},</p><p>Just following up on my note. Would love to learn more about <b>{{company}}</b>.</p>",
-    "lastFollowMsg": "<p>Hi {{name}},</p><p>Final note from me. If you're ever looking for performance marketing support, I'd be glad to chat.</p>"
-  },
-  "seo_formal": {
-    "category": "SEO Analyst",
-    "label": "Professional & Formal",
-    "subject": "Application for SEO Analyst Role at {{company}}",
-    "initialMsg": "<p>Dear {{name}},</p><p>I am writing to express my interest in the SEO Analyst position at <b>{{company}}</b>. With experience in technical SEO, on-page optimisation, and analytics-driven strategies, I have delivered measurable improvements in organic visibility.</p><p>Key accomplishments include:</p><ul><li>[Your SEO achievement #1]</li><li>[Your SEO achievement #2]</li><li>[Your SEO achievement #3]</li></ul><p>I would welcome the opportunity to discuss how my SEO expertise can enhance <b>{{company}}</b>'s organic search performance.</p>",
-    "follow1Msg": "<p>Hi {{name}},</p><p>Following up on my application for the SEO Analyst role at <b>{{company}}</b>. Would love to discuss further.</p>",
-    "lastFollowMsg": "<p>Hi {{name}},</p><p>Final follow-up regarding the SEO role at <b>{{company}}</b>. If now isn't the right time, I completely understand.</p>"
-  },
-  "seo_friendly": {
-    "category": "SEO Analyst",
-    "label": "Friendly & Conversational",
-    "subject": "SEO Enthusiast Looking for New Challenges – Would Love to Connect!",
-    "initialMsg": "<p>Hi {{name}},</p><p>I'll be honest — I'm one of those people who gets excited about Core Web Vitals scores and schema markup. If that's not a red flag, keep reading!</p><p>I've been deep in the SEO world — technical audits, keyword research, link building, and watching organic traffic charts go up.</p><p>What I love about SEO is that it's part science, part creativity, and always evolving.</p><p>I'd love to learn about the SEO challenges at <b>{{company}}</b>. No pitch, just a genuine conversation.</p>",
-    "follow1Msg": "<p>Hi {{name}},</p><p>Just following up on my note about SEO at <b>{{company}}</b>. Would love to connect!</p>",
-    "lastFollowMsg": "<p>Hi {{name}},</p><p>Last note from me. If SEO is ever on the radar at <b>{{company}}</b>, feel free to reach out anytime.</p>"
-  },
-  "seo_jobpost": {
-    "category": "SEO Analyst",
-    "label": "Specific Job Posting Response",
-    "subject": "Application for {{role_name}} at {{company}}",
-    "initialMsg": "<p>Dear {{name}},</p><p>I am writing to apply for the <b>{{role_name}}</b> position at <b>{{company}}</b>, as advertised on <b>{{platform}}</b>. The role's emphasis aligns perfectly with my experience.</p><p>I have attached my resume and would welcome the opportunity to discuss how I can contribute to <b>{{company}}</b>'s SEO objectives.</p><p>Portfolio: {{portfolio_link}}</p>",
-    "follow1Msg": "<p>Hi {{name}},</p><p>Following up on my application for the <b>{{role_name}}</b> at <b>{{company}}</b>. Would love to discuss further.</p>",
-    "lastFollowMsg": "<p>Hi {{name}},</p><p>Final follow-up regarding the <b>{{role_name}}</b> role. If the timing isn't right, I understand.</p>"
-  },
-  "seo_referral": {
-    "category": "SEO Analyst",
-    "label": "Referral Based",
-    "subject": "Referred for SEO Analyst Opportunity at {{company}}",
-    "initialMsg": "<p>Dear {{name}},</p><p>I was recommended to reach out regarding SEO opportunities at <b>{{company}}</b>.</p><p>I'm an SEO Analyst with experience driving organic growth:</p><ul><li>[Your SEO achievement #1]</li><li>[Your SEO achievement #2]</li><li>[Your SEO achievement #3]</li></ul><p>Would you be open to a brief conversation?</p>",
-    "follow1Msg": "<p>Hi {{name}},</p><p>Following up on my note about SEO at <b>{{company}}</b>. I'd love to connect.</p>",
-    "lastFollowMsg": "<p>Hi {{name}},</p><p>Final follow-up from me. Wishing <b>{{company}}</b> all the best!</p>"
-  },
-  "seo_linkedin": {
-    "category": "SEO Analyst",
-    "label": "LinkedIn Post Follow-up",
-    "subject": "Your Post Caught My Attention – SEO Analyst Here",
-    "initialMsg": "<p>Hi {{name}},</p><p>I came across your LinkedIn post and it really struck a chord.</p><p>I'm an SEO Analyst with experience in technical SEO and organic growth.</p><p>I'd love to connect and learn more about the SEO challenges at <b>{{company}}</b>.</p>",
-    "follow1Msg": "<p>Hi {{name}},</p><p>Just following up. Would love to learn more about SEO at <b>{{company}}</b>.</p>",
-    "lastFollowMsg": "<p>Hi {{name}},</p><p>Last note from me. If you ever need SEO support, feel free to reach out.</p>"
-  },
-  "dm_formal": {
-    "category": "Digital Marketing Executive",
-    "label": "Professional & Formal",
-    "subject": "Application for Digital Marketing Executive at {{company}}",
-    "initialMsg": "<p>Dear {{name}},</p><p>I am writing to express my interest in the Digital Marketing Executive position at <b>{{company}}</b>. With experience across SEO, SEM, PPC, and data-driven marketing, I have delivered comprehensive growth results.</p><ul><li>[Your marketing achievement #1]</li><li>[Your marketing achievement #2]</li><li>[Your marketing achievement #3]</li></ul><p>I would welcome the opportunity to discuss how my diverse marketing expertise can contribute to <b>{{company}}</b>'s objectives.</p>",
-    "follow1Msg": "<p>Hi {{name}},</p><p>Following up on my application for the Digital Marketing Executive role at <b>{{company}}</b>. Would love to discuss how my cross-functional experience can help.</p>",
-    "lastFollowMsg": "<p>Hi {{name}},</p><p>Final follow-up. If the timing isn't right, I completely understand. Wishing <b>{{company}}</b> continued success.</p>"
-  },
-  "dm_friendly": {
-    "category": "Digital Marketing Executive",
-    "label": "Friendly & Conversational",
-    "subject": "Digital Marketer Who Loves the Full Stack – Let's Connect!",
-    "initialMsg": "<p>Hi {{name}},</p><p>I'm one of those marketers who can't pick a favourite channel — I love them all! SEO, paid ads, analytics, content — each piece of the puzzle excites me.</p><p>I've been following <b>{{company}}</b> and I'm impressed by what you're building.</p><p>If you're looking for someone who can think holistically about growth and execute across channels, I'd love to chat.</p>",
-    "follow1Msg": "<p>Hi {{name}},</p><p>Following up on my note. Would love to chat about digital marketing at <b>{{company}}</b>.</p>",
-    "lastFollowMsg": "<p>Hi {{name}},</p><p>Final note from me. If you're ever looking for a versatile marketer, I'd love to connect.</p>"
-  },
-  "dm_jobpost": {
-    "category": "Digital Marketing Executive",
-    "label": "Specific Job Posting Response",
-    "subject": "Application for {{role_name}} at {{company}}",
-    "initialMsg": "<p>Dear {{name}},</p><p>I am writing to apply for the <b>{{role_name}}</b> position at <b>{{company}}</b>, as advertised on <b>{{platform}}</b>. The cross-functional nature of this role is exactly what excites me.</p><p>My resume is attached for your review. I'd love to discuss how my experience can contribute to <b>{{company}}</b>'s marketing objectives.</p><p>Portfolio: {{portfolio_link}}</p>",
-    "follow1Msg": "<p>Hi {{name}},</p><p>Following up on my application for the <b>{{role_name}}</b> at <b>{{company}}</b>. Would love to discuss further.</p>",
-    "lastFollowMsg": "<p>Hi {{name}},</p><p>Final follow-up regarding the <b>{{role_name}}</b> role. If the timing isn't right, I completely understand.</p>"
-  },
-  "dm_referral": {
-    "category": "Digital Marketing Executive",
-    "label": "Referral Based",
-    "subject": "Referred for Digital Marketing Opportunity at {{company}}",
-    "initialMsg": "<p>Dear {{name}},</p><p>I was referred regarding digital marketing opportunities at <b>{{company}}</b>.</p><p>I bring cross-functional expertise across SEO, paid media, and analytics:</p><ul><li>[Your marketing achievement #1]</li><li>[Your marketing achievement #2]</li><li>[Your marketing achievement #3]</li></ul><p>Would you be open to a brief conversation?</p>",
-    "follow1Msg": "<p>Hi {{name}},</p><p>Following up on my note about digital marketing at <b>{{company}}</b>. Would love to connect.</p>",
-    "lastFollowMsg": "<p>Hi {{name}},</p><p>Last follow-up from me. Wishing <b>{{company}}</b> all the best!</p>"
-  },
-  "dm_linkedin": {
-    "category": "Digital Marketing Executive",
-    "label": "LinkedIn Post Follow-up",
-    "subject": "Your Post Inspired Me – Digital Marketer Interested in Connecting",
-    "initialMsg": "<p>Hi {{name}},</p><p>I came across your recent LinkedIn post and it sparked my interest.</p><p>I'm a Digital Marketing professional with cross-functional expertise in SEO, paid media, and analytics.</p><p>I'd love to connect and learn more about what's happening at <b>{{company}}</b>.</p>",
-    "follow1Msg": "<p>Hi {{name}},</p><p>Following up on my note. Would love to learn more about <b>{{company}}</b>.</p>",
-    "lastFollowMsg": "<p>Hi {{name}},</p><p>Final note from me. If you're ever looking for marketing support, I'd be glad to chat.</p>"
+  "starter_thankyou": {
+    "category": "Starter",
+    "label": "Thank You (Post-Interview)",
+    "subject": "Thanks for your time today",
+    "initialMsg": "<p>Hi {{name|there}},</p><p>Thanks for the conversation today about <b>{{role_name|the role}}</b> at <b>{{company}}</b>. I enjoyed it and came away more excited about the work.</p><p>Happy to share anything else that would be useful — references, samples, additional context.</p>",
+    "follow1Msg": "",
+    "lastFollowMsg": ""
   }
 }

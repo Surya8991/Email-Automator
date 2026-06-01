@@ -88,6 +88,63 @@ describe('contacts service', () => {
   })
 })
 
+describe('analytics.systemStats + perUserStats', () => {
+  it('systemStats sums across all users', async () => {
+    const u1 = await newUser()
+    const u2 = await newUser()
+    await services.addContact(u1, { recruiterEmail: 'a@x.co' })
+    await services.addContact(u1, { recruiterEmail: 'b@x.co' })
+    await services.addContact(u2, { recruiterEmail: 'c@x.co' })
+    await services.templates.upsertTemplate(u1, 'k1', { subject: 's', initialMsg: 'b' })
+    const { systemStats } = await import('@/server/services/analytics')
+    const s = await systemStats()
+    expect(s.users).toBeGreaterThanOrEqual(2)
+    expect(s.contacts).toBe(3)
+    expect(s.templates).toBeGreaterThanOrEqual(1)
+  })
+
+  it('perUserStats returns a map keyed by userId with per-user counts', async () => {
+    const u1 = await newUser()
+    const u2 = await newUser()
+    await services.addContact(u1, { recruiterEmail: 'a@x.co' })
+    await services.addContact(u1, { recruiterEmail: 'b@x.co' })
+    await services.addContact(u2, { recruiterEmail: 'c@x.co' })
+    const { perUserStats } = await import('@/server/services/analytics')
+    const m = await perUserStats()
+    expect(m.get(u1)?.contacts).toBe(2)
+    expect(m.get(u2)?.contacts).toBe(1)
+  })
+})
+
+describe('analytics.pipelineKpis', () => {
+  it('buckets contacts by status and computes response rate', async () => {
+    const u = await newUser()
+    const statuses = ['Not Applied', 'Applied', 'Phone Screen', 'Final Round', 'Offer Extended', 'Hired', 'Rejected — culture']
+    for (const s of statuses) {
+      await db.insert(schema.contacts).values({ userId: u, recruiterEmail: `${s}@x.co`.replace(/\s/g, '-'), status: s })
+    }
+    const { pipelineKpis } = await import('@/server/services/analytics')
+    const k = await pipelineKpis(u)
+    // Not Applied is excluded from "applied"; everything else (6 rows) counts.
+    expect(k.applied).toBe(6)
+    // Applied / Phone Screen / Final Round are active pipeline.
+    expect(k.pipeline).toBe(3)
+    // Offer* + Hired → offers.
+    expect(k.offers).toBe(2)
+    // Reject* → rejections.
+    expect(k.rejections).toBe(1)
+    // (pipeline + offers + rejections) / applied = 6/6 = 1.0
+    expect(k.responseRate).toBeCloseTo(1)
+  })
+
+  it('returns zeroed buckets when the user has no contacts', async () => {
+    const u = await newUser()
+    const { pipelineKpis } = await import('@/server/services/analytics')
+    const k = await pipelineKpis(u)
+    expect(k).toEqual({ applied: 0, pipeline: 0, offers: 0, rejections: 0, responseRate: 0 })
+  })
+})
+
 describe('templates → drafts pipeline', () => {
   it('activate template + createDraftsBulk + sendDraft + status flow', async () => {
     const u = await newUser()

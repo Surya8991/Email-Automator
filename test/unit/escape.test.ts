@@ -39,6 +39,15 @@ describe('personalize', () => {
   it('handles missing values', () => {
     expect(personalize('Hi {{nope}}', {}, 'html')).toBe('Hi ')
   })
+  it('uses |fallback when value is missing or empty', () => {
+    expect(personalize('Hi {{name|there}}', {}, 'html')).toBe('Hi there')
+    expect(personalize('Hi {{name|there}}', { name: '' }, 'html')).toBe('Hi there')
+    expect(personalize('Hi {{name|there}}', { name: '   ' }, 'html')).toBe('Hi there')
+    expect(personalize('Hi {{name|there}}', { name: 'Priya' }, 'html')).toBe('Hi Priya')
+  })
+  it('fallback also applies in subject mode', () => {
+    expect(personalize('Re: {{company|your team}}', {}, 'subject')).toBe('Re: your team')
+  })
 })
 
 describe('sanitizeUnsubText', () => {

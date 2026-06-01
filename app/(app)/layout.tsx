@@ -15,7 +15,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const userId = (session.user as { id?: string }).id
   // First visit ever → seed the 20 starter templates so the user lands on
   // something useful instead of an empty editor. No-op on subsequent visits.
-  if (userId) await ensureSeededTemplatesFor(userId).catch(() => { /* non-fatal */ })
+  if (userId) await ensureSeededTemplatesFor(userId, session.user.email ?? '').catch(() => { /* non-fatal */ })
   // Pick up the user's chosen TZ; falls back to IST. Provided via context
   // so every client formatter (useFormatDate) in the tree is consistent.
   const userTz = userId ? (await getSetting(userId, 'TIMEZONE').catch(() => '')) || APP_TZ : APP_TZ
@@ -24,7 +24,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <div className="flex h-dvh">
         <Sidebar isAdmin={isAdmin} />
         <div className="flex flex-1 flex-col overflow-hidden">
-          <Topbar userEmail={session.user.email ?? undefined} />
+          <Topbar userEmail={session.user.email ?? undefined} isAdmin={isAdmin} />
           <main className="flex-1 overflow-auto p-4 sm:p-6">{children}</main>
         </div>
         <CommandPalette isAdmin={isAdmin} />

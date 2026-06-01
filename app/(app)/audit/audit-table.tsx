@@ -11,9 +11,12 @@ interface Row {
   // Raw timestamp passed through for date-range filtering. The displayed
   // string (createdAt) is pre-formatted in the user's TZ on the server.
   ts: number
+  // Populated only when the page is in admin "all users" scope. Empty
+  // string otherwise — the column is hidden in that case.
+  userEmail?: string
 }
 
-export function AuditTable({ rows }: { rows: Row[] }) {
+export function AuditTable({ rows, adminAll = false }: { rows: Row[]; adminAll?: boolean }) {
   const [q, setQ] = useState('')
   const [action, setAction] = useState('')
   // Date range — both bounds optional, both inclusive at day granularity.
@@ -38,7 +41,8 @@ export function AuditTable({ rows }: { rows: Row[] }) {
       if (r.ts < fromMs || r.ts > toMs) return false
       if (q.trim()) {
         const n = q.toLowerCase()
-        if (![r.action, r.detail, r.ip, r.createdAt].some((v) => v.toLowerCase().includes(n))) return false
+        const haystack = [r.action, r.detail, r.ip, r.createdAt, r.userEmail ?? '']
+        if (!haystack.some((v) => v.toLowerCase().includes(n))) return false
       }
       return true
     })
@@ -83,6 +87,7 @@ export function AuditTable({ rows }: { rows: Row[] }) {
           <thead className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
             <tr>
               <th className="px-3 py-2">Time</th>
+              {adminAll ? <th className="px-3 py-2">User</th> : null}
               <th className="px-3 py-2">Action</th>
               <th className="px-3 py-2">Detail</th>
               <th className="px-3 py-2">IP</th>
@@ -92,6 +97,7 @@ export function AuditTable({ rows }: { rows: Row[] }) {
             {filtered.map((r) => (
               <tr key={r.id} className="border-t">
                 <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">{r.createdAt}</td>
+                {adminAll ? <td className="px-3 py-2 font-mono text-xs">{r.userEmail || '—'}</td> : null}
                 <td className="px-3 py-2"><span className="rounded bg-muted px-1.5 py-0.5 text-xs">{r.action}</span></td>
                 <td className="px-3 py-2 text-muted-foreground">{r.detail || '—'}</td>
                 <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{r.ip || '—'}</td>

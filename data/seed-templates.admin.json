@@ -1,0 +1,186 @@
+{
+  "growth_formal": {
+    "category": "Growth Marketer",
+    "label": "Professional & Formal",
+    "subject": "Growth marketer — 3.2x ROAS — open to a chat?",
+    "initialMsg": "<p>Hi {{name|there}},</p><p>I work on full-funnel growth — most recently driving a <b>+35% organic traffic lift in 6 months at Edstellar</b> and <b>3.2x ROAS on a ₹30L BeatXP paid campaign</b>.</p><p>I'd like to put my hat in the ring for growth roles at <b>{{company}}</b>. A few results worth flagging:</p><ul><li>+35% organic traffic in 6 months (Edstellar, full-funnel SEO + SEM)</li><li>3.2x ROAS on a ₹30L BeatXP Meta + Google Ads campaign</li><li>Bounce rate cut from 50% → &lt;40% (Betterhalf.ai, 3-month SEO sprint)</li></ul><p>Worth a quick chat?</p>",
+    "follow1Msg": "<p>Hi {{name|there}},</p><p>Bumping my note from last week on growth roles at <b>{{company}}</b>. Would Tuesday or Thursday afternoon work for a 20-min call?</p>",
+    "lastFollowMsg": "<p>Hi {{name|there}},</p><p>Last note from me on this — if growth isn't a current priority at <b>{{company}}</b>, happy to circle back next quarter. Best of luck either way.</p>"
+  },
+  "growth_friendly": {
+    "category": "Growth Marketer",
+    "label": "Friendly & Conversational",
+    "subject": "Loved what you're building — growth marketer here",
+    "initialMsg": "<p>Hi {{name|there}},</p><p>Been watching <b>{{company}}</b> for a bit and wanted to reach out. I'm a growth marketer — my last 18 months have been full-funnel work across SEO, paid, and CRO.</p><p>A few numbers that say more than the title: <b>+35% organic at Edstellar</b>, <b>3.2x ROAS on a ₹30L BeatXP campaign</b>, and a Betterhalf.ai sprint that took bounce from 50% to under 40%.</p><p>Not pitching anything specific — just curious about the growth side at <b>{{company}}</b> and whether a conversation makes sense.</p>",
+    "follow1Msg": "<p>Hi {{name|there}},</p><p>Knew you'd be slammed — bumping this in case it got buried. Even a 15-min call next week would be great. I'll send a calendar link if it helps.</p>",
+    "lastFollowMsg": "<p>Hi {{name|there}},</p><p>I'll stop the inbox spam after this. If the timing's wrong, totally fair. If <b>{{company}}</b> ever needs a growth hand, my door's open.</p>"
+  },
+  "growth_jobpost": {
+    "category": "Growth Marketer",
+    "label": "Specific Job Posting Response",
+    "subject": "{{role_name|Growth role}} — 3.2x ROAS, +35% organic",
+    "initialMsg": "<p>Hi {{name|there}},</p><p>Applying for the <b>{{role_name|Growth role}}</b> at <b>{{company}}</b> — saw it on <b>{{platform|your careers page}}</b>.</p><p>Recent results that map to the JD:</p><ul><li>+35% organic / +20% campaign ROI at Edstellar (full-funnel SEO + SEM)</li><li>3.2x ROAS on a ₹30L BeatXP Meta + Google Ads campaign</li><li>Bounce 50% → &lt;40% at Betterhalf.ai via a 3-month SEO sprint</li></ul><p>Resume attached. Portfolio: {{portfolio_link|suryalokesh.me}}.</p>",
+    "follow1Msg": "<p>Hi {{name|there}},</p><p>Checking in on my <b>{{role_name|Growth}}</b> application. Happy to share a short Loom walking through the BeatXP campaign or the Edstellar funnel work if that's useful.</p>",
+    "lastFollowMsg": "<p>Hi {{name|there}},</p><p>Closing the loop on the <b>{{role_name|Growth}}</b> role at <b>{{company}}</b>. If it's filled, no worries — happy to be in the queue for the next opening.</p>"
+  },
+  "growth_referral": {
+    "category": "Growth Marketer",
+    "label": "Referral Based",
+    "subject": "Referred your way — growth at {{company}}",
+    "initialMsg": "<p>Hi {{name|there}},</p><p>Referred to you for growth conversations at <b>{{company}}</b>. Quick context — I run full-funnel growth, results that travel well:</p><ul><li>+35% organic in 6 months at Edstellar</li><li>3.2x ROAS, −18% CPL on a ₹30L BeatXP campaign</li><li>500+ B2B leads/month at HiringHut via paid + funnel work</li></ul><p>Open to a short call to see if there's a fit?</p>",
+    "follow1Msg": "<p>Hi {{name|there}},</p><p>Looping back on the referral. Would a 20-min slot next Tuesday or Wednesday work for you?</p>",
+    "lastFollowMsg": "<p>Hi {{name|there}},</p><p>Last nudge from me. If <b>{{company}}</b> isn't hiring on the growth side right now, totally fine — I'll keep watching the space.</p>"
+  },
+  "growth_linkedin": {
+    "category": "Growth Marketer",
+    "label": "LinkedIn Post Follow-up",
+    "subject": "Your post on retention — quick thought",
+    "initialMsg": "<p>Hi {{name|there}},</p><p>Your recent LinkedIn post stuck with me — specifically the point on retention beating acquisition. We saw the same thing at Edstellar: a 12% conversion lift came from CRO and funnel work, not new traffic.</p><p>I'm a growth marketer (+35% organic in 6mo, 3.2x ROAS on a ₹30L paid campaign) and would love to swap notes on what's working at <b>{{company}}</b>.</p>",
+    "follow1Msg": "<p>Hi {{name|there}},</p><p>Bumping my earlier note. Happy to keep it to 15 minutes if your calendar's tight.</p>",
+    "lastFollowMsg": "<p>Hi {{name|there}},</p><p>Final note — if growth chat at <b>{{company}}</b> isn't on the cards, no problem. Will keep an eye on what you post.</p>"
+  },
+  "perf_formal": {
+    "category": "Performance Marketing",
+    "label": "Professional & Formal",
+    "subject": "Performance marketer — 3.2x ROAS, −18% CPL",
+    "initialMsg": "<p>Hi {{name|there}},</p><p>Writing about performance marketing roles at <b>{{company}}</b>. Recent paid-media wins:</p><ul><li>3.2x ROAS on a ₹30L BeatXP Meta + Google Ads campaign</li><li>−18% CPL through bid management and creative A/B testing</li><li>500+ qualified B2B leads/month at HiringHut via segmented paid search</li></ul><p>Strong on GA4, attribution, and full-funnel optimisation. Worth a quick conversation?</p>",
+    "follow1Msg": "<p>Hi {{name|there}},</p><p>Bumping this. Happy to share the BeatXP campaign breakdown in a 20-min call — Tuesday or Thursday work on my side.</p>",
+    "lastFollowMsg": "<p>Hi {{name|there}},</p><p>Last note on this. If hiring's paused, happy to circle back next quarter. Wishing the team a strong run regardless.</p>"
+  },
+  "perf_friendly": {
+    "category": "Performance Marketing",
+    "label": "Friendly & Conversational",
+    "subject": "Paid media nerd — quick hello",
+    "initialMsg": "<p>Hi {{name|there}},</p><p>Genuinely enjoy this stuff — the kind of person who gets excited when a campaign clears 3x ROAS. (Most recent: ₹30L BeatXP campaign at 3.2x ROAS, −18% CPL.)</p><p>Watching <b>{{company}}</b> for a bit and curious about your paid mix. Open to a casual chat?</p>",
+    "follow1Msg": "<p>Hi {{name|there}},</p><p>Bumping this — if a quick call is too much, even a Loom exchange works for me.</p>",
+    "lastFollowMsg": "<p>Hi {{name|there}},</p><p>Closing the loop. If paid roles open up at <b>{{company}}</b> later, my door's open.</p>"
+  },
+  "perf_jobpost": {
+    "category": "Performance Marketing",
+    "label": "Specific Job Posting Response",
+    "subject": "{{role_name|Paid media}} — 3.2x ROAS on ₹30L",
+    "initialMsg": "<p>Hi {{name|there}},</p><p>Applying for the <b>{{role_name|Performance Marketing}}</b> role at <b>{{company}}</b> from <b>{{platform|your posting}}</b>.</p><ul><li>3.2x ROAS, −18% CPL on a ₹30L BeatXP Meta + Google Ads campaign</li><li>500+ qualified B2B leads/month at HiringHut</li><li>+12% conversion lift via GA4 + attribution work at Edstellar</li></ul><p>Resume attached. Portfolio: {{portfolio_link|suryalokesh.me}}.</p>",
+    "follow1Msg": "<p>Hi {{name|there}},</p><p>Checking in on the <b>{{role_name|Performance}}</b> application. Happy to walk through the BeatXP creative + bid strategy if useful.</p>",
+    "lastFollowMsg": "<p>Hi {{name|there}},</p><p>Last note on the <b>{{role_name|role}}</b>. If filled, no worries — I'll keep an eye out for the next one.</p>"
+  },
+  "perf_referral": {
+    "category": "Performance Marketing",
+    "label": "Referral Based",
+    "subject": "Referred — paid media at {{company}}",
+    "initialMsg": "<p>Hi {{name|there}},</p><p>Sent your way for performance marketing conversations at <b>{{company}}</b>.</p><ul><li>3.2x ROAS, −18% CPL on a ₹30L BeatXP campaign</li><li>500+ B2B leads/month at HiringHut</li><li>Strong on GA4, attribution, and budget allocation across Google + Meta + LinkedIn Ads</li></ul><p>20-min call to see if there's a fit?</p>",
+    "follow1Msg": "<p>Hi {{name|there}},</p><p>Bumping the referral note. Tuesday afternoon or Thursday morning work on my side.</p>",
+    "lastFollowMsg": "<p>Hi {{name|there}},</p><p>Last note — if performance roles aren't on the horizon at <b>{{company}}</b>, no problem at all.</p>"
+  },
+  "perf_linkedin": {
+    "category": "Performance Marketing",
+    "label": "LinkedIn Post Follow-up",
+    "subject": "Your post on iOS attribution — quick thought",
+    "initialMsg": "<p>Hi {{name|there}},</p><p>Your recent LinkedIn post resonated — the attribution piece especially. Lived that pain on the BeatXP ₹30L campaign (eventually landed 3.2x ROAS and −18% CPL once attribution windows were sorted).</p><p>Would love to compare notes on what's working at <b>{{company}}</b> right now.</p>",
+    "follow1Msg": "<p>Hi {{name|there}},</p><p>Bumping this — 15 min is plenty if your calendar's tight.</p>",
+    "lastFollowMsg": "<p>Hi {{name|there}},</p><p>Final note. If paid-side chat at <b>{{company}}</b> isn't on the cards, no problem.</p>"
+  },
+  "seo_formal": {
+    "category": "SEO Analyst",
+    "label": "Professional & Formal",
+    "subject": "SEO Analyst — 15 page-1 rankings in 3 months",
+    "initialMsg": "<p>Hi {{name|there}},</p><p>Writing about SEO roles at <b>{{company}}</b>. Recent results:</p><ul><li>15 first-page rankings in 3 months at Betterhalf.ai</li><li>+15% page-speed uplift via Core Web Vitals work at Edstellar (200+ pages)</li><li>+20–30% crawl efficiency from technical audits on Shaadi.com, EaseMyTrip, CarWale</li></ul><p>Strong on technical SEO, GA4, and GEO (Generative Engine Optimisation). Worth a chat?</p>",
+    "follow1Msg": "<p>Hi {{name|there}},</p><p>Bumping this. Happy to send a sample audit deck for one of <b>{{company}}</b>'s pages ahead of any call.</p>",
+    "lastFollowMsg": "<p>Hi {{name|there}},</p><p>Closing the loop. If SEO hiring's paused at <b>{{company}}</b>, happy to be in the queue for the next round.</p>"
+  },
+  "seo_friendly": {
+    "category": "SEO Analyst",
+    "label": "Friendly & Conversational",
+    "subject": "SEO nerd — page-1 in 3 months at Betterhalf",
+    "initialMsg": "<p>Hi {{name|there}},</p><p>I'm the kind of person who looks at a site and immediately checks the robots.txt. Recent wins: <b>15 page-1 rankings for Betterhalf.ai in 3 months</b>, <b>+15% page-speed on 200+ pages at Edstellar</b>, technical audits on Shaadi/EaseMyTrip/CarWale that surfaced 20–30% crawl wins.</p><p>What's the SEO story at <b>{{company}}</b> right now? Curious — open to a casual chat.</p>",
+    "follow1Msg": "<p>Hi {{name|there}},</p><p>Bumping this. I'll keep it to 15 min and lead with the Betterhalf playbook if it'd help.</p>",
+    "lastFollowMsg": "<p>Hi {{name|there}},</p><p>Last note from me — if SEO isn't a current priority, totally fair. Will keep watching <b>{{company}}</b>.</p>"
+  },
+  "seo_jobpost": {
+    "category": "SEO Analyst",
+    "label": "Specific Job Posting Response",
+    "subject": "{{role_name|SEO Analyst}} — 15 page-1 rankings, +35% organic",
+    "initialMsg": "<p>Hi {{name|there}},</p><p>Applying for the <b>{{role_name|SEO Analyst}}</b> role at <b>{{company}}</b> from <b>{{platform|your posting}}</b>.</p><ul><li>+35% organic traffic in 6 months at Edstellar (technical + on-page SEO across 200+ pages)</li><li>15 first-page rankings in 3 months at Betterhalf.ai</li><li>+20–30% crawl efficiency from audits on Shaadi.com, EaseMyTrip, CarWale</li></ul><p>Resume attached. Portfolio: {{portfolio_link|suryalokesh.me}}.</p>",
+    "follow1Msg": "<p>Hi {{name|there}},</p><p>Following up on the <b>{{role_name|SEO}}</b> application. Happy to share a sample audit for one of your URLs if that's useful.</p>",
+    "lastFollowMsg": "<p>Hi {{name|there}},</p><p>Final note on the <b>{{role_name|SEO}}</b> role. If it's gone, no worries — happy to be considered for the next one.</p>"
+  },
+  "seo_referral": {
+    "category": "SEO Analyst",
+    "label": "Referral Based",
+    "subject": "Referred — SEO conversation at {{company}}",
+    "initialMsg": "<p>Hi {{name|there}},</p><p>Sent your way for SEO at <b>{{company}}</b>. Quick context:</p><ul><li>15 first-page rankings in 3 months (Betterhalf.ai)</li><li>+15% page speed across 200+ pages (Edstellar, Core Web Vitals)</li><li>+20–30% crawl efficiency from multi-brand technical audits</li></ul><p>Open to a 20-min chat?</p>",
+    "follow1Msg": "<p>Hi {{name|there}},</p><p>Bumping the referral note. Any window next week that works?</p>",
+    "lastFollowMsg": "<p>Hi {{name|there}},</p><p>Final note from me. If SEO isn't open at <b>{{company}}</b> right now, no worries.</p>"
+  },
+  "seo_linkedin": {
+    "category": "SEO Analyst",
+    "label": "LinkedIn Post Follow-up",
+    "subject": "Your post on GEO — quick thought",
+    "initialMsg": "<p>Hi {{name|there}},</p><p>Your LinkedIn post on Generative Engine Optimisation hit home — that's where I've been spending recent cycles too (schema markup, FAQ blocks, structured data for AI Overviews).</p><p>For context: 15 page-1 rankings at Betterhalf.ai in 3 months, +15% page speed across 200+ Edstellar pages. Would love to compare notes on <b>{{company}}</b>'s approach.</p>",
+    "follow1Msg": "<p>Hi {{name|there}},</p><p>Bumping this — 15 min is plenty.</p>",
+    "lastFollowMsg": "<p>Hi {{name|there}},</p><p>Last note from me. If SEO chat at <b>{{company}}</b> isn't on the table, no problem.</p>"
+  },
+  "dm_formal": {
+    "category": "Digital Marketing Executive",
+    "label": "Professional & Formal",
+    "subject": "Digital marketer — 35% organic, 3.2x ROAS",
+    "initialMsg": "<p>Hi {{name|there}},</p><p>Writing about digital marketing roles at <b>{{company}}</b>. Cross-functional results — SEO, paid, analytics:</p><ul><li>+20% campaign ROI at Edstellar via integrated SEO + SEM</li><li>3.2x ROAS on a ₹30L BeatXP paid campaign</li><li>+12% conversion lift from GA4 dashboards and CRO work</li></ul><p>Worth a quick chat?</p>",
+    "follow1Msg": "<p>Hi {{name|there}},</p><p>Following up. Tuesday or Thursday next week work for a 20-min call?</p>",
+    "lastFollowMsg": "<p>Hi {{name|there}},</p><p>Last note. If hiring's on pause at <b>{{company}}</b>, happy to circle back next quarter.</p>"
+  },
+  "dm_friendly": {
+    "category": "Digital Marketing Executive",
+    "label": "Friendly & Conversational",
+    "subject": "Full-stack marketer — quick hello",
+    "initialMsg": "<p>Hi {{name|there}},</p><p>Can't pick a favourite channel — SEO, paid, analytics, content all light me up. Numbers that say more than words: <b>+35% organic at Edstellar</b>, <b>3.2x ROAS on a ₹30L BeatXP campaign</b>, <b>500+ B2B leads/month at HiringHut</b>.</p><p>What's the marketing setup like at <b>{{company}}</b>? Open to a casual chat.</p>",
+    "follow1Msg": "<p>Hi {{name|there}},</p><p>Bumping this — 15 min works fine if calendars are tight.</p>",
+    "lastFollowMsg": "<p>Hi {{name|there}},</p><p>Last note. If <b>{{company}}</b> needs a versatile hand later, I'd love to reconnect.</p>"
+  },
+  "dm_jobpost": {
+    "category": "Digital Marketing Executive",
+    "label": "Specific Job Posting Response",
+    "subject": "{{role_name|Digital Marketing}} — 35% organic + 3.2x ROAS",
+    "initialMsg": "<p>Hi {{name|there}},</p><p>Applying for the <b>{{role_name|Digital Marketing}}</b> role at <b>{{company}}</b> from <b>{{platform|your posting}}</b>.</p><ul><li>+20% campaign ROI at Edstellar (integrated SEO + SEM + analytics)</li><li>3.2x ROAS on a ₹30L BeatXP campaign</li><li>500+ qualified B2B leads/month at HiringHut</li></ul><p>Resume attached. Portfolio: {{portfolio_link|suryalokesh.me}}.</p>",
+    "follow1Msg": "<p>Hi {{name|there}},</p><p>Following up on the <b>{{role_name}}</b> application. Happy to share a short Loom on the integrated funnel work at Edstellar if useful.</p>",
+    "lastFollowMsg": "<p>Hi {{name|there}},</p><p>Closing the loop on <b>{{role_name|the role}}</b>. If it's filled, no problem — would still appreciate being in the queue for the next opening.</p>"
+  },
+  "dm_referral": {
+    "category": "Digital Marketing Executive",
+    "label": "Referral Based",
+    "subject": "Referred — digital marketing at {{company}}",
+    "initialMsg": "<p>Hi {{name|there}},</p><p>Sent your way for digital marketing conversations at <b>{{company}}</b>.</p><ul><li>+20% campaign ROI at Edstellar via integrated SEO + SEM</li><li>3.2x ROAS on a ₹30L BeatXP paid campaign</li><li>+12% conversion lift from GA4 + CRO work</li></ul><p>Worth a 20-min chat?</p>",
+    "follow1Msg": "<p>Hi {{name|there}},</p><p>Bumping the referral note. Tuesday or Wednesday next week work?</p>",
+    "lastFollowMsg": "<p>Hi {{name|there}},</p><p>Last note. If nothing's open at <b>{{company}}</b> right now, no worries.</p>"
+  },
+  "dm_linkedin": {
+    "category": "Digital Marketing Executive",
+    "label": "LinkedIn Post Follow-up",
+    "subject": "Your post on full-funnel — quick thought",
+    "initialMsg": "<p>Hi {{name|there}},</p><p>Your LinkedIn post on full-funnel ownership landed — I've been living that at Edstellar (SEO + SEM + GA4 attribution, +20% campaign ROI).</p><p>Would love to compare notes on <b>{{company}}</b>'s setup.</p>",
+    "follow1Msg": "<p>Hi {{name|there}},</p><p>Bumping this — happy with a 15-min slot.</p>",
+    "lastFollowMsg": "<p>Hi {{name|there}},</p><p>Last note. If a chat doesn't make sense right now, no problem.</p>"
+  },
+  "universal_short_cold": {
+    "category": "Universal",
+    "label": "Short Cold (LinkedIn DM-Style)",
+    "subject": "3.2x ROAS on a ₹30L campaign — open to chat?",
+    "initialMsg": "<p>Hi {{name|there}}, ran a ₹30L BeatXP paid campaign to 3.2x ROAS and drove +35% organic at Edstellar in 6 months. Worth a 15-min chat about <b>{{company}}</b>?</p>",
+    "follow1Msg": "<p>Hi {{name|there}}, bumping this — even a Loom exchange works if calendars are tight.</p>",
+    "lastFollowMsg": "<p>Hi {{name|there}}, last nudge. No worries if timing's off.</p>"
+  },
+  "universal_thankyou": {
+    "category": "Universal",
+    "label": "Thank You (Post-Interview)",
+    "subject": "Thanks for your time today",
+    "initialMsg": "<p>Hi {{name|there}},</p><p>Thanks for the conversation about <b>{{role_name|the role}}</b> at <b>{{company}}</b>. Enjoyed it — came away more excited about the work and the team.</p><p>One follow-up thought from the call: happy to share my Betterhalf.ai SEO playbook or the BeatXP campaign breakdown if either would be useful context for the next round.</p>",
+    "follow1Msg": "",
+    "lastFollowMsg": ""
+  },
+  "universal_reengage": {
+    "category": "Universal",
+    "label": "60-Day Re-engagement",
+    "subject": "Following up from a couple of months ago",
+    "initialMsg": "<p>Hi {{name|there}},</p><p>We spoke (or I reached out) about <b>{{company}}</b> a couple of months back — wanted to circle back. A few things on my side since then worth flagging:</p><ul><li>Most recent campaign closed at 3.2x ROAS on a ₹30L budget</li><li>15 first-page rankings landed for a separate SEO sprint</li></ul><p>If anything's changed on your side, happy to chat. If not, no worries — I'll keep watching <b>{{company}}</b>.</p>",
+    "follow1Msg": "<p>Hi {{name|there}},</p><p>Bumping this re-engage note in case it got buried.</p>",
+    "lastFollowMsg": "<p>Hi {{name|there}},</p><p>Closing the loop fully on this one. If <b>{{company}}</b> ever needs a growth hand, my inbox is open.</p>"
+  }
+}

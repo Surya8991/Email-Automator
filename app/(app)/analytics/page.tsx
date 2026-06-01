@@ -1,17 +1,19 @@
 import { requireUser } from '@/auth'
-import { dailySeries, kpis, breakdownByTemplate, breakdownByTag, breakdownByCampaign, sendTimeHeatmap } from '@/server/services/analytics'
+import { dailySeries, kpis, breakdownByTemplate, breakdownByTag, breakdownByCampaign, sendTimeHeatmap, pipelineKpis } from '@/server/services/analytics'
 import { Heatmap } from './heatmap'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Chart } from './chart'
 
 export default async function AnalyticsPage() {
   const u = await requireUser()
-  const [k, series, byTpl, byTag, byCamp, heatmap] = await Promise.all([
+  const [k, series, byTpl, byTag, byCamp, heatmap, pipeline] = await Promise.all([
     kpis(u.id), dailySeries(u.id, 14),
     breakdownByTemplate(u.id, 30),
     breakdownByTag(u.id, 30),
     breakdownByCampaign(u.id, 30),
     sendTimeHeatmap(u.id, 30),
+    // Admin-only pipeline row — non-admins get the work skipped.
+    u.isAdmin ? pipelineKpis(u.id) : Promise.resolve(null),
   ])
   // Pivot rows into one row per day with one column per kind for Recharts.
   type DayRow = { day: string; sent: number; open: number; click: number; reply: number; bounce: number; [k: string]: string | number }
@@ -32,6 +34,15 @@ export default async function AnalyticsPage() {
         <Card><CardHeader><CardTitle className="text-sm">Click rate</CardTitle></CardHeader><CardContent className="text-2xl font-semibold">{(k.clickRate * 100).toFixed(1)}%</CardContent></Card>
         <Card><CardHeader><CardTitle className="text-sm">Reply rate</CardTitle></CardHeader><CardContent className="text-2xl font-semibold">{(k.replyRate * 100).toFixed(1)}%</CardContent></Card>
       </div>
+      {pipeline && (
+        <div className="grid gap-4 grid-cols-2 md:grid-cols-5">
+          <Card><CardHeader><CardTitle className="text-sm">Total applied</CardTitle></CardHeader><CardContent className="text-2xl font-semibold">{pipeline.applied}</CardContent></Card>
+          <Card><CardHeader><CardTitle className="text-sm">Active pipeline</CardTitle></CardHeader><CardContent className="text-2xl font-semibold">{pipeline.pipeline}</CardContent></Card>
+          <Card><CardHeader><CardTitle className="text-sm">Offers</CardTitle></CardHeader><CardContent className="text-2xl font-semibold">{pipeline.offers}</CardContent></Card>
+          <Card><CardHeader><CardTitle className="text-sm">Response rate</CardTitle></CardHeader><CardContent className="text-2xl font-semibold">{(pipeline.responseRate * 100).toFixed(1)}%</CardContent></Card>
+          <Card><CardHeader><CardTitle className="text-sm">Rejections</CardTitle></CardHeader><CardContent className="text-2xl font-semibold">{pipeline.rejections}</CardContent></Card>
+        </div>
+      )}
       <Card>
         <CardHeader><CardTitle>Last 14 days</CardTitle></CardHeader>
         <CardContent><Chart data={data} /></CardContent>

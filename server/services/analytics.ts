@@ -1,6 +1,6 @@
 import { and, eq, gte, sql } from 'drizzle-orm'
 import { db } from '@/server/db/client'
-import { events, contacts, drafts } from '@/server/db/schema'
+import { events, contacts, drafts, users, templates, campaigns } from '@/server/db/schema'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -30,6 +30,77 @@ export async function kpis(userId: string) {
     openRate: rate(opens), clickRate: rate(clicks), replyRate: rate(replies), bounceRate: rate(bounces),
     totalContacts, pendingDrafts,
   }
+}
+
+// Instance-wide totals for the admin landing page. Six COUNTs fired in
+// parallel. No per-user scoping — caller MUST be admin (gated in the page).
+export async function systemStats() {
+  const since30 = Date.now() - 30 * DAY_MS
+  const [u, c, t, d, sent30, cAct] = await Promise.all([
+    db.select({ n: sql<number>`COUNT(*)` }).from(users),
+    db.select({ n: sql<number>`COUNT(*)` }).from(contacts),
+    db.select({ n: sql<number>`COUNT(*)` }).from(templates),
+    db.select({ n: sql<number>`COUNT(*)` }).from(drafts).where(eq(drafts.status, 'draft')),
+    db.select({ n: sql<number>`COUNT(*)` }).from(events).where(and(eq(events.kind, 'sent'), gte(events.ts, since30))),
+    db.select({ n: sql<number>`COUNT(*)` }).from(campaigns).where(eq(campaigns.status, 'active')),
+  ])
+  return {
+    users: Number(u[0]?.n ?? 0),
+    contacts: Number(c[0]?.n ?? 0),
+    templates: Number(t[0]?.n ?? 0),
+    draftsPending: Number(d[0]?.n ?? 0),
+    sent30d: Number(sent30[0]?.n ?? 0),
+    activeCampaigns: Number(cAct[0]?.n ?? 0),
+  }
+}
+
+// Per-user counts in 3 grouped queries instead of N+1. Returns a Map keyed
+// by userId so the admin page can stitch counts onto its user list.
+export async function perUserStats(): Promise<Map<string, { contacts: number; drafts: number; events: number }>> {
+  const [c, d, e] = await Promise.all([
+    db.select({ uid: contacts.userId, n: sql<number>`COUNT(*)` })
+      .from(contacts).groupBy(contacts.userId),
+    db.select({ uid: drafts.userId, n: sql<number>`COUNT(*)` })
+      .from(drafts).groupBy(drafts.userId),
+    db.select({ uid: events.userId, n: sql<number>`COUNT(*)` })
+      .from(events).groupBy(events.userId),
+  ])
+  const out = new Map<string, { contacts: number; drafts: number; events: number }>()
+  const ensure = (uid: string) => {
+    let row = out.get(uid)
+    if (!row) { row = { contacts: 0, drafts: 0, events: 0 }; out.set(uid, row) }
+    return row
+  }
+  for (const r of c) ensure(String(r.uid)).contacts = Number(r.n ?? 0)
+  for (const r of d) ensure(String(r.uid)).drafts = Number(r.n ?? 0)
+  for (const r of e) ensure(String(r.uid)).events = Number(r.n ?? 0)
+  return out
+}
+
+// Job-search pipeline snapshot — counts contacts grouped by status. Used
+// by the admin-only KPI row on /analytics. Status strings follow the
+// Universal Job Tracker convention (Applied / Phone Screen / Interview 1 /
+// Interview 2 / Final Round / Offer* / Hired / Reject* / Not Applied).
+export async function pipelineKpis(userId: string) {
+  const rows = await db
+    .select({ status: contacts.status, n: sql<number>`COUNT(*)` })
+    .from(contacts)
+    .where(eq(contacts.userId, userId))
+    .groupBy(contacts.status)
+  const buckets = { applied: 0, pipeline: 0, offers: 0, rejections: 0 }
+  const PIPELINE = new Set(['Applied', 'Phone Screen', 'Interview 1', 'Interview 2', 'Final Round'])
+  for (const r of rows) {
+    const s = String(r.status ?? '')
+    const n = Number(r.n ?? 0)
+    if (!s || s === 'Not Applied') continue
+    buckets.applied += n
+    if (PIPELINE.has(s)) buckets.pipeline += n
+    else if (/^Offer/i.test(s) || s === 'Hired') buckets.offers += n
+    else if (/^Reject/i.test(s)) buckets.rejections += n
+  }
+  const responded = buckets.pipeline + buckets.offers + buckets.rejections
+  const responseRate = buckets.applied > 0 ? responded / buckets.applied : 0
+  return { ...buckets, responseRate }
 }
 
 export async function dailySeries(userId: string, days = 14) {

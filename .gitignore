@@ -11,10 +11,13 @@ build
 # DB / data
 *.db
 *.db-journal
-data/
+# Ignore contents of data/ (sqlite, runtime artifacts) but keep the
+# directory traversable so explicit allowlists below can re-include files.
+data/*
 # …but DO ship the seed templates — onboarding loads them at first sign-in,
-# and Vercel needs the file in the build to populate new users' libraries.
+# and Vercel needs the files in the build to populate new users' libraries.
 !data/seed-templates.json
+!data/seed-templates.admin.json
 
 # logs
 *.log
@@ -32,3 +35,7 @@ coverage
 
 # Sub-agent ephemeral scratch (created by code-review tooling)
 .agentmaster/
+
+# Personal resumes — never ship
+*.pdf
+Surya_L_Resume_*

@@ -1,7 +1,7 @@
 'use client'
-import { useState, useTransition } from 'react'
+import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { ChevronDown, ChevronUp, Pause, Play, Trash2, UserPlus, Archive, X } from 'lucide-react'
+import { ChevronDown, ChevronUp, Pause, Play, Trash2, UserPlus, Archive, X, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -40,6 +40,21 @@ export function CampaignDetail({ campaign, steps, enrollments, templates, tags, 
 
   // Enroll form
   const [tag, setTag] = useState<string>('')
+
+  // Enrollment filters — client-side. The list can grow into the thousands
+  // once a tag-based enroll fans out, so we cap the rendered slice and let
+  // the user filter to find specific rows.
+  const [enrQ, setEnrQ] = useState('')
+  const [enrStatus, setEnrStatus] = useState<'all' | 'active' | 'paused' | 'done' | 'errored'>('all')
+  const enrStatuses = useMemo(() => Array.from(new Set(enrollments.map((e) => e.status))).sort(), [enrollments])
+  const filteredEnrollments = useMemo(() => {
+    const q = enrQ.trim()
+    return enrollments.filter((e) => {
+      if (enrStatus !== 'all' && e.status !== enrStatus) return false
+      if (q && !String(e.contactId).includes(q) && !e.status.toLowerCase().includes(q.toLowerCase())) return false
+      return true
+    })
+  }, [enrollments, enrQ, enrStatus])
 
   const tplName = (id: number | null) => templates.find((t) => t.id === id)?.label ?? '— deleted template —'
 
@@ -198,25 +213,47 @@ export function CampaignDetail({ campaign, steps, enrollments, templates, tags, 
             {enrollments.length === 0 ? (
               <p className="text-sm text-muted-foreground">No contacts enrolled yet.</p>
             ) : (
-              <table className="w-full text-sm">
-                <thead className="text-left text-xs uppercase text-muted-foreground">
-                  <tr><th className="p-1">Contact</th><th className="p-1">Step</th><th className="p-1">Next run</th><th className="p-1">Status</th></tr>
-                </thead>
-                <tbody>
-                  {enrollments.slice(0, 50).map((e) => (
-                    <tr key={e.id} className="border-t">
-                      <td className="p-1 font-mono text-xs">#{e.contactId}</td>
-                      <td className="p-1">{e.currentStep + 1} / {steps.length}</td>
-                      <td className="p-1 text-muted-foreground">{formatDate(e.nextRunAt)}</td>
-                      <td className="p-1 text-xs text-muted-foreground">{e.status}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <>
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <div className="relative max-w-xs flex-1">
+                    <Search className="pointer-events-none absolute left-2 top-2 h-3.5 w-3.5 text-muted-foreground" />
+                    <Input value={enrQ} onChange={(e) => setEnrQ(e.target.value)}
+                      placeholder="Search contact # or status…" className="h-7 pl-7 text-xs" />
+                  </div>
+                  <select value={enrStatus} onChange={(e) => setEnrStatus(e.target.value as typeof enrStatus)}
+                    className="h-7 rounded-md border bg-background px-2 text-xs">
+                    <option value="all">All statuses</option>
+                    {enrStatuses.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                  <span className="ml-auto text-xs text-muted-foreground">
+                    {filteredEnrollments.length === enrollments.length
+                      ? `${enrollments.length} total`
+                      : `${filteredEnrollments.length}/${enrollments.length}`}
+                  </span>
+                </div>
+                <table className="w-full text-sm">
+                  <thead className="text-left text-xs uppercase text-muted-foreground">
+                    <tr><th className="p-1">Contact</th><th className="p-1">Step</th><th className="p-1">Next run</th><th className="p-1">Status</th></tr>
+                  </thead>
+                  <tbody>
+                    {filteredEnrollments.slice(0, 200).map((e) => (
+                      <tr key={e.id} className="border-t">
+                        <td className="p-1 font-mono text-xs">#{e.contactId}</td>
+                        <td className="p-1">{e.currentStep + 1} / {steps.length}</td>
+                        <td className="p-1 text-muted-foreground">{formatDate(e.nextRunAt)}</td>
+                        <td className="p-1 text-xs text-muted-foreground">{e.status}</td>
+                      </tr>
+                    ))}
+                    {filteredEnrollments.length === 0 ? (
+                      <tr><td colSpan={4} className="p-3 text-center text-xs text-muted-foreground">No enrollments match.</td></tr>
+                    ) : null}
+                  </tbody>
+                </table>
+                {filteredEnrollments.length > 200 ? (
+                  <p className="mt-2 text-xs text-muted-foreground">Showing first 200 of {filteredEnrollments.length} — narrow the filter to see more.</p>
+                ) : null}
+              </>
             )}
-            {enrollments.length > 50 ? (
-              <p className="mt-2 text-xs text-muted-foreground">…and {enrollments.length - 50} more.</p>
-            ) : null}
           </div>
         </CardContent>
       </Card>

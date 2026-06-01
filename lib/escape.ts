@@ -23,18 +23,24 @@ export function assertNoCrlf(name: string, s: unknown): asserts s is string {
   }
 }
 
-const PLACEHOLDER_RE = /\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g
+// Supports {{var}} and {{var|fallback}}. Fallback kicks in when the value
+// is null, undefined, or an empty/whitespace string — so a CSV row missing
+// `name` renders "Hi there," instead of "Hi ,".
+const PLACEHOLDER_RE = /\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*\|\s*([^}]*?))?\s*\}\}/g
 
 /**
- * Replace {{var}} placeholders in `template`.
+ * Replace {{var}} (and {{var|fallback}}) placeholders in `template`.
  *   - mode 'subject' → values are CRLF-stripped (header safety)
  *   - mode 'html'    → values are HTML-escaped (XSS safety in email body)
  *   - mode 'text'    → no escaping (use only for plain-text bodies)
  */
 export function personalize(template: string, data: Record<string, unknown>, mode: 'subject' | 'html' | 'text' = 'html'): string {
   if (!template) return ''
-  return template.replace(PLACEHOLDER_RE, (_, key) => {
-    const raw = data[key]
+  return template.replace(PLACEHOLDER_RE, (_, key, fallback) => {
+    let raw = data[key]
+    if (raw === null || raw === undefined || (typeof raw === 'string' && raw.trim() === '')) {
+      raw = fallback ?? ''
+    }
     if (mode === 'subject') return stripCrlf(raw)
     if (mode === 'text') return raw === null || raw === undefined ? '' : String(raw)
     return htmlEscape(raw)
