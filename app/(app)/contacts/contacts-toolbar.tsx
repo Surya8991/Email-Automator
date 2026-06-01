@@ -1,9 +1,13 @@
 'use client'
 import { useRef, useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
-import { Download, Upload, RotateCcw, FileText, X } from 'lucide-react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { toast } from 'sonner'
+import { Download, Upload, RotateCcw, FileText, X, Copy, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { importContactsAction, resetStatusAction } from '@/server/actions/contacts'
+import {
+  importContactsAction, resetStatusAction,
+  dedupeContactsAction, deleteAllContactsAction, deleteFilteredContactsAction,
+} from '@/server/actions/contacts'
 
 interface ImportReport {
   imported: number; duplicates: number; rejected: number; total: number
@@ -12,12 +16,25 @@ interface ImportReport {
 
 export function ContactsToolbar() {
   const router = useRouter()
+  const sp = useSearchParams()
   const fileRef = useRef<HTMLInputElement>(null)
   const [pending, start] = useTransition()
   const [msg, setMsg] = useState<string | null>(null)
   // Detailed report from the last import. Shown as a collapsible card so
   // the user can see exactly which rows the parser rejected and why.
   const [report, setReport] = useState<ImportReport | null>(null)
+
+  // Snapshot the current filter set so "Delete matching" targets exactly
+  // what the user sees, not the whole table.
+  const filters = {
+    search: sp.get('search') ?? '',
+    tag: sp.get('tag') ?? '',
+    status: sp.get('status') ?? '',
+    company: sp.get('company') ?? '',
+    location: sp.get('location') ?? '',
+    platform: sp.get('platform') ?? '',
+  }
+  const hasFilter = Object.values(filters).some(Boolean)
 
   return (
     <div className="space-y-2">
@@ -67,6 +84,61 @@ export function ContactsToolbar() {
           start(async () => { await resetStatusAction(); router.refresh(); setMsg('Status reset') })
         }}>
         <RotateCcw className="mr-1.5 h-4 w-4" /> Reset status
+      </Button>
+      <Button variant="ghost" size="sm" disabled={pending}
+        title="Find rows with duplicate emails and keep only the oldest one per email"
+        onClick={() => {
+          if (!confirm('Scan all contacts and remove duplicate-email rows? The oldest occurrence per email is kept.')) return
+          start(async () => {
+            const r = await dedupeContactsAction()
+            router.refresh()
+            if ('removed' in r) {
+              const summary = r.removed === 0
+                ? 'No duplicates found.'
+                : `Removed ${r.removed} duplicate row${r.removed === 1 ? '' : 's'} across ${r.affectedEmails} email${r.affectedEmails === 1 ? '' : 's'}.`
+              toast.success(summary)
+              setMsg(summary)
+            }
+          })
+        }}>
+        <Copy className="mr-1.5 h-4 w-4" /> Dedupe
+      </Button>
+      {hasFilter ? (
+        <Button variant="ghost" size="sm" disabled={pending}
+          title="Delete every contact matching the current filter set"
+          onClick={() => {
+            const summary = Object.entries(filters).filter(([, v]) => v)
+              .map(([k, v]) => `${k}=${v}`).join(' · ')
+            if (!confirm(`Delete EVERY contact matching:\n  ${summary}\n\nThis cannot be undone. Continue?`)) return
+            start(async () => {
+              const r = await deleteFilteredContactsAction(filters)
+              router.refresh()
+              if ('deleted' in r) {
+                toast.success(`Deleted ${r.deleted} contact${r.deleted === 1 ? '' : 's'} matching the filter.`)
+                setMsg(`Deleted ${r.deleted} matching contacts.`)
+              }
+            })
+          }}>
+          <Trash2 className="mr-1.5 h-4 w-4" /> Delete matching
+        </Button>
+      ) : null}
+      <Button variant="ghost" size="sm" disabled={pending}
+        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+        title="Delete every contact in your account"
+        onClick={() => {
+          if (!confirm('DELETE EVERY CONTACT in your account? This cannot be undone.')) return
+          const phrase = prompt('Type DELETE ALL to confirm:')
+          if (phrase !== 'DELETE ALL') { setMsg('Cancelled — phrase did not match.'); return }
+          start(async () => {
+            const r = await deleteAllContactsAction()
+            router.refresh()
+            if ('deleted' in r) {
+              toast.success(`Deleted ${r.deleted} contact${r.deleted === 1 ? '' : 's'}.`)
+              setMsg(`Deleted ${r.deleted} contacts.`)
+            }
+          })
+        }}>
+        <Trash2 className="mr-1.5 h-4 w-4" /> Delete all
       </Button>
       {msg ? <span className="text-xs text-muted-foreground">{msg}</span> : null}
       </div>

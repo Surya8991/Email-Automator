@@ -88,6 +88,36 @@ describe('contacts service', () => {
   })
 })
 
+describe('contacts dedupe + delete-all', () => {
+  it('dedupeContacts keeps the oldest row per email and removes the rest', async () => {
+    const u = await newUser()
+    // Three rows for the same email (different case) + one unique.
+    await db.insert(schema.contacts).values({ userId: u, recruiterEmail: 'dup@x.co', recruiterName: 'first' })
+    await db.insert(schema.contacts).values({ userId: u, recruiterEmail: 'DUP@x.co', recruiterName: 'second' })
+    await db.insert(schema.contacts).values({ userId: u, recruiterEmail: 'dup@x.co', recruiterName: 'third' })
+    await db.insert(schema.contacts).values({ userId: u, recruiterEmail: 'unique@x.co', recruiterName: 'solo' })
+    const r = await services.dedupeContacts(u)
+    expect(r.removed).toBe(2)
+    expect(r.affectedEmails).toBe(1)
+    const rows = await db.select().from(schema.contacts).where(eq(schema.contacts.userId, u))
+    expect(rows.length).toBe(2)
+    // The oldest row (recruiterName 'first') survived.
+    expect(rows.find((c) => c.recruiterEmail === 'dup@x.co')?.recruiterName).toBe('first')
+  })
+
+  it('deleteAllContacts wipes everything for the user but spares other users', async () => {
+    const u1 = await newUser()
+    const u2 = await newUser()
+    await services.addContact(u1, { recruiterEmail: 'a@x.co' })
+    await services.addContact(u1, { recruiterEmail: 'b@x.co' })
+    await services.addContact(u2, { recruiterEmail: 'c@x.co' })
+    const n = await services.deleteAllContacts(u1)
+    expect(n).toBe(2)
+    expect((await services.listContacts(u1)).total).toBe(0)
+    expect((await services.listContacts(u2)).total).toBe(1)
+  })
+})
+
 describe('analytics.systemStats + perUserStats', () => {
   it('systemStats sums across all users', async () => {
     const u1 = await newUser()

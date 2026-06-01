@@ -9,12 +9,19 @@ import { ContactsTable } from './contacts-table'
 import { AddContactDialog } from './add-contact-dialog'
 import { ContactsToolbar } from './contacts-toolbar'
 
-export default async function ContactsPage(props: { searchParams: Promise<{ page?: string; search?: string; tag?: string; status?: string; company?: string; location?: string; platform?: string }> }) {
+// Valid page sizes — kept in lockstep with the UI selector. Anything
+// outside this list falls back to 50 to prevent URL-driven over-fetch.
+const PAGE_SIZES = [50, 100, 500, 1000]
+
+export default async function ContactsPage(props: { searchParams: Promise<{ page?: string; pageSize?: string; search?: string; tag?: string; status?: string; company?: string; location?: string; platform?: string }> }) {
   const search = await props.searchParams
   const u = await requireUser()
+  const requestedSize = Number(search.pageSize ?? 50)
+  const pageSize = PAGE_SIZES.includes(requestedSize) ? requestedSize : 50
   const [data, allTags, companies, locations, platforms, rawCfKeys] = await Promise.all([
     listContacts(u.id, {
       page: Number(search.page ?? 1),
+      pageSize,
       search: search.search ?? '',
       tag: search.tag ?? '',
       status: search.status ?? '',
@@ -56,6 +63,8 @@ export default async function ContactsPage(props: { searchParams: Promise<{ page
               rows={data.rows}
               page={data.page}
               pages={data.pages}
+              pageSize={pageSize}
+              total={data.total}
               search={search.search ?? ''}
               tag={search.tag ?? ''}
               status={search.status ?? ''}

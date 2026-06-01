@@ -55,6 +55,36 @@ export async function deleteContactsBulkAction(ids: number[]) {
   return { ok: true, deleted: ids.length }
 }
 
+// Wipe everything (no filter) — caller MUST double-confirm in the UI.
+export async function deleteAllContactsAction() {
+  const u = await requireUser()
+  const n = await svc.deleteAllContacts(u.id)
+  revalidatePath('/contacts')
+  revalidatePath('/admin')
+  return { ok: true, deleted: n }
+}
+
+// Wipe rows matching the current filter set — caller MUST confirm with
+// the count visible. Filters mirror listContacts opts.
+export async function deleteFilteredContactsAction(opts: {
+  search?: string; tag?: string; status?: string
+  company?: string; location?: string; platform?: string
+}) {
+  const u = await requireUser()
+  const n = await svc.deleteFilteredContacts(u.id, opts)
+  revalidatePath('/contacts')
+  return { ok: true, deleted: n }
+}
+
+// Remove duplicate-email rows for the current user, keeping the oldest
+// (lowest-id) one per email. Idempotent — re-running returns 0 removed.
+export async function dedupeContactsAction() {
+  const u = await requireUser()
+  const r = await svc.dedupeContacts(u.id)
+  revalidatePath('/contacts')
+  return { ok: true, ...r }
+}
+
 // Bulk-tag the selected contacts. `add` and `remove` are comma-separated.
 export async function bulkTagAction(ids: number[], add: string, remove: string) {
   const u = await requireUser()

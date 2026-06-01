@@ -14,11 +14,13 @@ import { scheduleFollowupAction, createDraftsForSelectedAction } from '@/server/
 import { ContactTimeline } from './contact-timeline'
 
 interface Props {
-  rows: Contact[]; page: number; pages: number
+  rows: Contact[]; page: number; pages: number; pageSize: number; total: number
   search: string; tag: string; status?: string
   company?: string; location?: string; platform?: string
   allTags: string[]; companies?: string[]; locations?: string[]; platforms?: string[]
 }
+
+const PAGE_SIZE_OPTIONS = [50, 100, 500, 1000]
 
 // Recognized status buckets for the filter dropdown. We match by substring
 // since the DB stores statuses as text ("Sent (5/30/2026, 7:14 PM)") —
@@ -35,7 +37,7 @@ const STATUS_OPTIONS = [
 ]
 
 export function ContactsTable({
-  rows, page, pages, search, tag, allTags, status = '',
+  rows, page, pages, pageSize, total, search, tag, allTags, status = '',
   company = '', location = '', platform = '',
   companies = [], locations = [], platforms = [],
 }: Props) {
@@ -301,9 +303,22 @@ export function ContactsTable({
 
       {timelineFor ? <ContactTimeline contact={timelineFor} onClose={() => setTimelineFor(null)} /> : null}
 
-      <div className="flex items-center justify-between border-t px-4 py-3 text-sm">
-        <span className="text-muted-foreground">Page {page} of {pages}</span>
-        <div className="flex gap-1">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t px-4 py-3 text-sm">
+        <span className="text-muted-foreground">
+          Page {page} of {pages}{total > 0 ? ` · ${total} total` : ''}
+        </span>
+        <div className="flex items-center gap-2">
+          <label className="flex items-center gap-1 text-xs text-muted-foreground" htmlFor="page-size">
+            Rows
+            <select
+              id="page-size"
+              value={pageSize}
+              onChange={(e) => go({ pageSize: e.target.value, page: '1' })}
+              className="h-8 rounded-md border bg-background px-2 text-xs"
+            >
+              {PAGE_SIZE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </label>
           <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => go({ page: String(page - 1) })}>
             <ChevronLeft className="h-4 w-4" /> Prev
           </Button>

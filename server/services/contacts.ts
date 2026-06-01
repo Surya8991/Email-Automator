@@ -9,7 +9,7 @@ export interface ListOpts {
 
 export async function listContacts(userId: string, opts: ListOpts = {}) {
   const page = Math.max(1, opts.page ?? 1)
-  const pageSize = Math.min(200, Math.max(1, opts.pageSize ?? 50))
+  const pageSize = Math.min(1000, Math.max(1, opts.pageSize ?? 50))
   const offset = (page - 1) * pageSize
 
   const clauses = [eq(contacts.userId, userId)]
@@ -116,6 +116,78 @@ export async function deleteContact(userId: string, id: number) {
 
 export async function deleteContactsBulk(userId: string, ids: number[]) {
   for (const id of ids) await deleteContact(userId, id)
+}
+
+// Wipe every contact for this user. Returns the count that was removed
+// so the caller can show a confirmation toast. Cascading FKs handle
+// drafts (contact_id nullified) and campaign_enrollments (cascade).
+export async function deleteAllContacts(userId: string): Promise<number> {
+  const before = await db.select({ n: count() }).from(contacts)
+    .where(eq(contacts.userId, userId))
+  const n = Number(before[0]?.n ?? 0)
+  if (n === 0) return 0
+  await db.delete(contacts).where(eq(contacts.userId, userId))
+  return n
+}
+
+// Same as deleteAllContacts but scoped to the current filter set. Used by
+// the toolbar's "Delete all matching" so a user can scope a destructive
+// action by tag / company / status without first paging through to select.
+export async function deleteFilteredContacts(userId: string, opts: ListOpts = {}): Promise<number> {
+  const clauses = [eq(contacts.userId, userId)]
+  if (opts.search) {
+    clauses.push(or(
+      like(contacts.recruiterName, `%${opts.search}%`),
+      like(contacts.company, `%${opts.search}%`),
+      like(contacts.recruiterEmail, `%${opts.search}%`),
+      like(contacts.jobTitle, `%${opts.search}%`),
+    )!)
+  }
+  if (opts.tag) clauses.push(like(sql`',' || ${contacts.tags} || ','`, `%,${opts.tag},%`))
+  if (opts.status) {
+    if (opts.status === 'pending') clauses.push(eq(contacts.emailStatus, ''))
+    else clauses.push(like(contacts.emailStatus, `%${opts.status}%`))
+  }
+  if (opts.company)  clauses.push(sql`LOWER(${contacts.company})  = LOWER(${opts.company})`)
+  if (opts.location) clauses.push(sql`LOWER(${contacts.location}) = LOWER(${opts.location})`)
+  if (opts.platform) clauses.push(sql`LOWER(${contacts.platform}) = LOWER(${opts.platform})`)
+  const where = and(...clauses)
+  const before = await db.select({ n: count() }).from(contacts).where(where)
+  const n = Number(before[0]?.n ?? 0)
+  if (n === 0) return 0
+  await db.delete(contacts).where(where)
+  return n
+}
+
+// Find rows with duplicate lowercased emails for the same user and remove
+// all but the lowest-id (oldest) occurrence per email. Returns counters
+// so the caller can report "X duplicates removed across Y emails".
+export async function dedupeContacts(userId: string): Promise<{ removed: number; affectedEmails: number }> {
+  const rows = await db
+    .select({ id: contacts.id, email: contacts.recruiterEmail })
+    .from(contacts)
+    .where(eq(contacts.userId, userId))
+    .orderBy(asc(contacts.id))
+  // Walk in id-ascending order; first occurrence of each lowercased
+  // email wins, every later occurrence is queued for deletion.
+  const seen = new Set<string>()
+  const toDelete: number[] = []
+  const affected = new Set<string>()
+  for (const r of rows) {
+    const key = String(r.email ?? '').trim().toLowerCase()
+    if (!key) continue
+    if (seen.has(key)) { toDelete.push(r.id); affected.add(key); continue }
+    seen.add(key)
+  }
+  if (toDelete.length === 0) return { removed: 0, affectedEmails: 0 }
+  // Chunked delete — `inArray` with thousands of ids generates a huge
+  // SQL string; 500 per chunk keeps it safe across drivers.
+  const CHUNK = 500
+  for (let i = 0; i < toDelete.length; i += CHUNK) {
+    const slice = toDelete.slice(i, i + CHUNK)
+    await db.delete(contacts).where(and(eq(contacts.userId, userId), inArray(contacts.id, slice)))
+  }
+  return { removed: toDelete.length, affectedEmails: affected.size }
 }
 
 // Merge `add` and remove `remove` tags from each selected contact. Both
