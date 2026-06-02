@@ -6,7 +6,7 @@ import { rateLimit } from '@/lib/rate-limit'
 import { addContact, listContacts, nameAndEmailExists } from '@/server/services/contacts'
 
 export async function GET(req: Request) {
-  const auth = await requireBearer(req)
+  const auth = await requireBearer(req, ['read:contacts'])
   if (auth instanceof Response) return auth
   if (!rateLimit(`v1:${auth.userId}`, 120, 60_000)) {
     return NextResponse.json({ error: 'Too many requests' }, { status: 429 })
@@ -21,7 +21,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const auth = await requireBearer(req)
+  const auth = await requireBearer(req, ['write:contacts'])
   if (auth instanceof Response) return auth
   if (!rateLimit(`v1:${auth.userId}`, 60, 60_000)) {
     return NextResponse.json({ error: 'Too many requests' }, { status: 429 })

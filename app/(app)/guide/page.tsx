@@ -20,6 +20,7 @@ function Section({ id, title, children }: { id: string; title: string; children:
 }
 
 const TOC = [
+  ['first-time', '0. First time? Start here'],
   ['quick-start', '1. Quick start (5 minutes)'],
   ['concepts',    '2. How it all fits together'],
   ['contacts',    '3. Contacts & tags'],
@@ -58,6 +59,23 @@ export default function GuidePage() {
           ))}
         </CardContent>
       </Card>
+
+      <Section id="first-time" title="0. First time? Start here">
+        <p className="text-sm">
+          On your first sign-in you'll see a 4-slide <strong>onboarding modal</strong> that walks through
+          Contacts → Templates → Drafts → Schedule/Campaigns. Skip or step through — it gets out of
+          your way as soon as you dismiss it.
+        </p>
+        <p className="text-sm">
+          To re-trigger it later (e.g. after a major UI change, or to show it to a new teammate), an
+          admin bumps <Code>ONBOARDING_CURRENT_VERSION</Code> in <Code>components/onboarding-modal.tsx</Code> and ships.
+          The modal will then re-appear once per user until they dismiss it again.
+        </p>
+        <p className="text-sm">
+          Prefer to read instead? The <strong>Quick start</strong> section below covers the same path in
+          5 minutes.
+        </p>
+      </Section>
 
       <Section id="quick-start" title="1. Quick start (5 minutes)">
         <ol className="list-decimal pl-6 space-y-2 text-sm">
@@ -112,10 +130,18 @@ Bob Smith,Globex,CTO,bob@globex.com,,,,
         <p className="text-sm">Per-page select-all checkbox at the top of the table. With rows checked, a toolbar appears:</p>
         <ul className="list-disc pl-6 text-sm space-y-1">
           <li><strong>Create drafts</strong> — creates drafts using your active template for just the selected contacts (cap 200). Skips anyone already drafted/sent.</li>
+          <li><strong>Schedule…</strong> — pop a date/time picker and queue exactly the selected contacts (cap 2000). Goes through the same staggered scheduler as the page-level <em>Schedule</em>, but scoped.</li>
+          <li><strong>Enroll in campaign…</strong> — pick a campaign from the dropdown and enroll the selected contacts into it (cap 10000).</li>
           <li><strong>Add tag</strong> / <strong>Remove tag</strong> — comma-separated; lower-cased automatically.</li>
           <li><strong>Reset status</strong> — makes them eligible for a fresh draft.</li>
-          <li><strong>Block</strong> — adds emails to your blocklist <em>and</em> removes the contact rows.</li>
+          <li><strong>Block</strong> — adds emails to your blocklist <em>and soft-deletes</em> the contact rows (sets <Code>emailStatus=BLOCKED</Code>). They disappear from the default list. Remove the entry from <Link href="/blocklist" className="underline">/blocklist</Link> later and the contact reappears at the bottom of the list (num bumped to max+1).</li>
           <li><strong>Delete</strong> — permanent.</li>
+        </ul>
+        <h3 className="text-sm font-semibold mt-3">Dedupe + delete-all + page size</h3>
+        <ul className="list-disc pl-6 text-sm space-y-1">
+          <li><strong>Dedupe</strong> button — removes rows whose (name + email) tuple matches another row (lower-cased, trimmed). Same email with a different display name is kept — useful when a shared inbox is reached by multiple people.</li>
+          <li><strong>Delete matching</strong> — destroys every row that matches the current filter set (search/tag/status/company/location/platform). Scoped by your filters.</li>
+          <li><strong>Page size</strong> — switch between 50 / 100 / 500 / 1000 rows per page from the bottom of the table.</li>
         </ul>
         <p className="text-sm mt-2 text-muted-foreground">
           Tip: combine filters (e.g. <Code>company=Acme</Code> + <Code>status=Pending</Code>) → select-all → Create drafts — that's how you blast to one company without touching others.
@@ -179,14 +205,23 @@ Bob Smith,Globex,CTO,bob@globex.com,,,,
         <p className="text-sm">Each <strong>Send</strong> writes an <Code>email_log</Code> row, then sends through SMTP with the tracking pixel + click rewrites injected.</p>
         <p className="text-sm">Daily limit defaults to <strong>50</strong> per user — change in <Link href="/settings" className="underline">Settings → General</Link>.</p>
 
+        <h3 className="text-sm font-semibold mt-3">Editor (rich text + HTML toggle)</h3>
+        <p className="text-sm">Per-row <strong>Pencil</strong> opens an inline subject + body editor. The body uses a shared <Code>&lt;RichTextEditor /&gt;</Code> with two modes:</p>
+        <ul className="list-disc pl-6 text-sm space-y-1">
+          <li><strong>Rich</strong> (default) — a WYSIWYG view with Bold / Italic / Bullet list / Link buttons. Ctrl/Cmd+B and Ctrl/Cmd+I work.</li>
+          <li><strong>HTML</strong> — raw markup textarea for power-users who want to paste / hand-edit. Switching modes preserves your content.</li>
+        </ul>
+        <p className="text-sm">The same component drives <Link href="/profile" className="underline">/profile</Link> signature.</p>
         <h3 className="text-sm font-semibold mt-3">In-row actions</h3>
         <ul className="list-disc pl-6 text-sm space-y-1">
-          <li><strong>Checkbox</strong> — select rows; a "Send selected (N)" button appears in the toolbar. Cap 100/batch.</li>
-          <li><strong>Pencil</strong> — edit subject + HTML body inline before sending. No need to re-create from the template.</li>
-          <li><strong>Send</strong> — Sends. If the same recipient was emailed in the last 7 days, a confirmation dialog shows the previous send timestamp; confirm to send anyway.</li>
+          <li><strong>Checkbox</strong> — select rows; <em>Send selected (N)</em> / <em>Discard selected</em> appear in the toolbar. <em>Discard all</em> wipes every pending draft in one click.</li>
+          <li><strong>Pencil</strong> — open the rich-text editor for subject + body before sending.</li>
+          <li><strong>Send</strong> — sends. If the same recipient was emailed in the last 7 days, a confirmation dialog shows the previous send timestamp; confirm to send anyway.</li>
+          <li><strong>Sparkles (admin only)</strong> — <em>AI Improve</em>. Pick a tone, rewrite the draft body, then review. The success toast exposes <strong>Undo</strong> for 1 hour — restores the pre-improve body from <Code>localStorage</Code>.</li>
           <li><strong>Calendar clock</strong> — schedules a follow-up for this contact (uses active template).</li>
           <li><strong>Trash</strong> — drops the draft.</li>
         </ul>
+        <p className="text-sm mt-2"><strong>Page size</strong> 50 / 100 / 500 / 1000 + Prev/Next at the bottom — same pagination shape as Contacts.</p>
         <p className="text-sm mt-2"><strong>Search</strong> box at the top of the list filters by recipient or subject. <strong>Select all visible</strong> checkbox to pick everything currently shown.</p>
       </Section>
 
@@ -200,6 +235,11 @@ Bob Smith,Globex,CTO,bob@globex.com,,,,
         </ol>
         <p className="text-sm"><strong>Cancel all</strong> flips every Scheduled/Retrying row to Cancelled. <strong>Cancel selected (N)</strong> cancels only the checked rows. Already-sent rows stay either way.</p>
         <p className="text-sm">The Queue table supports search (recipient/subject) + status filter (Scheduled / Retrying) + per-row checkbox. Each row shows attempts + last result so you can debug stuck retries (e.g. "Throttled: already sent within 30d on …" if you've set the per-recipient throttle in Settings).</p>
+        <h3 className="text-sm font-semibold mt-3">Per-row preview + admin AI Improve</h3>
+        <ul className="list-disc pl-6 text-sm space-y-1">
+          <li><strong>Eye</strong> — toggle the rendered body of the queued email (the exact HTML the worker will send, still with <Code>{'{{personalized}}'}</Code> placeholders).</li>
+          <li><strong>Sparkles (admin only)</strong> — pick a tone, rewrite the queued <Code>email_log.body</Code> in place. The scheduler picks up the new body on its next pass — no schedule change.</li>
+        </ul>
       </Section>
 
       <Section id="campaigns" title="7. Campaigns (multi-step sequences)">
@@ -213,6 +253,11 @@ Bob Smith,Globex,CTO,bob@globex.com,,,,
         </ol>
         <p className="text-sm">Worker advances each enrollment by its <Code>nextRunAt</Code>. Each step is its own send — analytics show per-step open rate. Statuses: <Code>draft</Code> · <Code>active</Code> · <Code>paused</Code> · <Code>archived</Code>.</p>
         <p className="text-sm">A contact is unique per (campaign, contact) — re-enrolling is a no-op.</p>
+        <h3 className="text-sm font-semibold mt-3">Per-step preview + admin AI Improve</h3>
+        <ul className="list-disc pl-6 text-sm space-y-1">
+          <li><strong>Eye</strong> on each step — shows the underlying template's <Code>initialMsg</Code> body so you don't have to jump to /templates.</li>
+          <li><strong>Sparkles (admin only)</strong> — rewrites the template body for future sends. Past sends are unchanged. The improved body is audit-logged.</li>
+        </ul>
       </Section>
 
       <Section id="analytics" title="8. Analytics & tracking">
@@ -272,11 +317,20 @@ Bob Smith,Globex,CTO,bob@globex.com,,,,
       <Section id="admin" title="11. Admin (multi-user)">
         <p className="text-sm">Add comma-separated emails to <Code>ADMIN_EMAILS</Code> in <Code>.env</Code>. Admins:</p>
         <ul className="list-disc pl-6 text-sm space-y-1">
-          <li>See the Admin sidebar entry.</li>
-          <li>Can list every user with per-user stats + search/filter (All / Active / Suspended / Admins).</li>
-          <li>Can <strong>Suspend / Resume</strong> any non-admin user — reuses the same <Code>SENDS_PAUSED</Code> setting the user's own kill-switch toggles. Their data stays; the worker just stops sending for them.</li>
+          <li>See the <strong>Admin</strong> sidebar entry with system-wide stats (users / contacts / templates / drafts pending / sent 30d / active campaigns) at the top.</li>
+          <li>Can list every user with per-user stats + search/filter (All / Active / Suspended / Admins) + per-page checkbox column for <strong>bulk Suspend / Resume</strong> on selected non-admin rows.</li>
+          <li>Can <strong>Suspend / Resume</strong> any non-admin user (single or bulk) — reuses the same <Code>SENDS_PAUSED</Code> setting the user's own kill-switch toggles. Data stays; the worker just stops sending for them.</li>
           <li>Can delete non-admin users (cascades through every table).</li>
-          <li>Can download the whole DB at <Code>/api/backup</Code> (admin-only).</li>
+          <li><strong>CSV</strong> button on the user table → <Code>/api/admin/users/export</Code> streams an instance-wide users dump (id, email, name, joined, contacts, drafts pending, events, suspended). Audit-logged.</li>
+          <li>See a <strong>Runtime configuration</strong> card with the env values that matter to operators (<Code>DAILY_SEND_LIMIT</Code>, <Code>TIMEZONE</Code>, SMTP host, OAuth, CRON_SECRET set/unset, etc.). <Code>ALLOW_DEV_SIGNIN=true</Code> renders red.</li>
+          <li>If <Code>ALLOW_DEV_SIGNIN=true</Code> on a deployed env (Vercel or NODE_ENV=production), a <strong>sticky red banner</strong> rides on top of every page so the operator can't forget to turn it off before sharing.</li>
+          <li>See a <strong>Bulk import contacts</strong> card — drop an .xlsx/.csv up to 25 MB; SSE-driven progress bar; auto-dedup against existing (name + email).</li>
+          <li>See a <strong>Retention</strong> card with <strong>Purge now</strong>. The scheduler already runs a daily per-user purge gated by <Code>LAST_PURGE_AT</Code>; the button bypasses the gate and runs across every user immediately. Defaults: events 180 d, audit 365 d (override per-user via <Code>EVENTS_RETENTION_DAYS</Code> / <Code>AUDIT_RETENTION_DAYS</Code> settings).</li>
+          <li>Can download the whole DB at <Code>/api/backup</Code> (admin-only, audit-logged).</li>
+          <li>Can hit <Link href="/diagnostic" className="underline">/diagnostic</Link> — gated to admins. Probes SMTP / AI / OAuth / MX / SPF / DMARC + CRON_SECRET set, libsql reachable, ADMIN_EMAILS populated.</li>
+          <li>Can see <strong>cross-user audit</strong> at <Link href="/audit?scope=all" className="underline">/audit?scope=all</Link>. Admin write actions (delete user / suspend / resume / bulk suspend / import / AI Improve draft / AI Improve scheduled / AI Improve campaign template / purge retention / backup download / users export) write rows automatically.</li>
+          <li>All admin write actions are rate-limited (60/min/admin) to cap accidental loops + Groq spend.</li>
+          <li>Get a per-draft <strong>AI Improve</strong> Sparkles button at <Link href="/drafts" className="underline">/drafts</Link> (rewrites body, 1-hour Undo via localStorage), per-row Sparkles on <Link href="/schedule" className="underline">/schedule</Link> (rewrites queued <Code>email_log.body</Code>), and per-step Sparkles on /campaigns (rewrites the underlying template).</li>
         </ul>
       </Section>
 
@@ -289,13 +343,15 @@ Bob Smith,Globex,CTO,bob@globex.com,,,,
               ['GET /api/auth/session', 'open', 'Auth.js session JSON (or null)'],
               ['ALL /api/auth/[...]', 'open', 'Auth.js sign-in / sign-out / callbacks'],
               ['POST /api/dev-signin', 'dev-only', 'Issue a session for an allow-listed email'],
-              ['GET /api/progress', 'user', 'SSE stream of draft progress events for the authed user'],
+              ['GET /api/progress', 'user', 'SSE stream of progress events (drafts / contact import) for the authed user'],
+              ['GET /api/progress/poll?since=ts', 'user', 'Polling fallback for /api/progress. Returns 204 if no event newer than ts'],
               ['GET /api/contacts/export', 'user', 'CSV of every contact you own'],
-              ['GET /api/audit/export', 'user', 'CSV of your full audit log (RFC 4180, IST timestamps)'],
+              ['GET /api/audit/export', 'user', 'CSV of your full audit log (streams 1000-row pages). Admins can pass ?scope=all'],
               ['GET /api/csv-template', 'open', 'Starter CSV with 5 realistic sample rows + canonical headers'],
-              ['GET /api/v1/contacts', 'API key', 'List your contacts (page, pageSize, search, tag)'],
-              ['POST /api/v1/contacts', 'API key', 'Create a contact. Body: {recruiterEmail, recruiterName?, company?, …}'],
-              ['GET /api/backup', 'admin', 'Whole-DB .db file download (admin only)'],
+              ['GET /api/v1/contacts', 'API key · read:contacts', 'List your contacts (page, pageSize, search, tag)'],
+              ['POST /api/v1/contacts', 'API key · write:contacts', 'Create a contact. Body: {recruiterEmail, recruiterName?, company?, …}'],
+              ['GET /api/backup', 'admin', 'Whole-DB .db file download (admin only, audit-logged)'],
+              ['GET /api/admin/users/export', 'admin', 'Streamed CSV of every user with per-user counts. Audit-logged'],
               ['GET /api/track/open?eid=&t=', 'open (HMAC)', '1×1 GIF + records open event if HMAC verifies'],
               ['GET /api/track/click?eid=&u=&t=', 'open (HMAC)', '302 redirect + records click event'],
               ['GET /unsubscribe?e=&t=', 'open (HMAC)', 'Confirmation page; adds to global blocklist'],

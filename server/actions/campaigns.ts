@@ -1,8 +1,14 @@
 'use server'
 import { revalidatePath } from 'next/cache'
+import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
-import { requireUser } from '@/auth'
+import { requireAdmin, requireUser } from '@/auth'
 import * as svc from '@/server/services/campaigns'
+import { actionError } from '@/lib/action-error'
+import { db } from '@/server/db/client'
+import { templates as templatesTable, auditLog } from '@/server/db/schema'
+import { draftEmail, type Tone } from '@/server/services/ai'
+import { rateLimit } from '@/lib/rate-limit'
 
 const NameSchema = z.object({ name: z.string().min(1).max(120) })
 
@@ -66,6 +72,36 @@ const EnrollSchema = z.object({
   contactIds: z.array(z.number().int().positive()).max(10000).optional(),
 })
 
+// Admin AI Improve for a campaign step's underlying template. Same Groq
+// prompt as drafts/scheduled-emails; rewrites templates.initialMsg. Future
+// sends for this step pick up the new body — past sends are unchanged.
+const TONE_LIST = ['professional', 'friendly', 'concise', 'enthusiastic', 'formal'] as const
+export async function improveCampaignTemplateAction(templateId: number, tone: Tone = 'professional') {
+  const me = await requireAdmin()
+  if (!rateLimit(`admin-write:${me.id}:improve_campaign_tpl`, 60, 60_000)) {
+    return { error: 'Too many admin actions — slow down' }
+  }
+  if (!TONE_LIST.includes(tone)) return { error: 'Invalid tone' }
+  const [tpl] = await db.select().from(templatesTable)
+    .where(and(eq(templatesTable.id, templateId), eq(templatesTable.userId, me.id)))
+  if (!tpl) return { error: 'Template not found' }
+  let improved: string
+  try {
+    improved = await draftEmail(me.id, {
+      existing: tpl.initialMsg,
+      tone,
+      goal: 'Improve the email below — keep the intent and any {{variables}} intact, tighten language, fix awkward phrasing, match the requested tone.',
+    })
+  } catch (e) {
+    return actionError(e, 'AI request failed')
+  }
+  await db.update(templatesTable).set({ initialMsg: improved, version: tpl.version + 1, updatedAt: new Date() })
+    .where(eq(templatesTable.id, tpl.id))
+  try { await db.insert(auditLog).values({ userId: me.id, action: 'admin.ai_improve_campaign_template', detail: `template_id=${tpl.id} tone=${tone}`, ip: '' }) } catch { /* noop */ }
+  revalidatePath('/templates')
+  return { ok: true as const, initialMsg: improved }
+}
+
 export async function enrollAction(input: z.infer<typeof EnrollSchema>) {
   const u = await requireUser()
   const parsed = EnrollSchema.safeParse(input)
@@ -75,6 +111,6 @@ export async function enrollAction(input: z.infer<typeof EnrollSchema>) {
     revalidatePath(`/campaigns/${parsed.data.campaignId}`)
     return { ok: true, ...r }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'Enroll failed' }
+    return actionError(e, 'Enroll failed')
   }
 }

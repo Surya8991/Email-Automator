@@ -8,7 +8,7 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import Database from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
-import { eq } from 'drizzle-orm'
+import { eq, and } from 'drizzle-orm'
 import path from 'node:path'
 import * as schema from '@/server/db/schema'
 
@@ -305,6 +305,102 @@ describe('schedule enqueueContacts', () => {
     // Only u1's 2 rows enqueued; u2's row counted as "skipped" (not eligible).
     expect(r.scheduled).toBe(2)
     expect(r.skipped).toBe(1)
+  })
+})
+
+describe('unblock restores contact at end of list', () => {
+  it('block soft-deletes; unblock restores with num=max+1', async () => {
+    const { removeEntry, removeEntries, countBlockedContacts } = await import('@/server/services/blocklist')
+    const u = await newUser()
+    await services.addContact(u, { recruiterEmail: 'a@x.co', recruiterName: 'A' })
+    await services.addContact(u, { recruiterEmail: 'b@x.co', recruiterName: 'B' })
+    await services.addContact(u, { recruiterEmail: 'c@x.co', recruiterName: 'C' })
+    // Simulate the action's effect — block one contact + add to blocklist.
+    const [b] = await db.select().from(schema.contacts)
+      .where(and(eq(schema.contacts.userId, u), eq(schema.contacts.recruiterEmail, 'b@x.co')))
+    await db.update(schema.contacts).set({ emailStatus: 'BLOCKED' }).where(eq(schema.contacts.id, b!.id))
+    const ble = await db.insert(schema.blocklist).values({ userId: u, pattern: 'b@x.co', type: 'email' }).returning()
+    // Default listContacts hides BLOCKED.
+    const visible = await services.listContacts(u, { page: 1, pageSize: 50 })
+    expect(visible.rows.map((r) => r.recruiterEmail).sort()).toEqual(['a@x.co', 'c@x.co'])
+    expect(await countBlockedContacts(u)).toBe(1)
+    // removeEntry restores BLOCKED → '', bumps num to max+1.
+    const before = await db.select().from(schema.contacts)
+      .where(and(eq(schema.contacts.userId, u), eq(schema.contacts.recruiterEmail, 'a@x.co')))
+    const maxBefore = Math.max(...(await db.select().from(schema.contacts)
+      .where(eq(schema.contacts.userId, u))).map((r) => r.num ?? 0))
+    const r = await removeEntry(u, ble[0]!.id)
+    expect(r.restored).toBe(true)
+    const restored = await db.select().from(schema.contacts)
+      .where(and(eq(schema.contacts.userId, u), eq(schema.contacts.recruiterEmail, 'b@x.co')))
+    expect(restored[0]!.emailStatus).toBe('')
+    expect(restored[0]!.num).toBe(maxBefore + 1)
+    expect(before[0]!.num).toBeLessThan(restored[0]!.num!)
+    // After restore, BLOCKED count = 0, list shows three rows.
+    expect(await countBlockedContacts(u)).toBe(0)
+    expect((await services.listContacts(u, { page: 1, pageSize: 50 })).total).toBe(3)
+  })
+
+  it('removeEntries bulk-unblock restores all matching contacts', async () => {
+    const { removeEntries } = await import('@/server/services/blocklist')
+    const u = await newUser()
+    await services.addContact(u, { recruiterEmail: 'x@y.co' })
+    await services.addContact(u, { recruiterEmail: 'z@y.co' })
+    await db.update(schema.contacts).set({ emailStatus: 'BLOCKED' })
+      .where(and(eq(schema.contacts.userId, u), eq(schema.contacts.recruiterEmail, 'x@y.co')))
+    await db.update(schema.contacts).set({ emailStatus: 'BLOCKED' })
+      .where(and(eq(schema.contacts.userId, u), eq(schema.contacts.recruiterEmail, 'z@y.co')))
+    const e1 = await db.insert(schema.blocklist).values({ userId: u, pattern: 'x@y.co', type: 'email' }).returning()
+    const e2 = await db.insert(schema.blocklist).values({ userId: u, pattern: 'z@y.co', type: 'email' }).returning()
+    await removeEntries(u, [e1[0]!.id, e2[0]!.id])
+    const rows = await db.select().from(schema.contacts).where(eq(schema.contacts.userId, u))
+    expect(rows.every((r) => r.emailStatus === '')).toBe(true)
+  })
+})
+
+describe('cascade delete on user removal', () => {
+  it('deleting a user wipes every owned row across the schema', async () => {
+    const u = await newUser()
+    // Seed at least one row in every user-owned table.
+    await db.insert(schema.contacts).values({ userId: u, recruiterEmail: 'a@x.co', recruiterName: 'A' })
+    const [ct] = await db.select().from(schema.contacts).where(eq(schema.contacts.userId, u))
+    await db.insert(schema.templates).values({ userId: u, key: 't1', subject: 's', initialMsg: 'b' })
+    const [tpl] = await db.select().from(schema.templates).where(eq(schema.templates.userId, u))
+    await db.insert(schema.drafts).values({ userId: u, contactId: ct!.id, toEmail: 'a@x.co', subject: 's', htmlBody: 'b' })
+    await db.insert(schema.emailLog).values({ userId: u, contactId: ct!.id, scheduleId: 's1', email: 'a@x.co', subject: 's', scheduledAt: Date.now() })
+    await db.insert(schema.settings).values({ userId: u, key: 'TIMEZONE', value: 'UTC' })
+    await db.insert(schema.auditLog).values({ userId: u, action: 'test.action' })
+    await db.insert(schema.blocklist).values({ userId: u, pattern: 'spam@x.co', type: 'email' })
+    await db.insert(schema.campaigns).values({ userId: u, name: 'C1' })
+    const [camp] = await db.select().from(schema.campaigns).where(eq(schema.campaigns.userId, u))
+    await db.insert(schema.campaignSteps).values({ campaignId: camp!.id, order: 0, templateId: tpl!.id })
+    await db.insert(schema.campaignEnrollments).values({ campaignId: camp!.id, contactId: ct!.id, nextRunAt: Date.now() })
+    await db.insert(schema.events).values({ userId: u, contactId: ct!.id, templateId: tpl!.id, kind: 'sent' })
+    await db.insert(schema.apiKeys).values({ userId: u, name: 'k', keyHash: `h-${u}`, prefix: 'abcd1234' })
+    await db.insert(schema.webhooks).values({ userId: u, url: 'https://x.co/h', secret: 's' })
+
+    // Seed a second user — proves the cascade is scoped, not a wholesale wipe.
+    const u2 = await newUser()
+    await db.insert(schema.contacts).values({ userId: u2, recruiterEmail: 'z@x.co' })
+
+    await db.delete(schema.users).where(eq(schema.users.id, u))
+
+    // Every user-scoped table must have zero rows for u.
+    for (const tbl of [
+      schema.contacts, schema.templates, schema.drafts, schema.emailLog,
+      schema.settings, schema.auditLog, schema.blocklist, schema.campaigns,
+      schema.events, schema.apiKeys, schema.webhooks,
+    ]) {
+      const rows = await db.select().from(tbl).where(eq(tbl.userId, u))
+      expect(rows.length, `${(tbl as { _: { name?: string } })._?.name ?? 'table'} should be empty`).toBe(0)
+    }
+    // Cascade reached campaign children too.
+    expect((await db.select().from(schema.campaignSteps)).filter((r) => r.campaignId === camp!.id)).toEqual([])
+    expect((await db.select().from(schema.campaignEnrollments)).filter((r) => r.campaignId === camp!.id)).toEqual([])
+
+    // u2's rows untouched.
+    const u2Rows = await db.select().from(schema.contacts).where(eq(schema.contacts.userId, u2))
+    expect(u2Rows.length).toBe(1)
   })
 })
 

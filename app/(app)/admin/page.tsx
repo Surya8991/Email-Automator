@@ -4,6 +4,7 @@ import { users } from '@/server/db/schema'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { AdminTable } from './admin-table'
 import { AdminImportContactsCard } from './import-contacts-card'
+import { RetentionCard } from './retention-card'
 import { adminEmails, env } from '@/lib/env'
 import { getUserSuspensions } from '@/server/actions/admin'
 import { systemStats, perUserStats } from '@/server/services/analytics'
@@ -100,6 +101,8 @@ export default async function AdminPage() {
       </Card>
 
       <AdminImportContactsCard />
+
+      <RetentionCard />
 
       <Card>
         <CardHeader><CardTitle>Users</CardTitle></CardHeader>

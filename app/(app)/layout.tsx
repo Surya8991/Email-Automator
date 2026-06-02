@@ -7,6 +7,7 @@ import { TimezoneProvider } from '@/components/timezone-provider'
 import { ensureSeededTemplatesFor } from '@/server/services/onboarding'
 import { getSetting } from '@/server/services/settings'
 import { APP_TZ } from '@/lib/utils'
+import { OnboardingModal, ONBOARDING_CURRENT_VERSION } from '@/components/onboarding-modal'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await auth()
@@ -19,16 +20,35 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // Pick up the user's chosen TZ; falls back to IST. Provided via context
   // so every client formatter (useFormatDate) in the tree is consistent.
   const userTz = userId ? (await getSetting(userId, 'TIMEZONE').catch(() => '')) || APP_TZ : APP_TZ
+  // Onboarding gate. Show the modal until the user dismisses it at the
+  // current version. Bump ONBOARDING_CURRENT_VERSION to re-show for
+  // everyone after a major UX change.
+  const seenRaw = userId ? await getSetting(userId, 'ONBOARDING_SEEN_VERSION').catch(() => '') : ''
+  const seenVersion = Number(seenRaw || '0')
+  const showOnboarding = Number.isFinite(seenVersion) && seenVersion < ONBOARDING_CURRENT_VERSION
+  // Dev-signin in a deployed env is a footgun — banner so the operator can't
+  // miss it. Local dev (NODE_ENV !== 'production' AND no VERCEL) stays quiet.
+  const devSigninRisky =
+    process.env.ALLOW_DEV_SIGNIN === 'true' &&
+    (process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL))
   return (
     <TimezoneProvider tz={userTz}>
-      <div className="flex h-dvh">
-        <Sidebar isAdmin={isAdmin} />
-        <div className="flex flex-1 flex-col overflow-hidden">
-          <Topbar userEmail={session.user.email ?? undefined} isAdmin={isAdmin} />
-          <main className="flex-1 overflow-auto p-4 sm:p-6">{children}</main>
+      <div className="flex h-dvh flex-col">
+        {devSigninRisky && (
+          <div className="border-b border-red-600 bg-red-600 px-4 py-1.5 text-center text-xs font-medium text-white">
+            ⚠ ALLOW_DEV_SIGNIN=true on a deployed instance — anyone on DEV_BYPASS_EMAILS can sign in without auth. Unset before sharing.
+          </div>
+        )}
+        <div className="flex flex-1 overflow-hidden">
+          <Sidebar isAdmin={isAdmin} />
+          <div className="flex flex-1 flex-col overflow-hidden">
+            <Topbar userEmail={session.user.email ?? undefined} isAdmin={isAdmin} />
+            <main className="flex-1 overflow-auto p-4 sm:p-6">{children}</main>
+          </div>
+          <CommandPalette isAdmin={isAdmin} />
         </div>
-        <CommandPalette isAdmin={isAdmin} />
       </div>
+      {showOnboarding ? <OnboardingModal initialOpen={true} /> : null}
     </TimezoneProvider>
   )
 }

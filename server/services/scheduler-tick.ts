@@ -10,6 +10,7 @@ import { lastSentTo } from './drafts'
 import { buildEmail } from './drafts'
 import { sendMail } from './mailer'
 import { instrumentHtml } from './tracking'
+import { maybePurgeForUser } from './retention'
 import { env } from '@/lib/env'
 import { logger } from '@/lib/logger'
 import { formatDate } from '@/lib/utils'
@@ -245,6 +246,9 @@ export async function tickOnce(): Promise<TickStats> {
     } catch (err) {
       log.error({ err, userId: u.id }, 'user tick failed')
     }
+    // Daily retention purge — internal gate keeps it at ~once per 24h
+    // per user. Non-fatal: if the purge errors, the user tick still ran.
+    await maybePurgeForUser(u.id).catch((err) => log.error({ err, userId: u.id }, 'retention skipped'))
   }
   return { sent, failed, advanced, users: allUsers.length }
 }

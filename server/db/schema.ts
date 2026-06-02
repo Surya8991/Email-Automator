@@ -186,6 +186,10 @@ export const apiKeys = sqliteTable('api_keys', {
   name: text('name').notNull(),
   keyHash: text('key_hash').notNull(),
   prefix: text('prefix').notNull(), // first 8 chars of the raw key, for UI display
+  // Comma-separated scope list. Empty = "all" (back-compat for pre-0004
+  // keys). Routes call requireScopes() to enforce per-endpoint requirements.
+  // See lib/bearer-auth.ts for the scope catalog.
+  scopes: text('scopes').notNull().default(''),
   lastUsedAt: integer('last_used_at', { mode: 'timestamp_ms' }),
   revokedAt: integer('revoked_at', { mode: 'timestamp_ms' }),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),

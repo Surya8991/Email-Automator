@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { saveProfileAction } from '@/server/actions/profile'
+import { RichTextEditor } from '@/components/rich-text-editor'
 
 export function ProfileForm({ email, initial }: { email: string; initial: Record<string, string> }) {
   const [state, setState] = useState({
@@ -63,10 +64,13 @@ export function ProfileForm({ email, initial }: { email: string; initial: Record
         <Input id="DEFAULT_ROLE_NAME" value={state.DEFAULT_ROLE_NAME} onChange={(e) => set('DEFAULT_ROLE_NAME')(e.target.value)} placeholder="Growth Marketer" />
       </div>
       <div className="grid gap-1.5 md:col-span-2">
-        <Label htmlFor="CACHED_SIGNATURE">Email signature (HTML)</Label>
-        <textarea id="CACHED_SIGNATURE" rows={6}
-          className="rounded-md border bg-background px-3 py-2 font-mono text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
-          value={state.CACHED_SIGNATURE} onChange={(e) => set('CACHED_SIGNATURE')(e.target.value)} />
+        <Label>Email signature</Label>
+        <RichTextEditor
+          value={state.CACHED_SIGNATURE}
+          onChange={set('CACHED_SIGNATURE')}
+          rows={6}
+          placeholder="Best regards, …"
+        />
       </div>
       <div className="grid gap-1.5 md:col-span-2">
         <Label htmlFor="UNSUBSCRIBE_TEXT">Unsubscribe footer text</Label>

@@ -8,6 +8,23 @@ import { getSmtpFor } from './credentials'
 // nodes and acceptable on serverless cold starts.
 const cache = new Map<string, Transporter>()
 
+/**
+ * Drop any cached transports for this user's host:port:user fingerprint.
+ * Called when SMTP creds are saved/cleared so the next send picks up the
+ * new password instead of reusing the stale Transporter.
+ */
+export function invalidateMailerCacheFor(host: string, port: number, user: string) {
+  cache.delete(`${host}:${port}:${user}`)
+}
+
+/**
+ * Drop the entire cache. Used when we don't know the prior fingerprint
+ * (e.g. clearSmtpAction wiped the settings before we could read them).
+ */
+export function clearMailerCache() {
+  cache.clear()
+}
+
 function transportFor(c: SmtpCreds): Transporter {
   if (!c.user || !c.pass) throw new Error('SMTP not configured (Settings → Email)')
   const key = `${c.host}:${c.port}:${c.user}`

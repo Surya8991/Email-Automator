@@ -14,18 +14,25 @@
 - `/drafts`: rich-text editor + HTML toggle, Discard selected, Discard all, AI Improve (admin-only)
 - `/blocklist`: row checkboxes + Remove selected
 
+## Shipped in the 2026-06-02 follow-up
+
+- Sticky banner for `ALLOW_DEV_SIGNIN=true` in deployed env (top of every (app) route)
+- `/admin` Retention card with manual "Purge now" backed by `purgeOldEvents` / `purgeOldAudit`
+- Audit CSV export now streams in 1000-row pages (no longer OOMs on large user histories)
+- Mailer transport cache invalidates on SMTP save/clear
+- **Bulk user actions** — checkbox column + bulk suspend/resume on `/admin`'s user table
+- **CSV export of users list** — `/api/admin/users/export` streams per-user counts; Download button on the user-table toolbar
+- **Diagnostic page enriched** — CRON_SECRET valid, libsql/SQLite reachable, ADMIN_EMAILS populated checks; page itself is now admin-gated
+- **Rate-limit admin write actions** — 60/min/admin for delete user, suspend, bulk suspend, import contacts, AI Improve (drafts/scheduled/campaigns), purge retention
+- **`/api/backup` download → auditLog** — `admin.download_backup` row written on every download
+- **`/diagnostic` admin-only** — non-admins redirect to /dashboard
+
 ## Admin enhancements (still deferred)
 
-- **Bulk user actions** — checkbox column on `/admin`'s user table; suspend/resume many at once. Useful for trial expiration or onboarding-batch cleanup. File: `app/(app)/admin/admin-table.tsx`.
-- **CSV export of users list** — new `/api/admin/users/export` route, mirrors the existing `/api/audit/export` pattern.
 - **Admin impersonation** — sign in as user X for support debugging, audited via `auditLog`. Security-sensitive; needs a dedicated `/admin/impersonate` route + cookie scoping. Defer until a real support need exists.
 - **Per-user template / contact drill-down** — click a row in `/admin`'s user table → see their templates, recent drafts, last-sent timestamps. Helps debug "why isn't my campaign sending". Medium build.
 - **Send-rate quotas per user** — replace the global `DAILY_SEND_LIMIT` with a per-user override stored in a new `user_quotas` table. Needed once the instance has paying tiers.
-- **`/admin` sub-routes** — split into `/admin/users`, `/admin/system`, `/admin/audit-all`, `/admin/imports` once the page grows past ~500 lines. Currently fine.
-- **Diagnostic page admin-richer** — add cron-secret-valid, libsql-reachable, ADMIN_EMAILS-populated checks. File: `app/(app)/diagnostic/`.
-- **Rate-limit admin write actions** — apply `lib/rate-limit.ts` (60/min/userId) to `deleteUserAction`, `suspendUserAction`, `adminImportContactsAction`, `improveDraftAction`.
-- **`/api/backup` download → auditLog** — currently fires silently; should write a row capturing the admin who downloaded.
-- **Sticky banner for `ALLOW_DEV_SIGNIN=true` in non-local env** — already shown red on `/admin`, promote to app-wide banner so it can't be left on in prod by accident.
+- **`/admin` sub-routes** — split into `/admin/users`, `/admin/system`, `/admin/audit-all`, `/admin/imports` once the page grows past ~500 lines. Currently still tolerable.
 
 ## Workbook Phase B features (from the Universal Job Tracker xlsx)
 

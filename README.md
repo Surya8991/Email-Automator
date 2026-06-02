@@ -55,23 +55,31 @@ For the comprehensive list see **[FEATURES.md](FEATURES.md)**. The high-level su
 | `/contacts` | CRUD · CSV/Excel import **with SSE progress bar** · per-row error report · per-page select-all + bulk actions (**Create drafts for selected**, Add/Remove tag, Reset status, Block, Delete) · **Dedupe / Delete matching / Delete all** toolbar · **page-size selector (50/100/500/1000)** · 6 filters (search + tag + status + company + location + platform) · per-row follow-up · per-contact custom-field inputs · timeline modal |
 | `/templates` | Public starter set (5 generic) auto-seeded for every user; **admin overlay (23 personalised)** seeded only for ADMIN_EMAILS addresses · sidebar search + category filter · live preview · A/B subject · AI Improve (Groq) · **Clone** · clickable variable + HTML-snippet palette + user-declared custom fields · `{{var\|fallback}}` syntax for empty values |
 | `/drafts` | Bulk create with SSE progress · **rich-text editor with HTML source toggle** · per-row select + Send selected / **Discard selected / Discard all** · **AI Improve per draft (admin-only)** · duplicate-send confirmation (last 7 days) · per-draft follow-up scheduler · search by recipient/subject |
-| `/schedule` | 5 recurring presets · configurable min/max gap · preview with spacing · queue search + status filter · select-to-cancel · per-row attempts + last-result · retry tinting |
-| `/campaigns` | Multi-step sequences · per-step delay + stop-on-reply · **step-level performance** (sent/open/click/reply/advanced %) · enroll by tag · search + status filter |
+| `/schedule` | 5 recurring presets · configurable min/max gap · preview with spacing · queue search + status filter · select-to-cancel · per-row attempts + last-result · retry tinting · **per-row body preview (Eye)** · **per-row AI Improve (admin)** rewriting the queued body in place |
+| `/campaigns` | Multi-step sequences · per-step delay + stop-on-reply · **step-level performance** (sent/open/click/reply/advanced %) · enroll by tag · search + status filter · **per-step body preview (Eye)** · **per-step AI Improve (admin)** rewriting the underlying template |
 | `/analytics` | 30-day KPIs · 14-day chart · breakdowns **by template / campaign / tag** (top 10) · **send-time heatmap** (7×24 IST grid) |
 | `/blocklist` | Per-user + global · single-add + **bulk paste-add** · **row checkboxes + Remove selected** · search + type filter · auto-block on unsubscribe |
 | `/audit` | Last 500 actions · search + action filter + **date range** · CSV export · **`?scope=all` cross-user view for admins** with User column + Mine/All toggle |
 | `/diagnostic` | SMTP · AI · OAuth · DNS · SPF · DMARC · **MX** checks · per-row retry · provider-domain whitelist (no DMARC false-positives on gmail.com etc.) |
 | `/profile` | Name, phone, company, role, LinkedIn, signature (Gmail import), unsub text |
 | `/settings` | 8 tabs: General (TZ, throttle, domain caps, custom fields, pause-all) · Email · AI · Auth · API keys · Webhooks · Data · Danger |
-| `/admin` | **System-wide stats card** (Users/Contacts/Templates/Drafts/Sent 30d/Active campaigns) · **Runtime configuration card** (env values, secrets shown as set/unset only) · **Bulk import contacts card** (XLSX/CSV upload with SSE progress) · admin emails list · per-user stats · search + filter (Active/Suspended/Admins) · Suspend/Resume · Delete · full DB backup |
+| `/admin` | **System-wide stats card** (Users/Contacts/Templates/Drafts/Sent 30d/Active campaigns) · **Runtime configuration card** (env values, secrets shown as set/unset only) · **Bulk import contacts card** (XLSX/CSV upload with SSE progress) · **Retention card** with Purge-now (scheduler runs daily auto-purge) · admin emails list · per-user stats · search + filter (Active/Suspended/Admins) · **per-row checkbox + bulk Suspend / Resume** · single Suspend/Resume · Delete · streamed users CSV export (`/api/admin/users/export`) · full DB backup |
 | `/guide` | In-app 17-section manual |
 | `/readme` | Public landing page (no login required) |
 
-**API:** `/api/v1/contacts` (GET, POST) — Bearer auth via API keys created in Settings → API keys. `/api/audit/export` for CSV download.
+**API:** `/api/v1/contacts` (GET, POST) — Bearer auth via API keys created in Settings → API keys. Keys carry **scopes** (`read:contacts`, `write:contacts`); routes reject calls missing the required scope with 403. `/api/audit/export` streams the full audit log (admins can pass `?scope=all`). `/api/progress/poll` is a polling fallback for SSE so progress works across Vercel Lambdas. `/api/admin/users/export` (admin) streams a users CSV. `/api/backup` (admin, audit-logged) dumps the whole DB.
 
 **Webhooks:** outbound POSTs on `sent / open / click / reply / bounce / unsubscribe` events with HMAC-SHA256 signatures (`X-EA-Signature` header). Configure in Settings → Webhooks.
 
-**Send safety:** per-user **daily limit** · **per-recipient throttle** (no double-tap from overlapping campaigns) · **per-domain daily cap** (defer over-cap rows by 1h, don't get flagged as a bulk sender) · **emergency Pause-all** kill switch · per-user TZ (IST default, 13-option dropdown).
+**Send safety:** per-user **daily limit** · **per-recipient throttle** (no double-tap from overlapping campaigns) · **per-domain daily cap** (defer over-cap rows by 1h, don't get flagged as a bulk sender) · **emergency Pause-all** kill switch · per-user TZ (IST default, 13-option dropdown) · **mailer transport cache invalidates on SMTP save/clear** so credential rotations take effect immediately · scheduler-tick **atomic claim** prevents double-send across overlapping ticks.
+
+**Onboarding:** First-time users see a 4-slide **onboarding modal** (Contacts → Templates → Drafts → Schedule/Campaigns). Dismissed once, persisted in `settings.ONBOARDING_SEEN_VERSION`; bump `ONBOARDING_CURRENT_VERSION` to re-show after a major UX change.
+
+**Retention:** events + audit-log rows are auto-purged once per 24 h per user by the scheduler. Defaults: events 180 d, audit 365 d. Override per-user via `EVENTS_RETENTION_DAYS` / `AUDIT_RETENTION_DAYS` settings, or hit "Purge now" on `/admin`.
+
+**Error sanitization:** server actions log full errors through pino but never echo driver / DB internals to the client (`lib/action-error.ts`).
+
+**Soft-block + unblock-restore:** Blocking a contact sets `emailStatus=BLOCKED` instead of deleting. The default contacts list hides BLOCKED rows. Removing the email from `/blocklist` restores the contact at the bottom of the list (`num = max + 1`).
 
 ---
 

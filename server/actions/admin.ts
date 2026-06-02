@@ -9,6 +9,14 @@ import { adminEmails } from '@/lib/env'
 import { parseXlsx, parseCsv, type ImportedContact } from '@/server/services/importer'
 import { dupKey } from '@/server/services/contacts'
 import { emit } from '@/server/sse'
+import { rateLimit } from '@/lib/rate-limit'
+
+// Admin write actions: 60/min/admin. Stops accidental loops (a stuck
+// onClick that fires every key event, or a malicious script in a console)
+// from chewing through the audit log.
+function adminLimit(adminId: string, op: string): boolean {
+  return rateLimit(`admin-write:${adminId}:${op}`, 60, 60_000)
+}
 
 // Tiny audit-log helper for admin actions. Keeps the call sites one-line
 // so contributors don't forget to log new admin operations. Errors are
@@ -21,6 +29,7 @@ async function logAdmin(actorId: string, action: string, detail = '') {
 
 export async function deleteUserAction(userId: string) {
   const me = await requireAdmin()
+  if (!adminLimit(me.id, 'delete_user')) return { error: 'Too many admin actions — slow down' }
   if (userId === me.id) return { error: "You can't delete yourself" }
   const [target] = await db.select().from(users).where(eq(users.id, userId))
   if (!target) return { error: 'User not found' }
@@ -41,6 +50,7 @@ import { setSetting } from '@/server/services/settings'
 
 export async function suspendUserAction(userId: string, suspend: boolean) {
   const me = await requireAdmin()
+  if (!adminLimit(me.id, 'suspend_user')) return { error: 'Too many admin actions — slow down' }
   if (userId === me.id) return { error: "You can't suspend yourself" }
   const [target] = await db.select().from(users).where(eq(users.id, userId))
   if (!target) return { error: 'User not found' }
@@ -57,6 +67,7 @@ export async function suspendUserAction(userId: string, suspend: boolean) {
 // admin's existing emails. Idempotent — re-upload skips dupes.
 export async function adminImportContactsAction(fd: FormData) {
   const me = await requireAdmin()
+  if (!adminLimit(me.id, 'import_contacts')) return { error: 'Too many admin actions — slow down' }
   const file = fd.get('file')
   if (!(file instanceof File)) return { error: 'No file uploaded' }
   // 25 MB cap — the workbook is ~600 KB so we have plenty of headroom for
@@ -176,6 +187,46 @@ function warmthAndLastContact(buf: ArrayBuffer): Map<string, string> {
     if (extras.length) out.set(email, extras.join(' | '))
   }
   return out
+}
+
+// Bulk suspend/resume — applies the per-user SENDS_PAUSED setting to many
+// users at once. Skips admins and the caller themselves so the operator
+// can't accidentally lock themselves out. Returns counts so the UI can
+// surface "Suspended 12 of 15 (3 skipped — admin/self)".
+export async function bulkSuspendUsersAction(userIds: string[], suspend: boolean) {
+  const me = await requireAdmin()
+  if (!adminLimit(me.id, 'bulk_suspend')) return { error: 'Too many admin actions — slow down' as string }
+  if (userIds.length === 0) return { error: 'No users selected' as string }
+  if (userIds.length > 500) return { error: 'Too many users — max 500 per call' as string }
+  const rows = await db.select().from(users).where(inArray(users.id, userIds))
+  let applied = 0, skipped = 0
+  for (const u of rows) {
+    if (u.id === me.id || adminEmails.includes((u.email ?? '').toLowerCase())) { skipped++; continue }
+    await setSetting(u.id, 'SENDS_PAUSED', suspend ? 'true' : 'false')
+    applied++
+  }
+  await logAdmin(me.id, suspend ? 'admin.bulk_suspend' : 'admin.bulk_resume',
+    `applied=${applied} skipped=${skipped}`)
+  revalidatePath('/admin')
+  return { ok: true as const, applied, skipped }
+}
+
+// Admin "Purge now" — bypasses the LAST_PURGE_AT day-gate and runs
+// retention on every user immediately. Caller sees totals so they know
+// the work happened. Audited so /audit?scope=all shows who triggered it.
+export async function purgeRetentionNowAction() {
+  const me = await requireAdmin()
+  if (!adminLimit(me.id, 'purge_retention')) return { error: 'Too many admin actions — slow down' }
+  const { purgeOldEvents, purgeOldAudit } = await import('@/server/services/retention')
+  const all = await db.select({ id: users.id }).from(users)
+  let events = 0, audit = 0
+  for (const u of all) {
+    events += await purgeOldEvents(u.id).catch(() => 0)
+    audit += await purgeOldAudit(u.id).catch(() => 0)
+  }
+  await logAdmin(me.id, 'admin.purge_retention', `events=${events} audit=${audit}`)
+  revalidatePath('/admin')
+  return { ok: true, events, audit, users: all.length }
 }
 
 export async function getUserSuspensions(userIds: string[]): Promise<Record<string, boolean>> {

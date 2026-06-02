@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { requireUser } from '@/auth'
 import { draftEmail, suggestSubjects, type Tone } from '@/server/services/ai'
 import { rateLimit } from '@/lib/rate-limit'
+import { actionError } from '@/lib/action-error'
 
 const TONES = ['professional', 'friendly', 'concise', 'enthusiastic', 'formal'] as const
 
@@ -27,7 +28,7 @@ export async function aiDraftAction(input: z.infer<typeof DraftSchema>) {
     })
     return { ok: true, html }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'AI request failed' }
+    return actionError(e, 'AI request failed')
   }
 }
 
@@ -45,6 +46,6 @@ export async function aiSuggestSubjectsAction(input: z.infer<typeof SubjectSchem
     const subjects = await suggestSubjects(u.id, parsed.data.topic, parsed.data.count ?? 5)
     return { ok: true, subjects }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'AI request failed' }
+    return actionError(e, 'AI request failed')
   }
 }

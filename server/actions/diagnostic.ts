@@ -3,7 +3,11 @@ import { promises as dns } from 'node:dns'
 import { requireUser } from '@/auth'
 import { verifySmtpFor, sendMail } from '@/server/services/mailer'
 import { getAiFor, getSmtpFor } from '@/server/services/credentials'
-import { env } from '@/lib/env'
+import { env, adminEmails } from '@/lib/env'
+import { actionError } from '@/lib/action-error'
+import { db } from '@/server/db/client'
+import { users } from '@/server/db/schema'
+import { sql } from 'drizzle-orm'
 
 export interface DiagResult { name: string; status: 'pass' | 'warn' | 'fail'; detail: string }
 
@@ -96,6 +100,30 @@ export async function runDiagnosticsAction(): Promise<{ results: DiagResult[] }>
     }
   } else warn('DNS', 'No sender domain to check')
 
+  // CRON_SECRET — required for the /api/cron/tick route to accept requests
+  // from Vercel cron. Missing it is the single most common reason "sends
+  // stopped after deploy" — surface it loudly here so the operator catches
+  // it before a campaign goes silent.
+  if (env.CRON_SECRET && env.CRON_SECRET.length >= 16) pass('CRON_SECRET', `set (${env.CRON_SECRET.length} chars)`)
+  else if (env.CRON_SECRET) warn('CRON_SECRET', 'set but suspiciously short (<16 chars) — use a long random value')
+  else warn('CRON_SECRET', 'unset — Vercel cron will be rejected; sends won\'t fire')
+
+  // libsql reachability — a 1-row probe against the configured DB. Errors
+  // here usually mean a bad TURSO_AUTH_TOKEN or an unreachable URL.
+  try {
+    await db.select({ n: sql<number>`1` }).from(users).limit(1)
+    const dbKind = env.DATABASE_URL.startsWith('libsql:') ? 'libsql (Turso)' : 'sqlite file'
+    pass('Database', `${dbKind} reachable`)
+  } catch (e) {
+    warn('Database', e instanceof Error ? e.message.slice(0, 200) : 'select failed')
+  }
+
+  // ADMIN_EMAILS — operators commonly forget to set this on first deploy.
+  // Without it /admin and /diagnostic redirect; the operator silently has
+  // no access. A loud warn beats a silent redirect.
+  if (adminEmails.length === 0) warn('ADMIN_EMAILS', 'unset — no admins on this instance; /admin and /diagnostic redirect')
+  else pass('ADMIN_EMAILS', `${adminEmails.length} configured`)
+
   pass('User', `Signed in as ${u.email}`)
   return { results: r }
 }
@@ -111,6 +139,6 @@ export async function sendSmtpTestAction() {
     }, u.id)
     return { ok: true, to: u.email }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'Send failed' }
+    return actionError(e, 'Send failed')
   }
 }

@@ -3,7 +3,7 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { requireUser } from '@/auth'
 import { setSetting } from '@/server/services/settings'
-import { verifySmtpFor } from '@/server/services/mailer'
+import { verifySmtpFor, clearMailerCache } from '@/server/services/mailer'
 import { encryptString } from '@/lib/crypto'
 
 const SmtpSchema = z.object({
@@ -28,6 +28,8 @@ export async function saveSmtpAction(input: z.infer<typeof SmtpSchema>) {
     const value = k === 'SMTP_PASS' ? encryptString(v) : v
     await setSetting(u.id, k, value)
   }
+  // Invalidate any cached Transporter so the next send picks up new creds.
+  clearMailerCache()
   // Verify right away — give the user instant feedback.
   const v = await verifySmtpFor(u.id)
   revalidatePath('/settings')
@@ -40,6 +42,7 @@ export async function clearSmtpAction() {
   for (const k of ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'EMAIL_FROM']) {
     await setSetting(u.id, k, '')
   }
+  clearMailerCache()
   revalidatePath('/settings')
   return { ok: true }
 }

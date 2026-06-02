@@ -1,16 +1,19 @@
 'use client'
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { CalendarClock, Eye, Play, X, Search } from 'lucide-react'
+import { toast } from 'sonner'
+import { CalendarClock, Eye, EyeOff, Play, Sparkles, X, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { cancelScheduleAction, enqueueScheduleAction, previewScheduleAction, cancelSelectedAction } from '@/server/actions/schedule'
+import { cancelScheduleAction, enqueueScheduleAction, previewScheduleAction, cancelSelectedAction, improveScheduledEmailAction } from '@/server/actions/schedule'
 import { useFormatDate, useTimezone } from '@/components/timezone-provider'
+
+type Tone = 'professional' | 'friendly' | 'concise' | 'enthusiastic' | 'formal'
 
 interface QueueRow {
   id: number; email: string; subject: string; scheduledAt: string; status: string
-  attempts: number; lastResult: string
+  attempts: number; lastResult: string; body: string
 }
 interface Preview { email: string; name: string; company: string; subject: string; scheduledAt: string }
 interface PreviewResp {
@@ -53,7 +56,7 @@ function buildPresets(): Preset[] {
   ]
 }
 
-export function ScheduleClient({ queue, queueCount }: { queue: QueueRow[]; queueCount: number }) {
+export function ScheduleClient({ queue, queueCount, isAdmin = false }: { queue: QueueRow[]; queueCount: number; isAdmin?: boolean }) {
   const formatDate = useFormatDate()
   const tz = useTimezone()
   const router = useRouter()
@@ -74,6 +77,12 @@ export function ScheduleClient({ queue, queueCount }: { queue: QueueRow[]; queue
   const [q, setQ] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'Scheduled' | 'Retrying'>('all')
   const [selected, setSelected] = useState<Set<number>>(new Set())
+  // Per-row preview state. Stores the *current* body so an admin AI Improve
+  // can update it in place without a full router.refresh().
+  const [openPreview, setOpenPreview] = useState<Record<number, { body: string }>>({})
+  const [aiRowId, setAiRowId] = useState<number | null>(null)
+  const [aiTone, setAiTone] = useState<Tone>('professional')
+  const [aiBusy, setAiBusy] = useState<number | null>(null)
   const filtered = queue.filter((r) => {
     if (statusFilter !== 'all' && r.status !== statusFilter) return false
     if (q.trim()) {
@@ -242,34 +251,105 @@ export function ScheduleClient({ queue, queueCount }: { queue: QueueRow[]; queue
                 <th className="p-2">Status</th>
                 <th className="p-2">Attempts</th>
                 <th className="p-2">Last result</th>
+                <th className="p-2"></th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((r) => (
-                <tr key={r.id} className="border-t">
-                  <td className="p-2">
-                    <input type="checkbox" aria-label={`Select scheduled email to ${r.email}`}
-                      checked={selected.has(r.id)}
-                      onChange={(e) => {
-                        const n = new Set(selected)
-                        if (e.target.checked) n.add(r.id); else n.delete(r.id)
-                        setSelected(n)
-                      }} />
-                  </td>
-                  <td className="p-2 whitespace-nowrap">{formatDate(r.scheduledAt)}</td>
-                  <td className="p-2 font-mono text-xs">{r.email}</td>
-                  <td className="p-2 truncate max-w-xs">{r.subject}</td>
-                  <td className="p-2">
-                    <span className={`rounded px-1.5 py-0.5 text-xs ${
-                      r.status === 'Retrying' ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400' : 'bg-muted'
-                    }`}>{r.status}</span>
-                  </td>
-                  <td className="p-2 text-xs tabular-nums">{r.attempts || 0}</td>
-                  <td className="p-2 text-xs text-muted-foreground truncate max-w-[16rem]" title={r.lastResult}>
-                    {r.lastResult || '—'}
-                  </td>
-                </tr>
-              ))}
+              {filtered.flatMap((r) => {
+                const previewOpen = openPreview[r.id]
+                const rows = [
+                  (
+                    <tr key={r.id} className="border-t">
+                      <td className="p-2">
+                        <input type="checkbox" aria-label={`Select scheduled email to ${r.email}`}
+                          checked={selected.has(r.id)}
+                          onChange={(e) => {
+                            const n = new Set(selected)
+                            if (e.target.checked) n.add(r.id); else n.delete(r.id)
+                            setSelected(n)
+                          }} />
+                      </td>
+                      <td className="p-2 whitespace-nowrap">{formatDate(r.scheduledAt)}</td>
+                      <td className="p-2 font-mono text-xs">{r.email}</td>
+                      <td className="p-2 truncate max-w-xs">{r.subject}</td>
+                      <td className="p-2">
+                        <span className={`rounded px-1.5 py-0.5 text-xs ${
+                          r.status === 'Retrying' ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400' : 'bg-muted'
+                        }`}>{r.status}</span>
+                      </td>
+                      <td className="p-2 text-xs tabular-nums">{r.attempts || 0}</td>
+                      <td className="p-2 text-xs text-muted-foreground truncate max-w-[16rem]" title={r.lastResult}>
+                        {r.lastResult || '—'}
+                      </td>
+                      <td className="p-2 text-right whitespace-nowrap">
+                        <Button variant="ghost" size="icon" aria-label={previewOpen ? 'Hide preview' : 'Preview body'}
+                          onClick={() => {
+                            setOpenPreview((o) => {
+                              const next = { ...o }
+                              if (previewOpen) delete next[r.id]
+                              else next[r.id] = { body: r.body }
+                              return next
+                            })
+                          }}>
+                          {previewOpen ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </Button>
+                        {isAdmin ? (
+                          <span className="relative inline-block">
+                            <Button variant="ghost" size="icon" aria-label="AI Improve"
+                              title="AI Improve (admin) — rewrite this queued email"
+                              disabled={pending || aiBusy === r.id}
+                              onClick={() => setAiRowId(aiRowId === r.id ? null : r.id)}>
+                              <Sparkles className={`h-4 w-4 ${aiBusy === r.id ? 'animate-pulse text-primary' : ''}`} />
+                            </Button>
+                            {aiRowId === r.id ? (
+                              <div className="absolute right-0 top-9 z-10 w-56 space-y-2 rounded-md border bg-popover p-2 text-sm shadow-md">
+                                <label className="block text-xs font-medium text-muted-foreground">Tone</label>
+                                <select value={aiTone} onChange={(e) => setAiTone(e.target.value as Tone)}
+                                  className="block w-full rounded-md border bg-background px-2 py-1 text-xs">
+                                  <option value="professional">Professional</option>
+                                  <option value="friendly">Friendly</option>
+                                  <option value="concise">Concise</option>
+                                  <option value="enthusiastic">Enthusiastic</option>
+                                  <option value="formal">Formal</option>
+                                </select>
+                                <div className="flex justify-end gap-1">
+                                  <Button variant="ghost" size="sm" onClick={() => setAiRowId(null)}>Cancel</Button>
+                                  <Button size="sm" disabled={aiBusy === r.id} onClick={() => {
+                                    const rowId = r.id
+                                    setAiBusy(rowId); setAiRowId(null)
+                                    start(async () => {
+                                      const resp = await improveScheduledEmailAction(rowId, aiTone)
+                                      setAiBusy(null)
+                                      if ('error' in resp) { toast.error(resp.error); return }
+                                      toast.success('Queued email improved — preview to review')
+                                      setOpenPreview((o) => ({ ...o, [rowId]: { body: resp.body } }))
+                                    })
+                                  }}>
+                                    <Sparkles className="mr-1 h-3.5 w-3.5" /> Improve
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : null}
+                          </span>
+                        ) : null}
+                      </td>
+                    </tr>
+                  ),
+                ]
+                if (previewOpen) {
+                  rows.push(
+                    <tr key={`${r.id}-body`} className="border-t bg-muted/40">
+                      <td colSpan={8} className="p-3">
+                        <div className="text-xs text-muted-foreground">Body preview — what the worker will send (still {'{{personalized}}'} at send time):</div>
+                        <div className="prose prose-sm dark:prose-invert mt-2 max-h-72 max-w-none overflow-auto rounded-md border bg-background p-3 text-sm"
+                          // eslint-disable-next-line react/no-danger
+                          dangerouslySetInnerHTML={{ __html: previewOpen.body || '<em class="text-muted-foreground">empty</em>' }} />
+                      </td>
+                    </tr>
+                  )
+                }
+                return rows
+              })}
             </tbody>
           </table>
         )}

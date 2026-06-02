@@ -19,7 +19,7 @@ npm run dev                      # Next dev server on :3000
 npm run worker                   # long-running scheduler tick loop (separate process)
 
 npm run typecheck                # tsc --noEmit, MUST stay clean
-npm test                         # Vitest, 52 tests, MUST stay green
+npm test                         # Vitest, 88 tests, MUST stay green
 npm run build                    # Next prod build
 npm run e2e                      # Playwright (optional, slow)
 ```
@@ -76,6 +76,30 @@ The local dev cookie is set by `POST /api/dev-signin {email}` when
     `requireAdmin()` should write a row so the cross-user audit view
     (`/audit?scope=all`) records who did what. See the `logAdmin()` helper
     in [server/actions/admin.ts](server/actions/admin.ts).
+14. **Admin write actions are rate-limited** — call the `adminLimit(me.id, 'op')`
+    helper at the top of every new `requireAdmin()` action (60/min/admin) so a
+    stuck loop or runaway script can't blow through Groq quota or the audit log.
+15. **Server actions never echo driver errors** — wrap any `catch (e)` that
+    returns to the client in `actionError(e, fallback)` from
+    [lib/action-error.ts](lib/action-error.ts). It logs through pino and
+    drops anything that looks like a SQLite / libsql / stack-frame leak.
+16. **API key scopes** — v1 routes call `requireBearer(req, ['scope:name'])`.
+    Adding a new route means adding it to the scope catalog in
+    [lib/bearer-auth.ts](lib/bearer-auth.ts) and listing it in the API keys UI
+    so users can opt in. Empty `scopes` = back-compat full-access (pre-0004).
+17. **Rich text editor is shared** — every body editor uses
+    `<RichTextEditor value onChange />` from
+    [components/rich-text-editor.tsx](components/rich-text-editor.tsx). Don't
+    re-implement contentEditable / toolbar in another component; the M1 TipTap
+    migration will swap a single file.
+18. **Onboarding modal version** — bumping `ONBOARDING_CURRENT_VERSION` in
+    [components/onboarding-modal.tsx](components/onboarding-modal.tsx) re-shows
+    the modal for every user on next sign-in. Use sparingly — major UX shifts
+    only.
+19. **Retention purge** — `EVENTS_RETENTION_DAYS` (default 180) and
+    `AUDIT_RETENTION_DAYS` (default 365) are per-user settings. Scheduler-tick
+    calls `maybePurgeForUser` after every user-tick, gated to once per 24 h.
+    Don't add a new unbounded growth table without a retention path.
 
 ## Architecture
 

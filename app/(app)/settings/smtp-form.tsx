@@ -80,7 +80,7 @@ export function SmtpForm({ initial, source, passSaved = false }: Props) {
         <Button type="submit" disabled={pending}><Save className="mr-1.5 h-4 w-4" /> {pending ? 'Saving…' : 'Save'}</Button>
         <Button type="button" variant="outline" disabled={pending} onClick={() => start(async () => {
           const r = await sendSmtpTestAction()
-          if ('error' in r && r.error) toast.error(r.error); else toast.success(`Test email sent to ${r.to}`)
+          if ('error' in r) toast.error(r.error); else toast.success(`Test email sent to ${r.to}`)
         })}><Mail className="mr-1.5 h-4 w-4" /> Send test to me</Button>
         {source === 'user' ? (
           <Button type="button" variant="ghost" className="ml-auto text-destructive" disabled={pending}

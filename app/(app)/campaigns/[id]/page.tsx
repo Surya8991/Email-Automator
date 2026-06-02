@@ -41,9 +41,10 @@ export default async function CampaignDetailPage(props: { params: Promise<{ id: 
         campaign={data.campaign}
         steps={data.steps}
         enrollments={data.enrollments}
-        templates={tpls.map((t) => ({ id: t.id, label: t.label || t.key }))}
+        templates={tpls.map((t) => ({ id: t.id, label: t.label || t.key, initialMsg: t.initialMsg }))}
         tags={tags}
         stepStats={stepStats}
+        isAdmin={u.isAdmin}
       />
     </div>
   )

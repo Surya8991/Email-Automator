@@ -7,10 +7,8 @@ import { contacts, events } from '@/server/db/schema'
 import { detectBounces, detectReplies, fetchGmailSignature } from '@/server/services/google'
 import { setSetting } from '@/server/services/settings'
 import { dispatchAsync } from '@/server/services/webhooks'
-import { logger } from '@/lib/logger'
+import { actionError } from '@/lib/action-error'
 import { formatDate } from '@/lib/utils'
-
-const log = logger.child({ component: 'gmail-action' })
 
 /** Fetch the user's Gmail signature and save it as their app signature. */
 export async function fetchSignatureAction() {
@@ -23,8 +21,7 @@ export async function fetchSignatureAction() {
     revalidatePath('/settings')
     return { ok: true, signature: sig, message: `Imported ${sig.length} chars.` }
   } catch (e) {
-    log.warn({ err: e }, 'fetch signature failed')
-    return { error: e instanceof Error ? e.message : 'Gmail fetch failed' }
+    return actionError(e, 'Gmail fetch failed', { action: 'fetchSignature' })
   }
 }
 
@@ -59,7 +56,7 @@ export async function checkRepliesAction() {
     revalidatePath('/dashboard')
     return { ok: true, checked: sample.length, total: sent.length, replied: updated }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'Gmail check failed' }
+    return actionError(e, 'Gmail check failed')
   }
 }
 
@@ -88,6 +85,6 @@ export async function checkBouncesAction() {
     revalidatePath('/contacts')
     return { ok: true, bouncedFound: bouncedEmails.size, marked }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'Gmail check failed' }
+    return actionError(e, 'Gmail check failed')
   }
 }

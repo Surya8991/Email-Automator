@@ -1,8 +1,14 @@
 'use server'
 import { revalidatePath } from 'next/cache'
+import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
-import { requireUser } from '@/auth'
+import { requireAdmin, requireUser } from '@/auth'
 import * as svc from '@/server/services/schedule'
+import { actionError } from '@/lib/action-error'
+import { db } from '@/server/db/client'
+import { emailLog, auditLog } from '@/server/db/schema'
+import { draftEmail, type Tone } from '@/server/services/ai'
+import { rateLimit } from '@/lib/rate-limit'
 
 const Schema = z.object({
   startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -48,7 +54,7 @@ export async function enqueueScheduleAction(input: z.infer<typeof Schema>) {
     revalidatePath('/dashboard')
     return { ok: true, ...r }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'Schedule failed' }
+    return actionError(e, 'Schedule failed')
   }
 }
 
@@ -74,7 +80,7 @@ export async function enqueueSelectedScheduleAction(input: z.infer<typeof Select
     revalidatePath('/dashboard')
     return { ok: true, ...r }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'Schedule failed' }
+    return actionError(e, 'Schedule failed')
   }
 }
 
@@ -84,6 +90,40 @@ export async function cancelScheduleAction() {
   revalidatePath('/schedule')
   revalidatePath('/dashboard')
   return { ok: true, ...r }
+}
+
+// Admin-only AI Improve for a queued email. Rewrites emailLog.body in place
+// using the same Groq prompt that drafts use, then audit-logs the action.
+// The scheduler tick picks up the new body on its next pass — no schedule
+// change. Caller (UI) opens a preview after this fires so the admin can
+// review before the worker sends.
+const TONE_LIST = ['professional', 'friendly', 'concise', 'enthusiastic', 'formal'] as const
+export async function improveScheduledEmailAction(id: number, tone: Tone = 'professional') {
+  const me = await requireAdmin()
+  if (!rateLimit(`admin-write:${me.id}:improve_scheduled`, 60, 60_000)) {
+    return { error: 'Too many admin actions — slow down' }
+  }
+  if (!TONE_LIST.includes(tone)) return { error: 'Invalid tone' }
+  const [row] = await db.select().from(emailLog)
+    .where(and(eq(emailLog.id, id), eq(emailLog.userId, me.id)))
+  if (!row) return { error: 'Scheduled email not found' }
+  if (row.status !== 'Scheduled' && row.status !== 'Retrying') {
+    return { error: `Cannot improve a "${row.status}" row` }
+  }
+  let improved: string
+  try {
+    improved = await draftEmail(me.id, {
+      existing: row.body,
+      tone,
+      goal: 'Improve the email below — keep the intent and any {{variables}} intact, tighten language, fix awkward phrasing, match the requested tone.',
+    })
+  } catch (e) {
+    return actionError(e, 'AI request failed')
+  }
+  await db.update(emailLog).set({ body: improved }).where(eq(emailLog.id, id))
+  try { await db.insert(auditLog).values({ userId: me.id, action: 'admin.ai_improve_scheduled', detail: `email_log_id=${id} tone=${tone}`, ip: '' }) } catch { /* noop */ }
+  revalidatePath('/schedule')
+  return { ok: true as const, body: improved }
 }
 
 export async function cancelSelectedAction(ids: number[]) {

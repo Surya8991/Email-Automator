@@ -7,6 +7,8 @@ import { drafts as draftsTable, auditLog } from '@/server/db/schema'
 import { getActive } from '@/server/services/templates'
 import * as drafts from '@/server/services/drafts'
 import { draftEmail, type Tone } from '@/server/services/ai'
+import { actionError } from '@/lib/action-error'
+import { rateLimit } from '@/lib/rate-limit'
 
 export async function createDraftsAction(count: number) {
   const u = await requireUser()
@@ -70,7 +72,7 @@ export async function scheduleFollowupAction(contactId: number, days: number) {
     revalidatePath('/dashboard')
     return { ok: true as const, ...r }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'Schedule failed' }
+    return actionError(e, 'Schedule failed')
   }
 }
 
@@ -152,6 +154,10 @@ export async function deleteAllDraftsAction() {
 // requireAdmin() guard catches anyone who hits the action directly.
 export async function improveDraftAction(id: number, tone: Tone = 'professional') {
   const me = await requireAdmin()
+  // Admin AI Improve: 60/min/admin. Caps Groq spend on a stuck loop.
+  if (!rateLimit(`admin-write:${me.id}:improve_draft`, 60, 60_000)) {
+    return { error: 'Too many admin actions — slow down' }
+  }
   const [d] = await db.select().from(draftsTable)
     .where(and(eq(draftsTable.id, id), eq(draftsTable.userId, me.id)))
   if (!d) return { error: 'Draft not found' }
@@ -163,7 +169,7 @@ export async function improveDraftAction(id: number, tone: Tone = 'professional'
       goal: 'Improve the email below — keep the intent and any {{variables}} intact, tighten language, fix awkward phrasing, match the requested tone.',
     })
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'AI request failed' }
+    return actionError(e, 'AI request failed')
   }
   await drafts.updateDraft(me.id, id, { htmlBody: improved })
   // Admin AI use is logged so /audit?scope=all can show which admin

@@ -25,22 +25,44 @@ export function readNotesText(notes: string | null | undefined): string {
   return notes.replace(BLOCK_RE, '').replace(/\s+$/, '')
 }
 
+// Per-render memoization. /contacts now lets users page 1000 rows at a
+// time and the templates' AI preview pass calls readCustomFields per
+// contact per render — JSON.parse of every notes block stacks up. A Map
+// keyed by the exact notes string short-circuits the parse on subsequent
+// reads in the same request without holding onto contacts after they fall
+// out of scope (the map is bounded so it's safe for a long-running worker
+// too). 200 entries covers a full page; older entries roll out FIFO.
+const PARSE_CACHE = new Map<string, Record<string, string>>()
+const PARSE_CACHE_MAX = 200
+
 /** Extract the JSON block from a notes string. Returns {} if absent / malformed. */
 export function readCustomFields(notes: string | null | undefined): Record<string, string> {
   if (!notes) return {}
+  const cached = PARSE_CACHE.get(notes)
+  if (cached) return cached
   const m = notes.match(BLOCK_RE)
-  if (!m) return {}
-  try {
-    const obj = JSON.parse(m[1]!)
-    if (!obj || typeof obj !== 'object') return {}
-    const out: Record<string, string> = {}
-    for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
-      if (typeof k === 'string' && k && (typeof v === 'string' || typeof v === 'number')) {
-        out[k.toLowerCase()] = String(v)
+  let out: Record<string, string> = {}
+  if (m) {
+    try {
+      const obj = JSON.parse(m[1]!)
+      if (obj && typeof obj === 'object') {
+        const parsed: Record<string, string> = {}
+        for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
+          if (typeof k === 'string' && k && (typeof v === 'string' || typeof v === 'number')) {
+            parsed[k.toLowerCase()] = String(v)
+          }
+        }
+        out = parsed
       }
-    }
-    return out
-  } catch { return {} }
+    } catch { /* malformed JSON — treat as empty */ }
+  }
+  // FIFO cap so a long-running worker doesn't grow this without bound.
+  if (PARSE_CACHE.size >= PARSE_CACHE_MAX) {
+    const first = PARSE_CACHE.keys().next().value
+    if (first !== undefined) PARSE_CACHE.delete(first)
+  }
+  PARSE_CACHE.set(notes, out)
+  return out
 }
 
 /** Compose a notes string with a fresh custom-fields block. */

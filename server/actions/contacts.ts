@@ -106,7 +106,7 @@ export async function bulkTagAction(ids: number[], add: string, remove: string) 
 export async function bulkBlockAction(ids: number[]) {
   const u = await requireUser()
   if (ids.length === 0) return { error: 'No contacts selected' }
-  const rows = await db.select({ email: contacts.recruiterEmail }).from(contacts)
+  const rows = await db.select({ id: contacts.id, email: contacts.recruiterEmail }).from(contacts)
     .where(and(eq(contacts.userId, u.id), inArray(contacts.id, ids)))
   let blocked = 0
   for (const r of rows) {
@@ -116,10 +116,14 @@ export async function bulkBlockAction(ids: number[]) {
       blocked++
     } catch { /* unique-conflict ok — already blocked */ }
   }
-  await svc.deleteContactsBulk(u.id, ids)
+  // Soft-block: flip emailStatus to BLOCKED instead of hard-deleting. The
+  // contact row stays so unblocking later can restore them to the bottom
+  // of the list. listContacts hides BLOCKED rows by default.
+  await db.update(contacts).set({ emailStatus: 'BLOCKED' })
+    .where(and(eq(contacts.userId, u.id), inArray(contacts.id, ids)))
   revalidatePath('/contacts')
   revalidatePath('/blocklist')
-  return { ok: true, blocked, deleted: rows.length }
+  return { ok: true, blocked, deleted: 0 }
 }
 
 // Reset the email_status on a set of contacts (so the next "Create drafts"

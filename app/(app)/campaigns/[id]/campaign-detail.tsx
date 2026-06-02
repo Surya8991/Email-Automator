@@ -1,7 +1,8 @@
 'use client'
 import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { ChevronDown, ChevronUp, Pause, Play, Trash2, UserPlus, Archive, X, Search } from 'lucide-react'
+import { toast } from 'sonner'
+import { ChevronDown, ChevronUp, Eye, EyeOff, Pause, Play, Sparkles, Trash2, UserPlus, Archive, X, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -9,8 +10,11 @@ import { Label } from '@/components/ui/label'
 import {
   addStepAction, deleteCampaignAction, enrollAction,
   moveStepAction, removeStepAction, setStatusAction,
+  improveCampaignTemplateAction,
 } from '@/server/actions/campaigns'
 import { useFormatDate } from '@/components/timezone-provider'
+
+type Tone = 'professional' | 'friendly' | 'concise' | 'enthusiastic' | 'formal'
 
 interface Step { id: number; campaignId: number; order: number; templateId: number | null; delayHours: number; stopOnReply: boolean }
 interface Enrollment { id: number; contactId: number; currentStep: number; nextRunAt: number; status: string }
@@ -22,12 +26,13 @@ interface Props {
   campaign: { id: number; name: string; status: string }
   steps: Step[]
   enrollments: Enrollment[]
-  templates: Array<{ id: number; label: string }>
+  templates: Array<{ id: number; label: string; initialMsg: string }>
   tags: string[]
   stepStats: StepStat[]
+  isAdmin?: boolean
 }
 
-export function CampaignDetail({ campaign, steps, enrollments, templates, tags, stepStats }: Props) {
+export function CampaignDetail({ campaign, steps, enrollments, templates, tags, stepStats, isAdmin = false }: Props) {
   const formatDate = useFormatDate()
   const router = useRouter()
   const [pending, start] = useTransition()
@@ -57,6 +62,14 @@ export function CampaignDetail({ campaign, steps, enrollments, templates, tags, 
   }, [enrollments, enrQ, enrStatus])
 
   const tplName = (id: number | null) => templates.find((t) => t.id === id)?.label ?? '— deleted template —'
+  const tplBody = (id: number | null) => templates.find((t) => t.id === id)?.initialMsg ?? ''
+
+  // Per-step preview + AI Improve UI state. Body map lets us update inline
+  // after Improve without a full router.refresh().
+  const [openPreview, setOpenPreview] = useState<Record<number, string>>({})
+  const [aiRowId, setAiRowId] = useState<number | null>(null)
+  const [aiTone, setAiTone] = useState<Tone>('professional')
+  const [aiBusy, setAiBusy] = useState<number | null>(null)
 
   return (
     <>
@@ -91,29 +104,91 @@ export function CampaignDetail({ campaign, steps, enrollments, templates, tags, 
             <p className="text-sm text-muted-foreground">No steps yet — add one below.</p>
           ) : (
             <ol className="space-y-2">
-              {steps.map((s, i) => (
-                <li key={s.id} className="flex items-center gap-3 rounded-md border p-3">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">{i + 1}</span>
-                  <div className="flex-1">
-                    <div className="text-sm font-medium">{tplName(s.templateId)}</div>
-                    <div className="text-xs text-muted-foreground">
-                      Wait {s.delayHours}h after enrollment{s.stopOnReply ? ' · stops on reply' : ''}
+              {steps.map((s, i) => {
+                const liveBody = s.templateId !== null ? (openPreview[s.id] ?? tplBody(s.templateId)) : ''
+                const previewOn = openPreview[s.id] !== undefined
+                return (
+                <li key={s.id} className="rounded-md border">
+                  <div className="flex items-center gap-3 p-3">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">{i + 1}</span>
+                    <div className="flex-1">
+                      <div className="text-sm font-medium">{tplName(s.templateId)}</div>
+                      <div className="text-xs text-muted-foreground">
+                        Wait {s.delayHours}h after enrollment{s.stopOnReply ? ' · stops on reply' : ''}
+                      </div>
                     </div>
+                    <Button variant="ghost" size="icon" aria-label={previewOn ? 'Hide template body' : 'Preview template body'}
+                      disabled={s.templateId === null}
+                      onClick={() => setOpenPreview((o) => {
+                        const next = { ...o }
+                        if (previewOn) delete next[s.id]
+                        else next[s.id] = tplBody(s.templateId)
+                        return next
+                      })}>
+                      {previewOn ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                    {isAdmin && s.templateId !== null ? (
+                      <span className="relative inline-block">
+                        <Button variant="ghost" size="icon" aria-label="AI Improve template" disabled={pending || aiBusy === s.id}
+                          title="AI Improve (admin) — rewrites the template body for future sends"
+                          onClick={() => setAiRowId(aiRowId === s.id ? null : s.id)}>
+                          <Sparkles className={`h-4 w-4 ${aiBusy === s.id ? 'animate-pulse text-primary' : ''}`} />
+                        </Button>
+                        {aiRowId === s.id ? (
+                          <div className="absolute right-0 top-9 z-10 w-56 space-y-2 rounded-md border bg-popover p-2 text-sm shadow-md">
+                            <label className="block text-xs font-medium text-muted-foreground">Tone</label>
+                            <select value={aiTone} onChange={(e) => setAiTone(e.target.value as Tone)}
+                              className="block w-full rounded-md border bg-background px-2 py-1 text-xs">
+                              <option value="professional">Professional</option>
+                              <option value="friendly">Friendly</option>
+                              <option value="concise">Concise</option>
+                              <option value="enthusiastic">Enthusiastic</option>
+                              <option value="formal">Formal</option>
+                            </select>
+                            <div className="flex justify-end gap-1">
+                              <Button variant="ghost" size="sm" onClick={() => setAiRowId(null)}>Cancel</Button>
+                              <Button size="sm" disabled={aiBusy === s.id} onClick={() => {
+                                const stepId = s.id
+                                const tid = s.templateId!
+                                setAiBusy(stepId); setAiRowId(null)
+                                start(async () => {
+                                  const r = await improveCampaignTemplateAction(tid, aiTone)
+                                  setAiBusy(null)
+                                  if ('error' in r) { toast.error(r.error); return }
+                                  toast.success('Template improved — future sends use new body')
+                                  setOpenPreview((o) => ({ ...o, [stepId]: r.initialMsg }))
+                                })
+                              }}>
+                                <Sparkles className="mr-1 h-3.5 w-3.5" /> Improve
+                              </Button>
+                            </div>
+                          </div>
+                        ) : null}
+                      </span>
+                    ) : null}
+                    <Button variant="ghost" size="icon" aria-label="Move up" disabled={pending || i === 0}
+                      onClick={() => start(async () => { await moveStepAction(campaign.id, s.id, 'up'); router.refresh() })}>
+                      <ChevronUp className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" aria-label="Move down" disabled={pending || i === steps.length - 1}
+                      onClick={() => start(async () => { await moveStepAction(campaign.id, s.id, 'down'); router.refresh() })}>
+                      <ChevronDown className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" aria-label="Remove step" disabled={pending}
+                      onClick={() => start(async () => { await removeStepAction(campaign.id, s.id); router.refresh() })}>
+                      <X className="h-4 w-4" />
+                    </Button>
                   </div>
-                  <Button variant="ghost" size="icon" aria-label="Move up" disabled={pending || i === 0}
-                    onClick={() => start(async () => { await moveStepAction(campaign.id, s.id, 'up'); router.refresh() })}>
-                    <ChevronUp className="h-4 w-4" />
-                  </Button>
-                  <Button variant="ghost" size="icon" aria-label="Move down" disabled={pending || i === steps.length - 1}
-                    onClick={() => start(async () => { await moveStepAction(campaign.id, s.id, 'down'); router.refresh() })}>
-                    <ChevronDown className="h-4 w-4" />
-                  </Button>
-                  <Button variant="ghost" size="icon" aria-label="Remove step" disabled={pending}
-                    onClick={() => start(async () => { await removeStepAction(campaign.id, s.id); router.refresh() })}>
-                    <X className="h-4 w-4" />
-                  </Button>
+                  {previewOn ? (
+                    <div className="border-t bg-muted/40 p-3">
+                      <div className="text-xs text-muted-foreground">Template body — what each enrolled contact will receive (still {'{{personalized}}'} at send time):</div>
+                      <div className="prose prose-sm dark:prose-invert mt-2 max-h-72 max-w-none overflow-auto rounded-md border bg-background p-3 text-sm"
+                        // eslint-disable-next-line react/no-danger
+                        dangerouslySetInnerHTML={{ __html: liveBody || '<em class="text-muted-foreground">empty</em>' }} />
+                    </div>
+                  ) : null}
                 </li>
-              ))}
+              )})}
             </ol>
           )}
 

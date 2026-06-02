@@ -1,8 +1,9 @@
 'use client'
-import { useRef, useState, useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
-import { Send, Trash2, Sparkles, SendHorizontal, Pencil, Save, X, CalendarClock, Search, Bold, Italic, Link as LinkIcon, List, Code, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Send, Trash2, Sparkles, SendHorizontal, Pencil, Save, X, CalendarClock, Search, ChevronLeft, ChevronRight } from 'lucide-react'
+import { RichTextEditor } from '@/components/rich-text-editor'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -50,11 +51,6 @@ export function DraftsClient({
   const [editId, setEditId] = useState<number | null>(null)
   const [editSubject, setEditSubject] = useState('')
   const [editBody, setEditBody] = useState('')
-  // Editor mode for the body — 'rich' shows a contentEditable WYSIWYG view
-  // (default; what users want), 'html' drops to raw HTML for power-users.
-  // Switching modes syncs editBody in both directions.
-  const [editMode, setEditMode] = useState<'rich' | 'html'>('rich')
-  const richRef = useRef<HTMLDivElement | null>(null)
   // AI Improve UI state — admin-only. Per-row tone picker; null = closed.
   const [aiRowId, setAiRowId] = useState<number | null>(null)
   const [aiTone, setAiTone] = useState<Tone>('professional')
@@ -208,77 +204,15 @@ export function DraftsClient({
                 <div className="min-w-0 flex-1">
                   <div className="text-xs font-mono text-muted-foreground">{d.toEmail}</div>
                   {isEditing ? (
-                    // Inline editor — subject Input + tabbed body editor.
-                    // Default 'rich' is a contentEditable view so non-
-                    // technical users edit formatted text directly. Power
-                    // users can flip to 'html' for raw markup. Saves
-                    // overwrite both subject + htmlBody; plainBody is
-                    // recomputed lazily next time the user toggles preview.
                     <div className="mt-2 space-y-2">
                       <Input value={editSubject} onChange={(e) => setEditSubject(e.target.value)}
                         className="font-medium" placeholder="Subject" />
-                      <div className="flex flex-wrap items-center gap-1 rounded-md border bg-muted/30 p-1">
-                        <div className="inline-flex overflow-hidden rounded-md border bg-background text-xs">
-                          <button type="button"
-                            className={`px-2 py-1 ${editMode === 'rich' ? 'bg-muted font-medium' : 'text-muted-foreground hover:bg-accent'}`}
-                            onClick={() => {
-                              // Pull latest from textarea before switching to rich.
-                              setEditMode('rich')
-                              // editBody is the source of truth; the rich div is
-                              // populated from it via dangerouslySetInnerHTML on mount.
-                            }}>
-                            <Pencil className="mr-1 inline h-3 w-3" /> Rich
-                          </button>
-                          <button type="button"
-                            className={`border-l px-2 py-1 ${editMode === 'html' ? 'bg-muted font-medium' : 'text-muted-foreground hover:bg-accent'}`}
-                            onClick={() => {
-                              // Pull latest from contentEditable before showing the textarea.
-                              if (richRef.current) setEditBody(richRef.current.innerHTML)
-                              setEditMode('html')
-                            }}>
-                            <Code className="mr-1 inline h-3 w-3" /> HTML
-                          </button>
-                        </div>
-                        {editMode === 'rich' ? (
-                          <div className="ml-2 inline-flex items-center gap-0.5">
-                            <ToolbarBtn label="Bold (Ctrl+B)" onClick={() => exec('bold')}><Bold className="h-3.5 w-3.5" /></ToolbarBtn>
-                            <ToolbarBtn label="Italic (Ctrl+I)" onClick={() => exec('italic')}><Italic className="h-3.5 w-3.5" /></ToolbarBtn>
-                            <ToolbarBtn label="Bullet list" onClick={() => exec('insertUnorderedList')}><List className="h-3.5 w-3.5" /></ToolbarBtn>
-                            <ToolbarBtn label="Link" onClick={() => {
-                              const url = prompt('URL:')?.trim()
-                              if (url) exec('createLink', url)
-                            }}><LinkIcon className="h-3.5 w-3.5" /></ToolbarBtn>
-                          </div>
-                        ) : null}
-                      </div>
-                      {editMode === 'rich' ? (
-                        <div
-                          ref={richRef}
-                          contentEditable
-                          suppressContentEditableWarning
-                          className="prose prose-sm dark:prose-invert min-h-[12rem] max-w-none rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                          // eslint-disable-next-line react/no-danger
-                          dangerouslySetInnerHTML={{ __html: editBody }}
-                          // Sync to editBody on blur so the Save button always
-                          // has the latest content even if the user clicks
-                          // Save before clicking elsewhere.
-                          onBlur={(e) => setEditBody((e.target as HTMLDivElement).innerHTML)}
-                          onKeyDown={(e) => {
-                            // Common keyboard shortcuts. execCommand is
-                            // deprecated but still ubiquitously supported and
-                            // covers our needs without a real rich-text dep.
-                            if (e.ctrlKey || e.metaKey) {
-                              if (e.key === 'b') { e.preventDefault(); exec('bold') }
-                              else if (e.key === 'i') { e.preventDefault(); exec('italic') }
-                            }
-                          }}
-                        />
-                      ) : (
-                        <textarea value={editBody} onChange={(e) => setEditBody(e.target.value)}
-                          rows={12}
-                          className="w-full rounded-md border bg-background px-3 py-2 font-mono text-xs"
-                          placeholder="HTML body" />
-                      )}
+                      <RichTextEditor
+                        value={editBody}
+                        onChange={setEditBody}
+                        rows={12}
+                        placeholder="Body"
+                      />
                     </div>
                   ) : (
                     <details className="group">
@@ -323,16 +257,42 @@ export function DraftsClient({
                           </Button>
                           <Button size="sm" disabled={aiBusy === d.id} onClick={() => {
                             const draftId = d.id
+                            const originalBody = d.htmlBody
+                            const originalSubject = d.subject
+                            // Snapshot the pre-improve body so the toast's
+                            // Undo button can restore it. TTL 1 h.
+                            try {
+                              localStorage.setItem(`undo-improve-${draftId}`, JSON.stringify({
+                                body: originalBody, subject: originalSubject, at: Date.now(),
+                              }))
+                            } catch { /* quota — proceed without undo */ }
                             setAiBusy(draftId); setAiRowId(null)
                             start(async () => {
                               const r = await improveDraftAction(draftId, aiTone)
                               setAiBusy(null)
                               if ('error' in r && r.error) { toast.error(r.error); return }
-                              toast.success('Draft improved — review before sending')
+                              toast.success('Draft improved — review before sending', {
+                                action: {
+                                  label: 'Undo',
+                                  onClick: () => start(async () => {
+                                    const raw = localStorage.getItem(`undo-improve-${draftId}`)
+                                    if (!raw) { toast.error('Original no longer available'); return }
+                                    try {
+                                      const saved = JSON.parse(raw) as { body: string; subject: string; at: number }
+                                      if (Date.now() - saved.at > 60 * 60 * 1000) {
+                                        toast.error('Undo expired (1 h)'); return
+                                      }
+                                      await updateDraftAction(draftId, { subject: saved.subject, htmlBody: saved.body })
+                                      localStorage.removeItem(`undo-improve-${draftId}`)
+                                      toast.success('Restored original draft'); router.refresh()
+                                    } catch { toast.error('Restore failed') }
+                                  }),
+                                },
+                              })
                               // Open the editor on the improved body so the
                               // admin reviews/edits before send.
                               if ('htmlBody' in r && typeof r.htmlBody === 'string') {
-                                setEditId(draftId); setEditSubject(d.subject); setEditBody(r.htmlBody); setEditMode('rich')
+                                setEditId(draftId); setEditSubject(d.subject); setEditBody(r.htmlBody)
                               }
                               router.refresh()
                             })
@@ -348,11 +308,7 @@ export function DraftsClient({
                   <>
                     <Button variant="ghost" size="icon" aria-label="Save" disabled={pending}
                       onClick={() => start(async () => {
-                        // Pull latest from the active editor before saving.
-                        const latestBody = editMode === 'rich' && richRef.current
-                          ? richRef.current.innerHTML
-                          : editBody
-                        await updateDraftAction(d.id, { subject: editSubject, htmlBody: latestBody })
+                        await updateDraftAction(d.id, { subject: editSubject, htmlBody: editBody })
                         setEditId(null); toast.success('Draft updated'); router.refresh()
                       })}>
                       <Save className="h-4 w-4" />
@@ -366,7 +322,6 @@ export function DraftsClient({
                   <Button variant="ghost" size="icon" aria-label="Edit"
                     onClick={() => {
                       setEditId(d.id); setEditSubject(d.subject); setEditBody(d.htmlBody)
-                      setEditMode('rich')
                     }}>
                     <Pencil className="h-4 w-4" />
                   </Button>
@@ -456,27 +411,3 @@ export function DraftsClient({
 
 // Thin wrapper around document.execCommand for the formatting toolbar.
 // execCommand is deprecated but every shipping browser still honors it for
-// these basic operations, and avoiding a real rich-text dep keeps the
-// bundle small. The contenteditable div picks up the changes immediately.
-function exec(cmd: string, value?: string) {
-  try {
-    document.execCommand(cmd, false, value)
-  } catch {
-    /* old Safari quirk — ignore */
-  }
-}
-
-function ToolbarBtn({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      type="button"
-      title={label}
-      aria-label={label}
-      onMouseDown={(e) => e.preventDefault()} // keep contenteditable selection
-      onClick={onClick}
-      className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-    >
-      {children}
-    </button>
-  )
-}

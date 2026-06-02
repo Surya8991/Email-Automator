@@ -25,7 +25,7 @@ export function DiagnosticClient() {
         })}><Play className="mr-1.5 h-4 w-4" /> Run checks</Button>
         <Button variant="outline" disabled={pending} onClick={() => start(async () => {
           const r = await sendSmtpTestAction()
-          if ('error' in r && r.error) toast.error(r.error); else toast.success(`Test email sent to ${r.to}`)
+          if ('error' in r) toast.error(r.error); else toast.success(`Test email sent to ${r.to}`)
         })}><Mail className="mr-1.5 h-4 w-4" /> Send test to self</Button>
         <Button variant="outline" disabled={pending} onClick={() => start(async () => {
           const r = await checkRepliesAction()

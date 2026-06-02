@@ -13,15 +13,21 @@ function hashKey(raw: string): string {
   return crypto.createHash('sha256').update(raw).digest('hex')
 }
 
-export interface CreatedKey { id: number; raw: string; prefix: string; name: string }
+export interface CreatedKey { id: number; raw: string; prefix: string; name: string; scopes: string }
 
-export async function createKey(userId: string, name: string): Promise<CreatedKey> {
+/**
+ * Create a new API key. `scopes` is a comma-separated list (e.g.
+ * "read:contacts,write:contacts"). Pass empty string to mean "all scopes"
+ * — matches the back-compat behavior of pre-0004 keys.
+ */
+export async function createKey(userId: string, name: string, scopes = 'read:contacts,write:contacts'): Promise<CreatedKey> {
   const raw = generateRawKey()
   const prefix = raw.slice(0, 11) // "ea_" + first 8 chars
+  const cleanScopes = scopes.split(',').map((s) => s.trim()).filter(Boolean).join(',')
   const ins = await db.insert(apiKeys).values({
-    userId, name, keyHash: hashKey(raw), prefix,
+    userId, name, keyHash: hashKey(raw), prefix, scopes: cleanScopes,
   }).returning({ id: apiKeys.id })
-  return { id: ins[0]!.id, raw, prefix, name }
+  return { id: ins[0]!.id, raw, prefix, name, scopes: cleanScopes }
 }
 
 export async function listKeys(userId: string): Promise<ApiKey[]> {
@@ -35,6 +41,12 @@ export async function revokeKey(userId: string, id: number): Promise<void> {
 
 /** Look up a key by raw token. Returns null if not found, revoked, or wrong. */
 export async function userIdFromKey(raw: string): Promise<string | null> {
+  const r = await userIdAndScopesFromKey(raw)
+  return r ? r.userId : null
+}
+
+/** Look up a key and its scopes. Empty `scopes` = "all" (back-compat). */
+export async function userIdAndScopesFromKey(raw: string): Promise<{ userId: string; scopes: string } | null> {
   if (!raw || !raw.startsWith('ea_')) return null
   const rows = await db.select().from(apiKeys).where(and(
     eq(apiKeys.keyHash, hashKey(raw)),
@@ -45,5 +57,5 @@ export async function userIdFromKey(raw: string): Promise<string | null> {
   // Update lastUsedAt opportunistically — non-blocking is fine, but the
   // strict-mode requires we await it. The cost is one fast UPDATE per call.
   await db.update(apiKeys).set({ lastUsedAt: new Date() }).where(eq(apiKeys.id, row.id))
-  return row.userId
+  return { userId: row.userId, scopes: row.scopes ?? '' }
 }
