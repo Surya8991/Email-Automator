@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Email Automator — operator TODO</title>
+  <style>
+    :root {
+      --bg: #0b0f17; --fg: #e6edf3; --muted: #9aa4b2; --line: #1e2632;
+      --card: #111827; --card-h: #1a2230; --accent: #6366f1; --ok: #10b981;
+      --warn: #f59e0b; --err: #ef4444; --code: #1f2937;
+    }
+    @media (prefers-color-scheme: light) {
+      :root { --bg:#fafaf9; --fg:#111827; --muted:#6b7280; --line:#e5e7eb;
+              --card:#ffffff; --card-h:#f9fafb; --code:#f3f4f6; }
+    }
+    * { box-sizing: border-box }
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+           background: var(--bg); color: var(--fg); line-height: 1.55; }
+    .wrap { max-width: 880px; margin: 0 auto; padding: 32px 20px 80px }
+    header { padding-bottom: 24px; border-bottom: 1px solid var(--line); margin-bottom: 24px }
+    h1 { margin: 0 0 6px; font-size: 30px; letter-spacing: -0.01em }
+    h2 { margin: 32px 0 8px; font-size: 19px; letter-spacing: -0.005em }
+    h3 { margin: 18px 0 6px; font-size: 15px; color: var(--fg) }
+    p, li { color: var(--fg); }
+    .muted { color: var(--muted) }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace }
+    code { background: var(--code); padding: 1px 6px; border-radius: 4px; font-size: 0.92em }
+    pre { background: var(--code); padding: 14px 16px; border-radius: 8px; overflow-x: auto;
+          font-size: 13px; border: 1px solid var(--line); position: relative }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+            padding: 18px 22px; margin: 14px 0 }
+    .step-num { display: inline-flex; align-items: center; justify-content: center;
+                width: 26px; height: 26px; border-radius: 50%; background: var(--accent);
+                color: #fff; font-weight: 600; font-size: 13px; margin-right: 10px;
+                vertical-align: middle }
+    a { color: var(--accent); text-decoration: none }
+    a:hover { text-decoration: underline }
+    .pill { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 999px;
+            margin-left: 8px; vertical-align: middle }
+    .pill.urgent { background: #ef4444; color: white }
+    .pill.recommended { background: var(--accent); color: white }
+    .pill.optional { background: #6b7280; color: white }
+    .pill.ok { background: var(--ok); color: white }
+    .checklist { list-style: none; padding-left: 0 }
+    .checklist li { padding: 8px 0; border-bottom: 1px solid var(--line); display: flex; gap: 10px; align-items: flex-start }
+    .checklist li:last-child { border: 0 }
+    .checklist input[type=checkbox] { margin-top: 5px; transform: scale(1.2); accent-color: var(--accent); cursor: pointer }
+    .checklist label { cursor: pointer; flex: 1 }
+    .warn { background: #f59e0b20; border-left: 3px solid var(--warn); padding: 10px 14px; border-radius: 4px; margin: 10px 0 }
+    .danger { background: #ef444420; border-left: 3px solid var(--err); padding: 10px 14px; border-radius: 4px; margin: 10px 0 }
+    .ok-box { background: #10b98120; border-left: 3px solid var(--ok); padding: 10px 14px; border-radius: 4px; margin: 10px 0 }
+    .toc { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 16px 22px }
+    .toc ol { margin: 0; padding-left: 22px }
+    .toc li { padding: 4px 0 }
+    .copy-btn { position: absolute; top: 8px; right: 8px; font-size: 11px; padding: 3px 8px;
+                background: var(--card-h); color: var(--muted); border: 1px solid var(--line);
+                border-radius: 4px; cursor: pointer; font-family: inherit }
+    .copy-btn:hover { color: var(--fg); background: var(--card) }
+    .copy-btn.copied { color: var(--ok); border-color: var(--ok) }
+    .progress { position: sticky; top: 0; background: var(--bg); padding: 12px 0;
+                border-bottom: 1px solid var(--line); margin-bottom: 16px; z-index: 10 }
+    .progress-bar { height: 6px; background: var(--card); border-radius: 999px; overflow: hidden }
+    .progress-bar-fill { height: 100%; background: var(--accent); transition: width 200ms ease; width: 0% }
+    .progress-text { font-size: 12px; color: var(--muted); margin-top: 6px }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>📋 Email Automator — operator TODO</h1>
+  <p class="muted">Step-by-step of what <em>you</em> need to do on your side to make the latest deployment work end-to-end.
+  Tick items as you go — your browser remembers across reloads.</p>
+</header>
+
+<div class="progress">
+  <div class="progress-bar"><div class="progress-bar-fill" id="progBar"></div></div>
+  <div class="progress-text" id="progText">0 / 0 done</div>
+</div>
+
+<div class="toc">
+  <strong>Sections</strong>
+  <ol>
+    <li><a href="#urgent">🚨 URGENT — apply prod migrations</a> <span class="pill urgent">do first</span></li>
+    <li><a href="#verify">Verify it worked</a></li>
+    <li><a href="#hardening">Recommended hardening</a> <span class="pill recommended">soon</span></li>
+    <li><a href="#github">Optional: GitHub OAuth</a> <span class="pill optional">10 min</span></li>
+    <li><a href="#redis">Optional: Redis rate limiter</a> <span class="pill optional">15 min</span></li>
+    <li><a href="#csp">Optional: CSP nonce</a> <span class="pill optional">audit first</span></li>
+    <li><a href="#whatsnew">What's new in the latest push</a></li>
+    <li><a href="#troubleshoot">Troubleshooting</a></li>
+  </ol>
+</div>
+
+<!-- ── URGENT ───────────────────────────────────────────────────────── -->
+<h2 id="urgent"><span class="step-num">1</span> URGENT — apply prod migrations</h2>
+<div class="danger">
+  <strong>Why your prod is 500'ing.</strong> The latest pushes added five new database tables:
+  <code>progress_events</code>, <code>companies</code>, <code>email_identities</code>,
+  <code>campaign_step_variants</code>, plus the <code>contact_form</code> audit rows. Until you run
+  the migrations against your Turso DB, every page that touches one of these tables crashes —
+  that's what's behind the <code>/settings</code> and <code>/companies</code> server errors
+  you've been seeing.
+</div>
+
+<h3>Step 1.1 — Run the migrations</h3>
+<p>From your laptop, with the credentials Vercel uses for prod:</p>
+<pre><button class="copy-btn">copy</button>cd C:\Coding\Email-Automator
+DATABASE_URL='libsql://YOUR-DB.turso.io' TURSO_AUTH_TOKEN='eyJ...' npm run db:migrate</pre>
+
+<p>Where to find those two values:</p>
+<ul class="checklist">
+  <li><input type="checkbox" id="m1" /><label for="m1">Open Vercel → your project → <strong>Settings → Environment Variables</strong></label></li>
+  <li><input type="checkbox" id="m2" /><label for="m2">Copy <code>DATABASE_URL</code> (a <code>libsql://&lt;name&gt;.turso.io</code> URL)</label></li>
+  <li><input type="checkbox" id="m3" /><label for="m3">Copy <code>TURSO_AUTH_TOKEN</code> (the long JWT)</label></li>
+  <li><input type="checkbox" id="m4" /><label for="m4">Run the command above with both values</label></li>
+</ul>
+
+<p>Expected output:</p>
+<pre><button class="copy-btn">copy</button>[db] migrated (libsql): libsql://YOUR-DB.turso.io</pre>
+
+<h3>Step 1.2 — Redeploy</h3>
+<ul class="checklist">
+  <li><input type="checkbox" id="m5" /><label for="m5">Vercel → your project → <strong>Deployments</strong> → latest deploy → <em>Redeploy</em>. Wait until it goes green.</label></li>
+</ul>
+
+<div class="ok-box">
+  Once the redeploy finishes, all the pages that were 500'ing will load. The defensive
+  <code>.catch</code> wrappers we added earlier mean if a single backend call still fails
+  after the migration, the page degrades to an empty-state instead of crashing.
+</div>
+
+<!-- ── VERIFY ──────────────────────────────────────────────────────── -->
+<h2 id="verify"><span class="step-num">2</span> Verify it worked</h2>
+<p class="muted">Sign in once the redeploy is done, then open each URL. They should all render.</p>
+<ul class="checklist">
+  <li><input type="checkbox" id="v1" /><label for="v1"><strong>Marketing site</strong> — <code>/</code> (Home), <code>/about</code>, <code>/contact</code> all render with the public nav</label></li>
+  <li><input type="checkbox" id="v2" /><label for="v2"><strong>Contact form</strong> — fill in test message, submit, then sign in and visit <code>/audit?scope=all</code>: a <code>public.contact_form</code> row should be there</label></li>
+  <li><input type="checkbox" id="v3" /><label for="v3"><strong>Settings</strong> — <code>/settings</code> loads; the Email tab shows the <em>Email identities</em> card under the legacy SMTP</label></li>
+  <li><input type="checkbox" id="v4" /><label for="v4"><strong>Companies</strong> — <code>/companies</code> renders (empty list with CTA, since you haven't added any yet)</label></li>
+  <li><input type="checkbox" id="v5" /><label for="v5"><strong>Add a company</strong> — <code>/companies/new</code>, click the <em>AI fill</em> button after typing a name (needs <code>GROQ_API_KEY</code>)</label></li>
+  <li><input type="checkbox" id="v6" /><label for="v6"><strong>Contact detail</strong> — visit any <code>/contacts/[id]</code>. The Company sidebar should show the matched record or a CTA to create one</label></li>
+  <li><input type="checkbox" id="v7" /><label for="v7"><strong>A/B variants</strong> — open any <code>/campaigns/[id]</code>. Each step shows the variants strip; <em>+ Add variant</em> opens the picker</label></li>
+  <li><input type="checkbox" id="v8" /><label for="v8"><strong>Admin queue</strong> — <code>/admin/queue</code>, status + user filters work, pagination shows if you have &gt; 50 active rows</label></li>
+</ul>
+
+<div class="warn">
+  If <em>any</em> of these still 500, open Vercel → <strong>Deployments → latest → Logs</strong> and filter to
+  <code>error</code>. Look for lines starting with <code>[settings]</code>, <code>[companies]</code>,
+  <code>[contacts]</code>, <code>[campaigns]</code>, or <code>[layout]</code> — those are the
+  defensive <code>console.error</code> markers I added so you see exactly which read failed.
+</div>
+
+<!-- ── HARDENING ───────────────────────────────────────────────────── -->
+<h2 id="hardening"><span class="step-num">3</span> Recommended hardening <span class="pill recommended">soon</span></h2>
+
+<h3>3.1 — Set <code>ENCRYPTION_KEY</code></h3>
+<p>SMTP passwords and Groq API keys are AES-GCM encrypted at rest. The key derives from
+  <code>ENCRYPTION_KEY</code> if set, else from <code>AUTH_SECRET</code>. Setting it explicitly
+  decouples the two so rotating one doesn't invalidate the other.</p>
+<pre><button class="copy-btn">copy</button>openssl rand -base64 32</pre>
+<ul class="checklist">
+  <li><input type="checkbox" id="h1" /><label for="h1">Run that on your laptop, copy the output</label></li>
+  <li><input type="checkbox" id="h2" /><label for="h2">Vercel → Settings → Environment Variables → add <code>ENCRYPTION_KEY</code> = (paste) for all 3 envs</label></li>
+  <li><input type="checkbox" id="h3" /><label for="h3">Redeploy</label></li>
+</ul>
+
+<h3>3.2 — Confirm <code>CRON_SECRET</code> is set</h3>
+<div class="danger">
+  Without <code>CRON_SECRET</code>, the <code>/api/cron/tick</code> endpoint is open to the public
+  in production. Anyone who finds the URL can trigger the scheduler to send emails on behalf of
+  all your users.
+</div>
+<ul class="checklist">
+  <li><input type="checkbox" id="h4" /><label for="h4">Vercel → Settings → Environment Variables → check that <code>CRON_SECRET</code> exists and is &ge; 16 chars</label></li>
+  <li><input type="checkbox" id="h5" /><label for="h5">GitHub → your repo → Settings → Secrets and variables → Actions → check that <code>CRON_SECRET</code> matches Vercel's value</label></li>
+</ul>
+
+<h3>3.3 — Set <code>HSTS_APEX=true</code> only if you have an apex domain</h3>
+<div class="warn">
+  <strong>Do NOT set this on a <code>*.vercel.app</code> host.</strong> The strong HSTS form
+  (<code>includeSubDomains; preload</code>) would force HTTPS on every other app on the shared
+  vercel.app zone, and the <code>preload</code> directive is invalid from a non-apex eTLD+1.
+  Only enable when your prod URL is <code>your-app.com</code>.
+</div>
+<ul class="checklist">
+  <li><input type="checkbox" id="h6" /><label for="h6">Skip unless you've moved to a custom apex domain</label></li>
+</ul>
+
+<!-- ── GITHUB OAUTH ────────────────────────────────────────────────── -->
+<h2 id="github"><span class="step-num">4</span> Optional: GitHub OAuth <span class="pill optional">10 min</span></h2>
+<p>Adds a <em>Continue with GitHub</em> button on <code>/login</code> alongside Google + magic link.</p>
+<ul class="checklist">
+  <li><input type="checkbox" id="g1" /><label for="g1">Open <a href="https://github.com/settings/developers" target="_blank">github.com/settings/developers</a> → New OAuth App</label></li>
+  <li><input type="checkbox" id="g2" /><label for="g2">Application name: <code>Email Automator</code> (or your fork's name)</label></li>
+  <li><input type="checkbox" id="g3" /><label for="g3">Homepage URL: <code>https://&lt;your-app&gt;.vercel.app</code></label></li>
+  <li><input type="checkbox" id="g4" /><label for="g4">Authorization callback URL: <code>https://&lt;your-app&gt;.vercel.app/api/auth/callback/github</code></label></li>
+  <li><input type="checkbox" id="g5" /><label for="g5">Copy Client ID + Generate a new client secret</label></li>
+  <li><input type="checkbox" id="g6" /><label for="g6">Vercel → Settings → Environment Variables → add <code>GITHUB_ID</code> + <code>GITHUB_SECRET</code></label></li>
+  <li><input type="checkbox" id="g7" /><label for="g7">Redeploy. The GitHub button auto-appears on <code>/login</code></label></li>
+</ul>
+
+<!-- ── REDIS ──────────────────────────────────────────────────────── -->
+<h2 id="redis"><span class="step-num">5</span> Optional: Redis rate limiter <span class="pill optional">15 min</span></h2>
+<p>The current in-memory rate limiter is per-Lambda instance — on Vercel, an attacker can
+  hit the same endpoint from one IP and the bucket resets for each warm Lambda. Wire Upstash
+  Redis to fix that.</p>
+<ul class="checklist">
+  <li><input type="checkbox" id="r1" /><label for="r1">Open <a href="https://upstash.com" target="_blank">upstash.com</a> → Sign up free</label></li>
+  <li><input type="checkbox" id="r2" /><label for="r2">Create a Redis database in the region nearest to your Vercel region</label></li>
+  <li><input type="checkbox" id="r3" /><label for="r3">Copy <code>UPSTASH_REDIS_REST_URL</code> + <code>UPSTASH_REDIS_REST_TOKEN</code></label></li>
+  <li><input type="checkbox" id="r4" /><label for="r4">Vercel → Settings → Environment Variables → add both</label></li>
+  <li><input type="checkbox" id="r5" /><label for="r5">Redeploy. The warning in Vercel logs about per-Lambda rate-limits should clear</label></li>
+</ul>
+<p class="muted">Note: the implementation that consumes these vars is scaffolded but not yet wired
+  on every route. The warning goes away; the actual swap is a follow-up sprint.</p>
+
+<!-- ── CSP ────────────────────────────────────────────────────────── -->
+<h2 id="csp"><span class="step-num">6</span> Optional: CSP nonce <span class="pill optional">audit first</span></h2>
+<div class="warn">
+  <strong>Do not enable until you've audited every inline script in the app.</strong> The
+  middleware ships ready, but enabling it without first threading the nonce through Next's
+  hydration runtime, Recharts, sonner toast styles, etc. will white-screen the app.
+</div>
+<ul class="checklist">
+  <li><input type="checkbox" id="c1" /><label for="c1">When you've done the audit: Vercel → set <code>CSP_NONCE=true</code> → redeploy</label></li>
+</ul>
+
+<!-- ── WHAT'S NEW ─────────────────────────────────────────────────── -->
+<h2 id="whatsnew"><span class="step-num">7</span> What's new in the latest push</h2>
+<div class="card">
+  <h3>Public marketing site</h3>
+  <p><code>/</code> Home · <code>/about</code> About · <code>/contact</code> Contact (with a real form
+  wired to a Zod-validated server action with honeypot + signed time-token + per-IP/per-token
+  rate limit + JSON-encoded audit log).</p>
+</div>
+<div class="card">
+  <h3>New tool features</h3>
+  <ul>
+    <li><strong>Identities UI</strong> — Settings → Email tab now has an <em>Email identities</em> card. Add Personal / Work / role personas with their own from-address + encrypted SMTP.</li>
+    <li><strong>A/B variants</strong> — every campaign step shows a variants strip. Add weighted template variants; scheduler hash-routes deterministically.</li>
+    <li><strong>Contact-detail page</strong> — <code>/contacts/[id]</code> with Company sidebar (matched by name), recent sends, event timeline.</li>
+    <li><strong>Companies CRUD</strong> — <code>/companies</code> with AI fill (Groq enriches industry / HQ / size / tech stack / salary range from just the name).</li>
+    <li><strong>AI features</strong> — subject suggester in templates, company auto-fill, opener generator (server action ready).</li>
+  </ul>
+</div>
+
+<!-- ── TROUBLESHOOTING ────────────────────────────────────────────── -->
+<h2 id="troubleshoot"><span class="step-num">8</span> Troubleshooting</h2>
+
+<h3>How to read Vercel logs</h3>
+<ol>
+  <li>Vercel → your project → <strong>Deployments</strong></li>
+  <li>Click the latest <em>Ready</em> deployment</li>
+  <li>Click the <strong>Logs</strong> tab (or click any specific function)</li>
+  <li>Filter to <code>error</code></li>
+</ol>
+
+<h3>What the bracketed log lines mean</h3>
+<table style="width: 100%; border-collapse: collapse; font-size: 13px">
+  <tr style="border-bottom: 1px solid var(--line)">
+    <th style="text-align: left; padding: 6px 8px; color: var(--muted); font-weight: 500">Log prefix</th>
+    <th style="text-align: left; padding: 6px 8px; color: var(--muted); font-weight: 500">Means</th>
+    <th style="text-align: left; padding: 6px 8px; color: var(--muted); font-weight: 500">Fix</th>
+  </tr>
+  <tr style="border-bottom: 1px solid var(--line)">
+    <td style="padding: 6px 8px"><code>[settings] getMany failed</code></td>
+    <td style="padding: 6px 8px">Settings table read failed</td>
+    <td style="padding: 6px 8px">Check Turso connection; retry</td>
+  </tr>
+  <tr style="border-bottom: 1px solid var(--line)">
+    <td style="padding: 6px 8px"><code>[settings] listIdentities failed</code></td>
+    <td style="padding: 6px 8px">Migration 0006 not applied to Turso</td>
+    <td style="padding: 6px 8px">Run the migrate command in section 1</td>
+  </tr>
+  <tr style="border-bottom: 1px solid var(--line)">
+    <td style="padding: 6px 8px"><code>[companies] listCompanies failed</code></td>
+    <td style="padding: 6px 8px">Migration 0006 not applied</td>
+    <td style="padding: 6px 8px">Same as above</td>
+  </tr>
+  <tr style="border-bottom: 1px solid var(--line)">
+    <td style="padding: 6px 8px"><code>[contacts] getCompanyByName failed</code></td>
+    <td style="padding: 6px 8px">Migration 0006 not applied</td>
+    <td style="padding: 6px 8px">Same as above</td>
+  </tr>
+  <tr style="border-bottom: 1px solid var(--line)">
+    <td style="padding: 6px 8px"><code>[campaigns] listVariants failed</code></td>
+    <td style="padding: 6px 8px">Migration 0006 not applied</td>
+    <td style="padding: 6px 8px">Same as above</td>
+  </tr>
+  <tr style="border-bottom: 1px solid var(--line)">
+    <td style="padding: 6px 8px"><code>[sse] readLatest failed</code></td>
+    <td style="padding: 6px 8px">Migration 0005 not applied (progress polling falls back to SSE)</td>
+    <td style="padding: 6px 8px">Same as above</td>
+  </tr>
+  <tr style="border-bottom: 1px solid var(--line)">
+    <td style="padding: 6px 8px"><code>[contact] sendMail failed (non-fatal)</code></td>
+    <td style="padding: 6px 8px">SMTP misconfigured; contact form still wrote to audit log</td>
+    <td style="padding: 6px 8px">Check SMTP_USER / SMTP_PASS in Vercel env</td>
+  </tr>
+  <tr style="border-bottom: 1px solid var(--line)">
+    <td style="padding: 6px 8px"><code>[rate-limit] Running on a multi-instance platform…</code></td>
+    <td style="padding: 6px 8px">Per-Lambda buckets warning</td>
+    <td style="padding: 6px 8px">Wire Upstash (section 5)</td>
+  </tr>
+  <tr>
+    <td style="padding: 6px 8px"><code>[cron/tick] CRON_SECRET is not set</code></td>
+    <td style="padding: 6px 8px">Critical: scheduler endpoint is open to the public</td>
+    <td style="padding: 6px 8px">Set CRON_SECRET in Vercel + GitHub Actions secrets (section 3.2)</td>
+  </tr>
+</table>
+
+<h3>Common errors and fixes</h3>
+<table style="width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 12px">
+  <tr style="border-bottom: 1px solid var(--line)">
+    <th style="text-align: left; padding: 6px 8px; color: var(--muted); font-weight: 500">Symptom</th>
+    <th style="text-align: left; padding: 6px 8px; color: var(--muted); font-weight: 500">Likely cause</th>
+  </tr>
+  <tr style="border-bottom: 1px solid var(--line)">
+    <td style="padding: 6px 8px">/settings or /companies returns 500</td>
+    <td style="padding: 6px 8px">Migrations 0005 + 0006 not applied to Turso</td>
+  </tr>
+  <tr style="border-bottom: 1px solid var(--line)">
+    <td style="padding: 6px 8px">Sign-in works but redirects to a blank page</td>
+    <td style="padding: 6px 8px">Stale build chunk — hard refresh (Ctrl+Shift+R)</td>
+  </tr>
+  <tr style="border-bottom: 1px solid var(--line)">
+    <td style="padding: 6px 8px">"Magic link 500"</td>
+    <td style="padding: 6px 8px">Wrong Gmail App Password — regenerate at <a href="https://myaccount.google.com/apppasswords" target="_blank">myaccount.google.com/apppasswords</a></td>
+  </tr>
+  <tr style="border-bottom: 1px solid var(--line)">
+    <td style="padding: 6px 8px">Continue with GitHub doesn't appear on /login</td>
+    <td style="padding: 6px 8px">GITHUB_ID or GITHUB_SECRET missing; redeploy needed after adding</td>
+  </tr>
+  <tr style="border-bottom: 1px solid var(--line)">
+    <td style="padding: 6px 8px">Contact form submits but no audit row</td>
+    <td style="padding: 6px 8px">Migration 0006 not applied (audit table is older but the action runs through the same connection)</td>
+  </tr>
+  <tr>
+    <td style="padding: 6px 8px">AI buttons return "Groq API key not set"</td>
+    <td style="padding: 6px 8px">Set <code>GROQ_API_KEY</code> in Vercel env, OR sign in and set the per-user key in Settings → AI</td>
+  </tr>
+</table>
+
+<p class="muted" style="margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--line)">
+  Need to ask something specific? Sign in, open <a href="/contact">/contact</a>, and the message
+  lands in your own audit log + optionally your inbox. Or file a GitHub issue —
+  faster turnaround on deployment problems.
+</p>
+
+</div>
+
+<script>
+  // ── Copy buttons ─────────────────────────────────────────────────
+  document.querySelectorAll('pre').forEach(function(pre) {
+    var btn = pre.querySelector('.copy-btn');
+    if (!btn) return;
+    btn.addEventListener('click', function() {
+      var text = pre.innerText.replace(/^copy/, '').trim();
+      navigator.clipboard.writeText(text).then(function() {
+        var orig = btn.textContent;
+        btn.textContent = 'copied';
+        btn.classList.add('copied');
+        setTimeout(function() {
+          btn.textContent = orig;
+          btn.classList.remove('copied');
+        }, 1500);
+      });
+    });
+  });
+
+  // ── Persist checklist state in localStorage ───────────────────────
+  var KEY = 'ea-operator-todo-v1';
+  var saved = {};
+  try { saved = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch(e) {}
+
+  var boxes = document.querySelectorAll('input[type=checkbox]');
+  function updateProgress() {
+    var total = boxes.length;
+    var done = 0;
+    boxes.forEach(function(b) { if (b.checked) done++; });
+    var pct = total > 0 ? Math.round((done / total) * 100) : 0;
+    document.getElementById('progBar').style.width = pct + '%';
+    document.getElementById('progText').textContent = done + ' / ' + total + ' done · ' + pct + '%';
+  }
+
+  boxes.forEach(function(b) {
+    if (saved[b.id]) b.checked = true;
+    b.addEventListener('change', function() {
+      saved[b.id] = b.checked;
+      try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch(e) {}
+      updateProgress();
+    });
+  });
+  updateProgress();
+</script>
+
+</body>
+</html>

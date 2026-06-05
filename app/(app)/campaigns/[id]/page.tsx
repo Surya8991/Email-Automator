@@ -18,11 +18,17 @@ export default async function CampaignDetailPage(props: { params: Promise<{ id: 
   const [tpls, tags, stepStats] = await Promise.all([
     listTemplates(u.id), listTags(u.id), getStepStats(u.id, cid),
   ])
-  // A/B variants per step. Fetch each in parallel; empty arrays for steps
-  // that haven't been split yet (the scheduler falls back to step.templateId).
+  // A/B variants per step. Each call wrapped in .catch — campaign_step_variants
+  // may not exist on the prod DB until migration 0006_features applies, in
+  // which case the step renders without the variant strip instead of 500.
   const variantsByStep = Object.fromEntries(
     await Promise.all(
-      data.steps.map(async (s) => [s.id, await listVariants(s.id)] as const),
+      data.steps.map(async (s) => [
+        s.id,
+        await listVariants(s.id).catch((e) => {
+          console.error('[campaigns] listVariants failed:', e); return []
+        }),
+      ] as const),
     ),
   ) as Record<number, Array<{ id: number; templateId: number | null; weight: number; label: string }>>
 

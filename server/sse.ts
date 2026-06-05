@@ -71,13 +71,18 @@ export function emit(userId: string, data: unknown): void {
  * where the emitter and SSE consumer don't share a process (Vercel).
  */
 export async function readLatest(userId: string, since: number): Promise<{ at: number; data: unknown } | null> {
-  const [row] = await db.select().from(progressEvents).where(eq(progressEvents.userId, userId))
-  if (!row || row.at <= since) return null
   try {
+    // Both the SELECT and the JSON.parse are inside the try — progress_events
+    // may not exist on a stale prod DB until migration 0005 applies, in
+    // which case the polling endpoint returns null instead of 500'ing every
+    // page that uses useProgress.
+    const [row] = await db.select().from(progressEvents).where(eq(progressEvents.userId, userId))
+    if (!row || row.at <= since) return null
     const parsed = JSON.parse(row.payload) as { at?: number; data?: unknown }
     if (typeof parsed.at !== 'number' || parsed.at <= since) return null
     return { at: parsed.at, data: parsed.data }
-  } catch {
+  } catch (e) {
+    console.error('[sse] readLatest failed:', e)
     return null
   }
 }

@@ -34,7 +34,12 @@ export default async function ContactDetailPage(props: { params: Promise<{ id: s
       .where(and(eq(emailLog.userId, u.id), eq(emailLog.contactId, cid)))
       .orderBy(desc(emailLog.scheduledAt))
       .limit(10),
-    contact.company ? getCompanyByName(u.id, contact.company) : Promise.resolve(null),
+    // Defensive — companies table may be missing on the prod DB until
+    // migration 0006_features is applied. Fall back to null so the
+    // contact page renders without the Company sidebar instead of 500.
+    contact.company ? getCompanyByName(u.id, contact.company).catch((e) => {
+      console.error('[contacts] getCompanyByName failed:', e); return null
+    }) : Promise.resolve(null),
   ])
 
   const tags = contact.tags.split(',').map((t) => t.trim()).filter(Boolean)

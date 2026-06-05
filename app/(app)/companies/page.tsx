@@ -7,7 +7,14 @@ import { Plus, Building2, ExternalLink } from 'lucide-react'
 
 export default async function CompaniesPage() {
   const u = await requireUser()
-  const companies = await listCompanies(u.id)
+  // Defensive — if migration 0006_features hasn't been applied to the prod
+  // DB yet, listCompanies throws "no such table: companies". Fall back to
+  // an empty list so the page shows the empty-state CTA instead of 500.
+  // The real error lands in Vercel logs via console.error.
+  const companies = await listCompanies(u.id).catch((e) => {
+    console.error('[companies] listCompanies failed:', e)
+    return [] as Awaited<ReturnType<typeof listCompanies>>
+  })
 
   return (
     <div className="space-y-6">
