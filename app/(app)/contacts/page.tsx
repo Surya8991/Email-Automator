@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { Suspense } from 'react'
+import { Users } from 'lucide-react'
 import { requireUser } from '@/auth'
 import { listContacts, listTags, listDistinct } from '@/server/services/contacts'
 import { listCampaigns } from '@/server/services/campaigns'
@@ -8,6 +9,7 @@ import { followUpBuckets } from '@/server/services/analytics'
 import { parseCustomFieldKeys } from '@/lib/custom-fields'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { PageHeader } from '@/components/ui/page-header'
 import { ContactsTable } from './contacts-table'
 import { AddContactDialog } from './add-contact-dialog'
 import { ContactsToolbar } from './contacts-toolbar'
@@ -55,16 +57,20 @@ export default async function ContactsPage(props: { searchParams: Promise<{ page
   ].filter(Boolean).join(' · ')
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Contacts</h1>
-          <p className="text-sm text-muted-foreground">{data.total} total{filterBadges ? ` · ${filterBadges}` : ''}</p>
-        </div>
-        <div className="flex items-center gap-2">
+      <PageHeader
+        icon={Users}
+        title="Contacts"
+        description={filterBadges || 'Recipients across your platforms. Filter, tag, import CSV, or jump into a contact for full history.'}
+        pills={[
+          { label: 'total', value: data.total, tone: 'info' },
+          { label: 'tags', value: allTags.length },
+          { label: 'companies', value: companies.length },
+        ]}
+        actions={<>
           <ContactsToolbar />
           <AddContactDialog customFieldKeys={customFieldKeys} />
-        </div>
-      </div>
+        </>}
+      />
       {/* Follow-up reminders — buckets of active contacts by last-send recency. */}
       {(followUps.overdue + followUps.soon + followUps.onTrack + followUps.neverSent) > 0 ? (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">

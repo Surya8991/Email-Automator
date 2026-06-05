@@ -21,32 +21,51 @@ const nav = [
   { href: '/analytics',  label: 'Analytics',  icon: BarChart3 },
   { href: '/blocklist',  label: 'Blocklist',  icon: Ban },
   { href: '/audit',      label: 'Audit log',  icon: ScrollText },
-  { href: '/diagnostic', label: 'Diagnostic', icon: FlaskConical },
   { href: '/profile',    label: 'Profile',    icon: UserCircle2 },
   { href: '/settings',   label: 'Settings',   icon: Settings },
   { href: '/guide',      label: 'Guide',      icon: BookOpen },
 ] as const
 
+// Admin-only links live in their own group below a divider so they're
+// visually separated from the per-user features. /diagnostic was
+// previously visible to every user but the page redirects non-admins —
+// confusing dead link in the nav. Now it sits next to /admin where it
+// belongs.
+const adminNav = [
+  { href: '/admin',      label: 'Admin',      icon: Shield },
+  { href: '/diagnostic', label: 'Diagnostic', icon: FlaskConical },
+] as const
+
 export function Sidebar({ isAdmin }: { isAdmin?: boolean }) {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
-  const items = isAdmin ? [...nav, { href: '/admin' as const, label: 'Admin' as const, icon: Shield }] : [...nav]
+  function renderLink({ href, label, icon: Icon }: { href: string; label: string; icon: React.ComponentType<{ className?: string }> }) {
+    const active = pathname === href || pathname?.startsWith(href + '/')
+    return (
+      <Link key={href} href={href} onClick={() => setOpen(false)}
+        className={cn(
+          'group flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors',
+          active ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
+        )}>
+        <Icon className="h-4 w-4" />
+        {label}
+      </Link>
+    )
+  }
 
   const list = (
     <nav className="flex-1 space-y-0.5 overflow-y-auto p-2">
-      {items.map(({ href, label, icon: Icon }) => {
-        const active = pathname === href || pathname?.startsWith(href + '/')
-        return (
-          <Link key={href} href={href} onClick={() => setOpen(false)}
-            className={cn(
-              'group flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors',
-              active ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
-            )}>
-            <Icon className="h-4 w-4" />
-            {label}
-          </Link>
-        )
-      })}
+      {nav.map(renderLink)}
+      {isAdmin ? (
+        <>
+          <div className="my-2 flex items-center gap-2 px-3">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Admin</span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+          {adminNav.map(renderLink)}
+        </>
+      ) : null}
     </nav>
   )
 

@@ -2,12 +2,13 @@
 import { useState, useTransition } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
-import { Send, Trash2, Sparkles, SendHorizontal, Pencil, Save, X, CalendarClock, Search, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Send, Trash2, Sparkles, SendHorizontal, Pencil, Save, X, CalendarClock, Search, ChevronLeft, ChevronRight, Inbox } from 'lucide-react'
 import { RichTextEditor } from '@/components/rich-text-editor'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { EmptyState } from '@/components/ui/empty-state'
 import {
-  createDraftsAction, deleteDraftAction, sendAllAction, sendDraftAction,
+  deleteDraftAction, sendAllAction, sendDraftAction,
   updateDraftAction, scheduleFollowupAction, sendSelectedDraftsAction,
   deleteSelectedDraftsAction, deleteAllDraftsAction,
   improveDraftAction,
@@ -15,6 +16,8 @@ import {
 import type { Draft } from '@/server/db/schema'
 import { useProgress } from '@/components/use-progress'
 import { AiImprovePicker } from '@/components/ai-improve-picker'
+import { CreateDraftsDialog, type TemplateOption } from './create-drafts-dialog'
+import { ScheduleSendDialog } from './schedule-send-dialog'
 
 const PAGE_SIZE_OPTIONS = [50, 100, 500, 1000]
 
@@ -25,11 +28,13 @@ interface DraftsClientProps {
   pages?: number
   pageSize?: number
   total?: number
+  templates?: TemplateOption[]
 }
 
 export function DraftsClient({
   rows, isAdmin = false,
   page = 1, pages = 1, pageSize = 50, total = 0,
+  templates = [],
 }: DraftsClientProps) {
   const router = useRouter()
   const sp = useSearchParams()
@@ -41,9 +46,11 @@ export function DraftsClient({
     }
     router.push(`/drafts?${next.toString()}`)
   }
-  const [count, setCount] = useState(10)
   const [pending, start] = useTransition()
   const progress = useProgress()
+  // Schedule-selected dialog state. Lifted to the client root so the
+  // dialog renders outside the per-row scrolling list.
+  const [scheduleOpen, setScheduleOpen] = useState(false)
   // Per-row edit state. Open one draft at a time; editing a second closes
   // the first. Tracks the local subject/body so the textarea is unaffected
   // by parent re-renders until save.
@@ -69,15 +76,7 @@ export function DraftsClient({
   return (
     <div>
       <div className="flex flex-wrap items-center gap-2 border-b p-3">
-        <Input type="number" min={1} max={50} value={count} onChange={(e) => setCount(Number(e.target.value))} className="w-24" />
-        <Button disabled={pending} onClick={() => start(async () => {
-          const r = await createDraftsAction(count)
-          if ('error' in r && r.error) { toast.error(r.error); return }
-          if ('processed' in r) toast.success(`Created ${r.processed} drafts`)
-          router.refresh()
-        })}>
-          <Sparkles className="mr-1.5 h-4 w-4" /> Create drafts
-        </Button>
+        <CreateDraftsDialog templates={templates} />
         {rows.length > 0 ? (
           <Button variant="outline" disabled={pending} onClick={() => start(async () => {
             if (!confirm(`Send all ${rows.length} drafts now? This will hit your SMTP server.`)) return
@@ -89,17 +88,23 @@ export function DraftsClient({
           </Button>
         ) : null}
         {selected.size > 0 ? (
-          <Button variant="default" disabled={pending} onClick={() => start(async () => {
-            const ids = Array.from(selected)
-            if (!confirm(`Send ${ids.length} selected draft(s) now?`)) return
-            const r = await sendSelectedDraftsAction(ids)
-            if ('error' in r && r.error) { toast.error(r.error); return }
-            toast[r.failed ? 'warning' : 'success'](`Sent ${r.sent}${r.failed ? ` · ${r.failed} failed` : ''}`)
-            setSelected(new Set())
-            router.refresh()
-          })}>
-            <SendHorizontal className="mr-1.5 h-4 w-4" /> Send selected ({selected.size})
-          </Button>
+          <>
+            <Button variant="default" disabled={pending} onClick={() => start(async () => {
+              const ids = Array.from(selected)
+              if (!confirm(`Send ${ids.length} selected draft(s) now?`)) return
+              const r = await sendSelectedDraftsAction(ids)
+              if ('error' in r && r.error) { toast.error(r.error); return }
+              toast[r.failed ? 'warning' : 'success'](`Sent ${r.sent}${r.failed ? ` · ${r.failed} failed` : ''}`)
+              setSelected(new Set())
+              router.refresh()
+            })}>
+              <SendHorizontal className="mr-1.5 h-4 w-4" /> Send selected ({selected.size})
+            </Button>
+            <Button variant="outline" disabled={pending} onClick={() => setScheduleOpen(true)}
+              title="Convert selected drafts into scheduled sends">
+              <CalendarClock className="mr-1.5 h-4 w-4" /> Schedule…
+            </Button>
+          </>
         ) : null}
         {selected.size > 0 ? (
           <Button variant="destructive" disabled={pending} onClick={() => start(async () => {
@@ -170,9 +175,19 @@ export function DraftsClient({
       ) : null}
 
       {rows.length === 0 ? (
-        <div className="px-6 py-16 text-center text-sm text-muted-foreground">
-          No pending drafts. Activate a template and click <strong>Create drafts</strong>.
-        </div>
+        <EmptyState
+          icon={Inbox}
+          title="No drafts yet"
+          description="Personalized emails appear here once you generate a batch from your contacts and template."
+          action={<CreateDraftsDialog templates={templates} trigger={
+            <Button><Sparkles className="mr-1.5 h-4 w-4" /> Create your first batch</Button>
+          } />}
+          hint={templates.length === 0 ? (
+            <>Create a template in <a className="underline" href="/templates">/templates</a> first.</>
+          ) : (
+            <>Tip: filter by platform or job title in the dialog to target a specific slice.</>
+          )}
+        />
       ) : filtered.length === 0 ? (
         <div className="px-6 py-12 text-center text-sm text-muted-foreground">
           No drafts match &ldquo;{q}&rdquo;.
@@ -386,6 +401,13 @@ export function DraftsClient({
           </div>
         </div>
       ) : null}
+
+      <ScheduleSendDialog
+        draftIds={Array.from(selected)}
+        open={scheduleOpen}
+        onOpenChange={setScheduleOpen}
+        onScheduled={() => setSelected(new Set())}
+      />
     </div>
   )
 }

@@ -3,21 +3,107 @@ import { revalidatePath } from 'next/cache'
 import { and, eq } from 'drizzle-orm'
 import { requireUser, requireAdmin } from '@/auth'
 import { db } from '@/server/db/client'
-import { drafts as draftsTable, auditLog } from '@/server/db/schema'
+import { drafts as draftsTable, templates as templatesTable, auditLog } from '@/server/db/schema'
 import { getActive } from '@/server/services/templates'
 import * as drafts from '@/server/services/drafts'
+import * as schedule from '@/server/services/schedule'
 import { draftEmail, type Tone } from '@/server/services/ai'
 import { actionError } from '@/lib/action-error'
 import { rateLimit } from '@/lib/rate-limit'
 
-export async function createDraftsAction(count: number) {
+// Resolve which template to use for a batch — explicit pickedTemplateId
+// wins (one-off override), otherwise fall back to the active template.
+// Always tenancy-scoped: a pickedTemplateId from another user silently
+// no-ops via the userId guard.
+async function resolveTemplate(userId: string, pickedTemplateId?: number) {
+  if (pickedTemplateId && Number.isFinite(pickedTemplateId)) {
+    const [row] = await db.select().from(templatesTable)
+      .where(and(eq(templatesTable.id, pickedTemplateId), eq(templatesTable.userId, userId)))
+    if (row) return row
+  }
+  return getActive(userId)
+}
+
+export interface CreateDraftsOpts {
+  count: number
+  templateId?: number
+  filters?: drafts.DraftFilters
+}
+
+/**
+ * Create drafts. Two call shapes for backwards compat with old callers:
+ *   - createDraftsAction(10)                  ← legacy, uses active template, no filters
+ *   - createDraftsAction({ count: 10, … })    ← new dialog-driven shape
+ * The widened signature lets the CreateDraftsDialog pass templateId + filters
+ * without breaking the existing UI buttons that still pass a plain number.
+ */
+export async function createDraftsAction(arg: number | CreateDraftsOpts) {
   const u = await requireUser()
-  const tpl = await getActive(u.id)
-  if (!tpl) return { error: 'No active template' }
-  const max = Math.min(50, Math.max(1, count | 0 || 10))
-  const r = await drafts.createDraftsBulk(u.id, tpl, max)
+  const opts: CreateDraftsOpts = typeof arg === 'number' ? { count: arg } : arg
+  const tpl = await resolveTemplate(u.id, opts.templateId)
+  if (!tpl) return { error: 'No active template — pick one in /templates first' }
+  const max = Math.min(50, Math.max(1, opts.count | 0 || 10))
+  const r = await drafts.createDraftsBulk(u.id, tpl, max, opts.filters ?? {})
   revalidatePath('/drafts')
   return { ok: true, ...r }
+}
+
+/**
+ * Live eligible-counter for the CreateDraftsDialog. Rate-limited 30/min
+ * per user so a focused dialog typing through filters can't hammer the
+ * counter query. Returns the count + first-5 sample.
+ */
+export async function previewEligibleDraftsAction(filters: drafts.DraftFilters = {}) {
+  const u = await requireUser()
+  if (!rateLimit(`preview-drafts:${u.id}`, 30, 60_000)) {
+    return { error: 'Too many preview requests — slow down' }
+  }
+  const r = await drafts.countEligible(u.id, filters)
+  return { ok: true as const, ...r }
+}
+
+/**
+ * Convert a user-picked subset of pending drafts into Scheduled rows in
+ * email_log, starting at `startAt` with the given stagger window. The
+ * draft row stays around so the user sees the conversion in their
+ * /schedule page; status is bumped to 'sent' so it leaves the pending
+ * list. Tenancy: only drafts owned by this user are touched.
+ */
+export async function scheduleSelectedDraftsAction(
+  ids: number[],
+  opts: { startAt: number; intervalMin?: number; intervalMax?: number },
+) {
+  const u = await requireUser()
+  if (!ids || ids.length === 0) return { error: 'No drafts selected' }
+  if (ids.length > 200) return { error: 'Pick at most 200 drafts at a time' }
+  const startMs = Number(opts.startAt)
+  if (!Number.isFinite(startMs)) return { error: 'Invalid start time' }
+  // Pull the eligible drafts; only ones we own + still pending.
+  const rows = await db.select().from(draftsTable).where(and(
+    eq(draftsTable.userId, u.id), eq(draftsTable.status, 'draft'),
+  ))
+  const idSet = new Set(ids)
+  const picked = rows.filter((d) => idSet.has(d.id) && d.contactId != null)
+  if (picked.length === 0) return { error: 'No matching drafts (perhaps already sent?)' }
+  const contactIds = picked.map((d) => d.contactId!).filter(Boolean)
+  try {
+    const r = await schedule.enqueueContacts(u.id, contactIds, startMs, {
+      intervalMin: opts.intervalMin,
+      intervalMax: opts.intervalMax,
+    })
+    // Mark the matching drafts done so they leave the pending list.
+    // Per-id WHERE keeps tenancy guarantee tight even though picked
+    // already filtered by userId above.
+    for (const d of picked) {
+      await db.update(draftsTable).set({ status: 'sent' })
+        .where(and(eq(draftsTable.id, d.id), eq(draftsTable.userId, u.id), eq(draftsTable.status, 'draft')))
+    }
+    revalidatePath('/drafts')
+    revalidatePath('/schedule')
+    return { ok: true as const, scheduled: r.scheduled, skipped: r.skipped + (picked.length - contactIds.length) }
+  } catch (e) {
+    return actionError(e, 'Schedule failed')
+  }
 }
 
 /**

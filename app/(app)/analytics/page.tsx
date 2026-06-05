@@ -1,8 +1,10 @@
+import { BarChart3 } from 'lucide-react'
 import { requireUser } from '@/auth'
 import { dailySeries, kpis, breakdownByTemplate, breakdownByTag, breakdownByCampaign, breakdownByPlatform, sendTimeHeatmap, pipelineKpis } from '@/server/services/analytics'
 import { Heatmap } from './heatmap'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Chart } from './chart'
+import { PageHeader } from '@/components/ui/page-header'
 
 export default async function AnalyticsPage() {
   const u = await requireUser()
@@ -28,7 +30,16 @@ export default async function AnalyticsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Analytics</h1>
+      <PageHeader
+        icon={BarChart3}
+        title="Analytics"
+        description="Sent / opens / clicks / replies, plus daily series, send-time heatmap, and per-template / tag / campaign / platform breakdowns."
+        pills={[
+          { label: 'sent', value: k.sent, tone: 'info' },
+          { label: 'open rate', value: `${(k.openRate * 100).toFixed(1)}%`, tone: k.openRate > 0.2 ? 'success' : 'default' },
+          { label: 'reply rate', value: `${(k.replyRate * 100).toFixed(1)}%`, tone: k.replyRate > 0.05 ? 'success' : 'default' },
+        ]}
+      />
       <div className="grid gap-4 md:grid-cols-4">
         <Card><CardHeader><CardTitle className="text-sm">Sent</CardTitle></CardHeader><CardContent className="text-2xl font-semibold">{k.sent}</CardContent></Card>
         <Card><CardHeader><CardTitle className="text-sm">Open rate</CardTitle></CardHeader><CardContent className="text-2xl font-semibold">{(k.openRate * 100).toFixed(1)}%</CardContent></Card>

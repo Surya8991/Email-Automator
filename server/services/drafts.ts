@@ -99,15 +99,98 @@ export async function createDraftsForContacts(
   return { created, skipped }
 }
 
-export async function createDraftsBulk(userId: string, template: Template, max: number) {
-  const ready = await db.select().from(contacts).where(
-    and(
-      eq(contacts.userId, userId),
-      sql`${contacts.recruiterEmail} != ''`,
-      sql`${contacts.emailStatus} NOT LIKE '%Draft Created%'`,
-      sql`${contacts.emailStatus} NOT LIKE '%Sent%'`
-    )
-  ).limit(max)
+/**
+ * Filters narrow which contacts are eligible for draft creation. All
+ * optional; ANDed together. Used by the CreateDraftsDialog to let the
+ * user batch-create drafts for a slice (e.g. "10 LinkedIn PMs in
+ * Bangalore I haven't emailed in the last 30 days") without first
+ * filtering the contacts table.
+ */
+export interface DraftFilters {
+  platforms?: string[]
+  jobTitleContains?: string
+  locationContains?: string
+  /** Skip contacts emailed in the last N days. */
+  skipRecentDays?: number
+}
+
+// Build the SQL WHERE shared by createDraftsBulk + countEligible. Pulled
+// into a helper so the dialog's "live eligible" count uses the same
+// rules as the actual create — no drift between preview and reality.
+function eligibleWhere(userId: string, filters: DraftFilters = {}) {
+  const clauses = [
+    eq(contacts.userId, userId),
+    sql`${contacts.recruiterEmail} != ''`,
+    sql`${contacts.emailStatus} NOT LIKE '%Draft Created%'`,
+    sql`${contacts.emailStatus} NOT LIKE '%Sent%'`,
+  ]
+  if (filters.platforms && filters.platforms.length > 0) {
+    // Lowercased substring match per platform — drizzle's inArray would
+    // be exact-match and platforms are user-entered free text (LinkedIn
+    // vs LinkedIN vs linkedin etc). Cap at 10 to keep the SQL bounded.
+    const trimmed = filters.platforms.slice(0, 10).map((p) => p.trim().toLowerCase()).filter(Boolean)
+    if (trimmed.length > 0) {
+      const ors = trimmed.map((p) => sql`LOWER(${contacts.platform}) LIKE ${'%' + p + '%'}`)
+      clauses.push(sql`(${sql.join(ors, sql` OR `)})`)
+    }
+  }
+  if (filters.jobTitleContains && filters.jobTitleContains.trim()) {
+    clauses.push(sql`LOWER(${contacts.jobTitle}) LIKE ${'%' + filters.jobTitleContains.trim().toLowerCase() + '%'}`)
+  }
+  if (filters.locationContains && filters.locationContains.trim()) {
+    clauses.push(sql`LOWER(${contacts.location}) LIKE ${'%' + filters.locationContains.trim().toLowerCase() + '%'}`)
+  }
+  if (filters.skipRecentDays && filters.skipRecentDays > 0) {
+    // Anti-join via NOT EXISTS — exclude contacts whose recruiterEmail
+    // appears in a Sent email_log row within the window. Per-user
+    // scoped so a shared address (rare) only affects the same user.
+    const since = Date.now() - filters.skipRecentDays * 24 * 60 * 60 * 1000
+    clauses.push(sql`NOT EXISTS (
+      SELECT 1 FROM email_log el
+      WHERE el.user_id = ${userId}
+        AND LOWER(el.email) = LOWER(${contacts.recruiterEmail})
+        AND el.status = 'Sent'
+        AND el.scheduled_at >= ${since}
+    )`)
+  }
+  return and(...clauses)
+}
+
+/**
+ * Live "X eligible / Y total" counter for the CreateDraftsDialog.
+ * Cheap — two COUNTs over the contacts table. Sample is the first 5
+ * matches so the user sees who the batch would target before clicking
+ * Create.
+ */
+export async function countEligible(userId: string, filters: DraftFilters = {}): Promise<{
+  eligible: number
+  total: number
+  sample: Array<{ id: number; recruiterName: string; company: string; recruiterEmail: string; jobTitle: string; platform: string }>
+}> {
+  const elig = await db.select({ n: sql<number>`COUNT(*)` }).from(contacts).where(eligibleWhere(userId, filters))
+  const total = await db.select({ n: sql<number>`COUNT(*)` }).from(contacts).where(eq(contacts.userId, userId))
+  const sample = await db.select({
+    id: contacts.id,
+    recruiterName: contacts.recruiterName,
+    company: contacts.company,
+    recruiterEmail: contacts.recruiterEmail,
+    jobTitle: contacts.jobTitle,
+    platform: contacts.platform,
+  }).from(contacts).where(eligibleWhere(userId, filters)).limit(5)
+  return {
+    eligible: Number(elig[0]?.n ?? 0),
+    total: Number(total[0]?.n ?? 0),
+    sample,
+  }
+}
+
+export async function createDraftsBulk(
+  userId: string,
+  template: Template,
+  max: number,
+  filters: DraftFilters = {},
+) {
+  const ready = await db.select().from(contacts).where(eligibleWhere(userId, filters)).limit(max)
 
   emit(userId, { type: 'draft_start', total: ready.length })
   let processed = 0

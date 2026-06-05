@@ -4,6 +4,8 @@ import { listCompanies } from '@/server/services/companies'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Plus, Building2, ExternalLink } from 'lucide-react'
+import { PageHeader } from '@/components/ui/page-header'
+import { EmptyState } from '@/components/ui/empty-state'
 
 export default async function CompaniesPage() {
   const u = await requireUser()
@@ -18,31 +20,34 @@ export default async function CompaniesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Companies</h1>
-          <p className="text-sm text-muted-foreground">
-            {companies.length} research record{companies.length === 1 ? '' : 's'}. Linked by company-name match to /contacts.
-          </p>
-        </div>
-        <Button asChild>
-          <Link href="/companies/new"><Plus className="mr-1 h-4 w-4" /> Add company</Link>
-        </Button>
-      </div>
+      <PageHeader
+        icon={Building2}
+        title="Companies"
+        description="Per-company research linked to your contacts by name match. Fill it in once, surface it everywhere."
+        pills={[
+          { label: 'records', value: companies.length, tone: companies.length > 0 ? 'info' : 'default' },
+        ]}
+        actions={
+          <Button asChild>
+            <Link href="/companies/new"><Plus className="mr-1 h-4 w-4" /> Add company</Link>
+          </Button>
+        }
+      />
 
       {companies.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <Building2 className="mx-auto h-8 w-8 text-muted-foreground" />
-            <h2 className="mt-3 text-base font-semibold">No company research yet</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Add per-company notes (industry, HQ, size, tech stack, salary range) and they'll auto-surface on contact-detail pages by name match.
-            </p>
-            <Button asChild className="mt-4">
-              <Link href="/companies/new"><Plus className="mr-1 h-4 w-4" /> Add your first company</Link>
-            </Button>
-          </CardContent>
-        </Card>
+        <Card><CardContent className="p-0">
+          <EmptyState
+            icon={Building2}
+            title="No company research yet"
+            description="Add per-company notes (industry, HQ, size, tech stack, salary range). They auto-surface on the matching contact-detail pages."
+            action={
+              <Button asChild>
+                <Link href="/companies/new"><Plus className="mr-1 h-4 w-4" /> Add your first company</Link>
+              </Button>
+            }
+            hint="Tip: the AI fill button in the company form populates everything from just the name (needs GROQ_API_KEY)."
+          />
+        </CardContent></Card>
       ) : (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {companies.map((c) => (

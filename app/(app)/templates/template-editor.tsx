@@ -2,14 +2,19 @@
 import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { CheckCircle2, Save, Sparkles, Eye, Wand2, Copy } from 'lucide-react'
+import { CheckCircle2, Save, Sparkles, Eye, Wand2, Copy, Send, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { personalize } from '@/lib/escape'
-import { activateTemplateAction, saveTemplateAction, cloneTemplateAction } from '@/server/actions/templates'
+import { activateTemplateAction, saveTemplateAction, cloneTemplateAction, sendTemplateTestAction } from '@/server/actions/templates'
 import { aiDraftAction, aiSuggestSubjectsAction } from '@/server/actions/ai'
 import type { Template } from '@/server/db/schema'
+
+// Tokens always available per recipient (see buildEmail() in
+// server/services/drafts.ts). Used by the variable validator to flag
+// unknown {{names}} typed in the editor before the user sends to anyone.
+const BUILTIN_VARS = new Set(['name', 'email', 'company', 'role_name', 'location', 'platform'])
 
 type Tone = 'professional' | 'friendly' | 'concise' | 'enthusiastic' | 'formal'
 const TONES: Tone[] = ['professional', 'friendly', 'concise', 'enthusiastic', 'formal']
@@ -93,6 +98,24 @@ export function TemplateEditor({ templates, customFieldKeys = [] }: { templates:
     setDraft({ key: t.key, label: t.label, subject: t.subject, initialMsg: t.initialMsg })
   }
 
+  // Variable validator — scan subject + body for every {{token}} the
+  // user typed, flag any that aren't in BUILTIN_VARS or the user's
+  // custom-field list. Catches typos like {{compny}} or {{rolename}}
+  // before send instead of after — those would otherwise pass through
+  // literally and the recipient sees "Hi {{compny}}".
+  const knownVars = new Set([...BUILTIN_VARS, ...customFieldKeys])
+  const unknownVars = (() => {
+    const found = new Set<string>()
+    const re = /\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g
+    const haystack = `${draft.subject ?? ''}\n${draft.initialMsg ?? ''}`
+    let m: RegExpExecArray | null
+    while ((m = re.exec(haystack)) !== null) {
+      const tok = m[1]!
+      if (!knownVars.has(tok)) found.add(tok)
+    }
+    return Array.from(found)
+  })()
+
   // Template list filters — useful once you have the 20 seeded templates
   // plus your own clones. Categories come from the templates themselves.
   const [tplQ, setTplQ] = useState('')
@@ -132,7 +155,11 @@ export function TemplateEditor({ templates, customFieldKeys = [] }: { templates:
           {visibleTemplates.map((t) => (<option key={t.id} value={t.id}>{(t.active ? '★ ' : '') + (t.label || t.key)}</option>))}
         </select>
         <div className="hidden lg:block space-y-1">
-          {templates.length === 0 ? <p className="text-sm text-muted-foreground">None yet — save to create.</p> : null}
+          {templates.length === 0 ? (
+            <p className="rounded-md border border-dashed bg-muted/40 px-3 py-3 text-xs text-muted-foreground">
+              None yet — fill in the form on the right and hit <strong>Save</strong> to create your first template.
+            </p>
+          ) : null}
           {templates.length > 0 && visibleTemplates.length === 0 ? (
             <p className="text-xs text-muted-foreground">No templates match the filter.</p>
           ) : null}
@@ -250,7 +277,40 @@ export function TemplateEditor({ templates, customFieldKeys = [] }: { templates:
               <Copy className="mr-1.5 h-4 w-4" /> Clone
             </Button>
           ) : null}
+          {/* Test-send — fires the current editor state to your own
+              address with sample data so you catch broken HTML / variable
+              typos before mass-send. Rate-limited 6/min server-side. */}
+          <Button variant="outline" disabled={pending || !draft.subject || !draft.initialMsg}
+            title="Send a personalized test to your own address"
+            onClick={() => start(async () => {
+              const r = await sendTemplateTestAction({
+                subject: draft.subject ?? '',
+                initialMsg: draft.initialMsg ?? '',
+              })
+              if ('error' in r && r.error) { toast.error(r.error); return }
+              if ('to' in r) toast.success(`Test sent to ${r.to}`)
+            })}>
+            <Send className="mr-1.5 h-4 w-4" /> Test send
+          </Button>
         </div>
+
+        {/* Variable validator — silent when everything matches; loud
+            warning when the editor contains {{foo}} that isn't a built-in
+            variable or one of the user's declared custom fields. */}
+        {unknownVars.length > 0 ? (
+          <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <div className="space-y-1">
+              <div>
+                <strong>Unknown variable{unknownVars.length === 1 ? '' : 's'}:</strong>{' '}
+                {unknownVars.map((v) => <code key={v} className="mx-0.5 rounded bg-amber-500/20 px-1 py-0.5 font-mono">{`{{${v}}}`}</code>)}
+              </div>
+              <div className="opacity-80">
+                These won&apos;t substitute on send — recipients see them literally. Fix typos or declare them in <a href="/settings" className="underline">Settings → Custom fields</a>.
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         {/* AI panel — tone + goal + Improve/Draft buttons */}
         <div className="space-y-2 rounded-md border bg-card/40 p-3">

@@ -1,7 +1,9 @@
 import { redirect } from 'next/navigation'
+import { FlaskConical } from 'lucide-react'
 import { auth } from '@/auth'
 import { adminEmails } from '@/lib/env'
 import { Card, CardContent } from '@/components/ui/card'
+import { PageHeader } from '@/components/ui/page-header'
 import { DiagnosticClient } from './diagnostic-client'
 
 export default async function DiagnosticPage() {
@@ -15,13 +17,12 @@ export default async function DiagnosticPage() {
   if (!isAdmin) redirect('/dashboard')
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Diagnostic</h1>
-        <p className="text-sm text-muted-foreground">
-          Admin-only. Checks SMTP, AI provider, OAuth, SPF, DMARC, cron secret,
-          libsql reachability, and ADMIN_EMAILS. Run before a big send.
-        </p>
-      </div>
+      <PageHeader
+        icon={FlaskConical}
+        title="Diagnostic"
+        description="Pre-flight checks for SMTP, AI, OAuth, deliverability posture, cron, DB, and admin config. Run a Quick check after every deploy, Full check before a big send."
+        pills={[{ label: 'access', value: 'admin only', tone: 'warn' }]}
+      />
       <Card><CardContent className="p-4"><DiagnosticClient /></CardContent></Card>
     </div>
   )

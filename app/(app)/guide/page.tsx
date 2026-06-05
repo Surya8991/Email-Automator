@@ -1,5 +1,8 @@
 import Link from 'next/link'
+import { BookOpen } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { PageHeader } from '@/components/ui/page-header'
+import { GuideToc, WhatsNew } from './guide-toc'
 
 function Kbd({ children }: { children: React.ReactNode }) {
   return <kbd className="rounded border bg-muted px-1 py-0.5 text-xs font-mono">{children}</kbd>
@@ -20,6 +23,7 @@ function Section({ id, title, children }: { id: string; title: string; children:
 }
 
 const TOC = [
+  ['whats-new',  '★ What\'s new'],
   ['first-time', '0. First time? Start here'],
   // Last updated 2026-06-05: admin section now covers the 6-tab layout
   // (Overview / Users / Queue / Webhooks / System / Broadcast).
@@ -43,24 +47,43 @@ const TOC = [
   ['shortcuts',   '17. Keyboard shortcuts'],
 ] as const
 
+// Bridge — convert the const tuple TOC into the {id,label} shape the
+// client TOC component expects. Kept in this file so the section JSX
+// below remains the source of truth for which sections exist.
+const TOC_ITEMS = TOC.map(([id, label]) => ({ id, label }))
+
 export default function GuidePage() {
   return (
-    <div className="space-y-8 max-w-4xl">
-      <header>
-        <h1 className="text-3xl font-bold tracking-tight">User guide</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Everything Email Automator does, how to use each feature, and the full API + env reference.
-        </p>
-      </header>
+    <div className="space-y-6">
+      <PageHeader
+        icon={BookOpen}
+        title="User guide"
+        description="Everything Email Automator does, how to use each feature, and the full API + env reference."
+        pills={[
+          { label: 'last updated', value: '2026-06-05', tone: 'info' },
+          { label: 'sections', value: TOC.length },
+        ]}
+      />
 
-      <Card>
-        <CardHeader><CardTitle>Contents</CardTitle></CardHeader>
-        <CardContent className="grid gap-1 sm:grid-cols-2 text-sm">
-          {TOC.map(([id, label]) => (
-            <a key={id} href={`#${id}`} className="text-muted-foreground hover:text-primary hover:underline">{label}</a>
-          ))}
-        </CardContent>
-      </Card>
+      <div className="grid gap-8 lg:grid-cols-[220px,1fr]">
+        <GuideToc items={TOC_ITEMS} />
+
+        <div className="space-y-8 min-w-0">
+          {/* What's new pinned at the top — collapsible so power users
+              who already know the changes can hide it. */}
+          <WhatsNew />
+
+          {/* Mobile TOC fallback — the sticky sidebar collapses below
+              lg, but a flat list of jump links is still useful so the
+              user doesn't have to scroll the whole guide to navigate. */}
+          <Card className="lg:hidden">
+            <CardHeader><CardTitle>Contents</CardTitle></CardHeader>
+            <CardContent className="grid gap-1 sm:grid-cols-2 text-sm">
+              {TOC.map(([id, label]) => (
+                <a key={id} href={`#${id}`} className="text-muted-foreground hover:text-primary hover:underline">{label}</a>
+              ))}
+            </CardContent>
+          </Card>
 
       <Section id="first-time" title="0. First time? Start here">
         <p className="text-sm">
@@ -669,6 +692,8 @@ docker run -d -p 3000:3000 -v $PWD/data:/app/data --env-file .env email-automato
           The palette is the fastest way to jump anywhere — start typing a page name (e.g. "drafts" → /drafts, "admin webhooks" → /admin/webhooks) and hit Enter. Admin-only pages only appear in the list for admins.
         </p>
       </Section>
+        </div>
+      </div>
     </div>
   )
 }
