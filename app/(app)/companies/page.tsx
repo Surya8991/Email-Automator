@@ -23,6 +23,7 @@ export default async function CompaniesPage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        accent="sky"
         icon={Building2}
         title="Companies"
         description="Per-company research linked to your contacts by name match. Fill it in once, surface it everywhere."

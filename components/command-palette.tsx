@@ -5,7 +5,7 @@ import { Command } from 'cmdk'
 import {
   LayoutDashboard, Users, FileText, Send, CalendarClock, Workflow, BarChart3, Ban, ScrollText,
   UserCircle2, Settings, FlaskConical, Eye, BookOpen, Shield, Building2, User2, Mail, Workflow as CampaignIcon,
-  Sparkles, Plus, Keyboard, HelpCircle,
+  Sparkles, Plus, Keyboard, HelpCircle, Briefcase,
 } from 'lucide-react'
 import { globalSearchAction, type SearchResult } from '@/server/actions/search'
 
@@ -27,6 +27,7 @@ const QUICK_ACTIONS: QuickAction[] = [
   { href: '/campaigns',     label: 'New campaign',        hint: 'Open the new-campaign flow',          icon: Workflow, keywords: 'campaign sequence new create automate' },
   { href: '/contacts',      label: 'Import contacts',     hint: 'CSV or Excel upload',                 icon: Users,    keywords: 'import upload csv xlsx contact add' },
   { href: '/companies/new', label: 'Add company',         hint: 'AI-fillable research record',         icon: Building2,keywords: 'company add new research enrich' },
+  { href: '/jobs',          label: 'Track jobs',          hint: 'Add a job-board URL to monitor',      icon: Briefcase,keywords: 'job jobs career careers track watch monitor source listing' },
   { href: '/schedule',      label: 'Schedule send',       hint: 'Bulk schedule with stagger',          icon: CalendarClock, keywords: 'schedule queue stagger send later' },
   { href: '/diagnostic',    label: 'Run diagnostic',      hint: 'Pre-flight SMTP / DNS / cron checks', icon: FlaskConical, keywords: 'diagnose check test smtp dns deploy' },
   { href: '/profile',       label: 'Export my data',      hint: 'GDPR JSON dump',                      icon: ScrollText, keywords: 'export download gdpr backup data' },
@@ -37,6 +38,7 @@ const ITEMS: Item[] = [
   { href: '/dashboard',  label: 'Dashboard',   icon: LayoutDashboard },
   { href: '/contacts',   label: 'Contacts',    icon: Users },
   { href: '/companies',  label: 'Companies',   icon: Building2 },
+  { href: '/jobs',       label: 'Job tracker', icon: Briefcase },
   { href: '/templates',  label: 'Templates',   icon: FileText },
   { href: '/drafts',     label: 'Drafts',      icon: Send },
   { href: '/dry-run',    label: 'Dry run',     icon: Eye },

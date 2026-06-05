@@ -13,6 +13,7 @@ export default async function SchedulePage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        accent="amber"
         icon={CalendarClock}
         title="Schedule"
         description="Enqueue emails to be sent at staggered times. The scheduler tick advances the queue every 30 seconds."

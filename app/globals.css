@@ -319,6 +319,52 @@
   box-shadow: 0 1px 0 0 hsl(0 0% 100% / 0.04);
 }
 
+/* ── Sectional accent system (2026-06-06) ───────────────────────────
+   Per-page accent color so each major surface gets its own identity
+   instead of every page being grey-on-grey. Apply .ea-accent-* on the
+   PageHeader icon container, on stat-pill borders, on Section
+   eyebrows, etc.
+
+   The vars expose --eyebrow (for text) and --halo (for the gradient
+   icon backdrop). Each accent is colorful but desaturated enough not
+   to clash with the user's chosen theme accent. */
+.ea-accent-blue    { --eyebrow: 217 91% 60%; --halo: 217 91% 60% / 0.18; --halo2: 217 91% 60% / 0.06; }
+.ea-accent-emerald { --eyebrow: 160 84% 39%; --halo: 160 84% 39% / 0.20; --halo2: 160 84% 39% / 0.06; }
+.ea-accent-amber   { --eyebrow: 38 92% 50%;  --halo: 38 92% 50% / 0.22;  --halo2: 38 92% 50% / 0.06; }
+.ea-accent-rose    { --eyebrow: 347 77% 50%; --halo: 347 77% 50% / 0.20; --halo2: 347 77% 50% / 0.06; }
+.ea-accent-violet  { --eyebrow: 262 83% 58%; --halo: 262 83% 58% / 0.20; --halo2: 262 83% 58% / 0.06; }
+.ea-accent-sky     { --eyebrow: 199 89% 48%; --halo: 199 89% 48% / 0.20; --halo2: 199 89% 48% / 0.06; }
+.ea-accent-fuchsia { --eyebrow: 292 84% 61%; --halo: 292 84% 61% / 0.20; --halo2: 292 84% 61% / 0.06; }
+.ea-accent-teal    { --eyebrow: 174 72% 41%; --halo: 174 72% 41% / 0.22; --halo2: 174 72% 41% / 0.06; }
+
+/* Apply on the PageHeader icon container. Overrides the indigo
+   default with the page's accent. */
+.ea-section-icon {
+  background: linear-gradient(135deg, hsl(var(--halo)), hsl(var(--halo2))) !important;
+  color: hsl(var(--eyebrow)) !important;
+  border-color: hsl(var(--halo)) !important;
+}
+.ea-section-icon::before {
+  background: radial-gradient(closest-side, hsl(var(--halo)), transparent 70%) !important;
+}
+
+/* Eyebrow color on Section headers — picks up the inherited --eyebrow. */
+.ea-accent-eyebrow {
+  color: hsl(var(--eyebrow)) !important;
+}
+
+/* ── Status pill colors ───────────────────────────────────────────── */
+.ea-pill-info     { background: hsl(217 91% 60% / 0.10); color: hsl(217 91% 50%); border: 1px solid hsl(217 91% 60% / 0.22); }
+.ea-pill-success  { background: hsl(160 84% 39% / 0.10); color: hsl(160 64% 35%); border: 1px solid hsl(160 84% 39% / 0.22); }
+.ea-pill-warn     { background: hsl(38 92% 50% / 0.10);  color: hsl(38 92% 40%);  border: 1px solid hsl(38 92% 50% / 0.22); }
+.ea-pill-danger   { background: hsl(347 77% 50% / 0.10); color: hsl(347 77% 45%); border: 1px solid hsl(347 77% 50% / 0.22); }
+.ea-pill-violet   { background: hsl(262 83% 58% / 0.10); color: hsl(262 83% 50%); border: 1px solid hsl(262 83% 58% / 0.22); }
+.dark .ea-pill-info     { color: hsl(217 91% 75%); }
+.dark .ea-pill-success  { color: hsl(160 84% 60%); }
+.dark .ea-pill-warn     { color: hsl(38 92% 65%); }
+.dark .ea-pill-danger   { color: hsl(347 77% 70%); }
+.dark .ea-pill-violet   { color: hsl(262 83% 75%); }
+
 /* ── Data tables (contacts / schedule / audit / queue) ──────────────
    Compositions:
      .ea-table       — base styling: zebra stripe, hover row tint, tight row,

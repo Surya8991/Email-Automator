@@ -22,6 +22,7 @@ export default async function DryRunPage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        accent="sky"
         icon={Eye}
         title="Dry run"
         description="Preview the first 100 eligible contacts and the personalized subject they'd get from your active template. Nothing is sent."

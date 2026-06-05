@@ -294,6 +294,48 @@ export const webhooks = sqliteTable('webhooks', {
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),
 }, (t) => ({ byUser: index('webhooks_user_idx').on(t.userId) }))
 
+// Job tracker — user-supplied tracked job-board / careers URLs. The
+// fetcher periodically pulls each URL via the SSRF-defended fetcher,
+// AI-extracts visible job titles, and persists new ones as `jobLeads`.
+// Per-user; tenancy enforced via userId on both tables.
+export const jobSources = sqliteTable('job_sources', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  // Free-form label the user picks ("Notion careers", "LinkedIn — PM in BLR").
+  label: text('label').notNull(),
+  url: text('url').notNull(),
+  // Comma-separated keywords; new leads matching at least one are kept.
+  // Empty = keep everything the AI sees.
+  keywords: text('keywords').notNull().default(''),
+  // Last fetch timestamp + status for the UI.
+  lastFetchedAt: integer('last_fetched_at'),
+  lastStatus: text('last_status').notNull().default(''),
+  lastError: text('last_error').notNull().default(''),
+  active: integer('active', { mode: 'boolean' }).notNull().default(true),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),
+}, (t) => ({ byUser: index('job_sources_user_idx').on(t.userId) }))
+
+export const jobLeads = sqliteTable('job_leads', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  sourceId: integer('source_id').notNull().references(() => jobSources.id, { onDelete: 'cascade' }),
+  // Normalized for dedupe — lowercased title + sourceId. A unique index
+  // guarantees we never re-insert the same lead from the same source.
+  fingerprint: text('fingerprint').notNull(),
+  title: text('title').notNull(),
+  company: text('company').notNull().default(''),
+  link: text('link').notNull().default(''),
+  location: text('location').notNull().default(''),
+  status: text('status').notNull().default('new'), // new|saved|ignored|applied
+  notes: text('notes').notNull().default(''),
+  seenAt: integer('seen_at', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),
+}, (t) => ({
+  byUser: index('job_leads_user_idx').on(t.userId, t.status, t.seenAt),
+  uqFingerprint: uniqueIndex('job_leads_fingerprint_idx').on(t.sourceId, t.fingerprint),
+}))
+
+export type JobSource = typeof jobSources.$inferSelect
+export type JobLead = typeof jobLeads.$inferSelect
 export type SavedView = typeof savedViews.$inferSelect
 export type User = typeof users.$inferSelect
 export type ApiKey = typeof apiKeys.$inferSelect

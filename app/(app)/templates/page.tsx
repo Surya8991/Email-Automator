@@ -34,6 +34,7 @@ export default async function TemplatesPage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        accent="emerald"
         icon={FileText}
         title="Templates"
         description="Edit subject and body. The active template feeds Drafts and single-step Campaigns."

@@ -16,6 +16,7 @@ export default async function CampaignsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        accent="violet"
         icon={Workflow}
         title="Campaigns"
         description="Multi-step sequences. The worker advances each enrollment based on its per-step delay."

@@ -5,7 +5,7 @@ import { useState } from 'react'
 import {
   LayoutDashboard, Users, FileText, Send, CalendarClock, BarChart3, Workflow,
   Settings, Shield, Ban, ScrollText, UserCircle2, FlaskConical, Eye, BookOpen,
-  Building2, Menu, X, Mail,
+  Building2, Menu, X, Mail, Briefcase,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -29,6 +29,7 @@ const GROUPS: NavGroup[] = [
       { href: '/dashboard',  label: 'Dashboard',  icon: LayoutDashboard },
       { href: '/contacts',   label: 'Contacts',   icon: Users },
       { href: '/companies',  label: 'Companies',  icon: Building2 },
+      { href: '/jobs',       label: 'Job tracker', icon: Briefcase },
     ],
   },
   {

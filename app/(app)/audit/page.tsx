@@ -54,6 +54,7 @@ export default async function AuditPage(props: { searchParams: Promise<{ scope?:
   return (
     <div className="space-y-6">
       <PageHeader
+        accent="teal"
         icon={ScrollText}
         title="Audit log"
         description={adminAll ? 'Last 500 events across all users.' : 'Last 500 of your events. Every server-side action that touches data lands here.'}

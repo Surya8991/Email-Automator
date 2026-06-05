@@ -10,6 +10,8 @@ import { cn } from '@/lib/utils'
 // The right slot lives on the same row as the title on >= sm, then
 // wraps below on mobile so the title isn't crushed.
 
+export type PageAccent = 'blue' | 'emerald' | 'amber' | 'rose' | 'violet' | 'sky' | 'fuchsia' | 'teal'
+
 interface PageHeaderProps {
   title: React.ReactNode
   description?: React.ReactNode
@@ -24,6 +26,8 @@ interface PageHeaderProps {
   }>
   /** Section help slot — render <SectionHelp /> here for the inline ? icon. */
   help?: React.ReactNode
+  /** Per-page accent color (overrides the default indigo halo). */
+  accent?: PageAccent
   className?: string
 }
 
@@ -35,18 +39,26 @@ const PILL_TONE: Record<NonNullable<NonNullable<PageHeaderProps['pills']>[number
   info:    'bg-primary/10 text-primary',
 }
 
-export function PageHeader({ title, description, icon: Icon, actions, pills, help, className }: PageHeaderProps) {
+export function PageHeader({ title, description, icon: Icon, actions, pills, help, accent, className }: PageHeaderProps) {
+  // Apply the per-page accent at the header root so the icon + eyebrow
+  // CSS vars all flow down. Falls back to the indigo theme accent when
+  // no per-page accent is set.
+  const accentClass = accent ? `ea-accent-${accent}` : ''
   return (
-    <header className={cn('flex flex-col gap-3 ea-fade-in', className)}>
+    <header className={cn('flex flex-col gap-3 ea-fade-in', accentClass, className)}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
           {Icon ? (
             // ea-icon-halo adds a soft gradient ring behind the icon —
             // lifts the header out of the "flat card" look without
-            // changing the layout.
+            // changing the layout. When `accent` is set, .ea-section-icon
+            // pulls the colored variant from the parent.
             <span
               aria-hidden
-              className="ea-icon-halo mt-0.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border bg-gradient-to-br from-primary/15 to-primary/5 text-primary shadow-sm"
+              className={cn(
+                'ea-icon-halo mt-0.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border bg-gradient-to-br from-primary/15 to-primary/5 text-primary shadow-sm',
+                accent ? 'ea-section-icon' : '',
+              )}
             >
               <Icon className="h-5 w-5" />
             </span>

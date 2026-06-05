@@ -96,10 +96,11 @@
 <!-- ── URGENT ───────────────────────────────────────────────────────── -->
 <h2 id="urgent"><span class="step-num">1</span> URGENT — apply prod migrations</h2>
 <div class="danger">
-  <strong>Why your prod is 500'ing.</strong> The latest pushes added six new database tables:
+  <strong>Why your prod is 500'ing.</strong> The latest pushes added eight new database tables:
   <code>progress_events</code>, <code>companies</code>, <code>email_identities</code>,
-  <code>campaign_step_variants</code>, <code>saved_views</code> (new — for /contacts saved
-  filter combos), plus the <code>contact_form</code> audit rows. Until you run the migrations
+  <code>campaign_step_variants</code>, <code>saved_views</code> (for /contacts saved filter combos),
+  <code>job_sources</code> + <code>job_leads</code> (new — for the Job tracker),
+  plus the <code>contact_form</code> audit rows. Until you run the migrations
   against your Turso DB, every page that touches one of these tables crashes — that's what's
   behind the <code>/settings</code>, <code>/companies</code>, and <code>/contacts</code> (saved-views
   read) errors you've been seeing. Defensive <code>.catch</code> wrappers degrade gracefully

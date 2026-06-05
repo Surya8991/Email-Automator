@@ -33,6 +33,7 @@ export default async function DraftsPage(props: { searchParams: Promise<{ page?:
   return (
     <div className="space-y-6">
       <PageHeader
+        accent="amber"
         icon={Send}
         title="Drafts"
         description="Personalized emails ready to send. Edit, schedule, or fire them off in batches."

@@ -3,6 +3,27 @@
 Everything Email Automator currently does, grouped by section.
 Last refreshed: 2026-06-05.
 
+## 🆕 What's new (2026-06-06, fourth batch — colors + Job tracker)
+
+**Sectional color system (every page now has identity)**
+- New `.ea-accent-*` CSS palette (blue / emerald / amber / rose / violet / sky / fuchsia / teal) exposing `--eyebrow` and `--halo` vars.
+- `PageHeader` gains an `accent` prop that paints the icon backdrop + section eyebrow.
+- Applied across every page: Dashboard → violet, Contacts → blue, Companies → sky, Templates → emerald, Drafts → amber, Schedule → amber, Campaigns → violet, Analytics → fuchsia, Blocklist → rose, Audit → teal, Diagnostic → emerald, Dry run → sky, Job tracker → fuchsia.
+- New `.ea-pill-{info,success,warn,danger,violet}` colored status pills.
+
+**Job tracker (new module — no external API keys)**
+- New `job_sources` + `job_leads` tables (migration `0008_job_tracker.sql`).
+- Service `server/services/job-tracker.ts`:
+  - Uses the existing **SSRF-defended `fetchForAi`** so HTTPS-only in prod, private IPs / loopback / link-local rejected, 1 MB body cap, 5 s timeout, content-type whitelist.
+  - Calls Groq with a structured-JSON prompt to extract job listings from any page (LinkedIn search, Lever, Greenhouse, Wellfound, Workday, Notion careers, company `/careers` pages).
+  - Dedupes via a (sourceId, fingerprint) unique index where fingerprint = lowercased + whitespace-collapsed `title|company`.
+  - Per-source keyword filter (comma-separated). Empty = keep all.
+  - Fire-and-forget Slack/Discord notification when new leads land.
+- Manual refresh button per source + cron at `/api/cron/job-tracker` gated by `CRON_SECRET`. Suggested hourly schedule; capped at 40 sources per tick to stay inside the Vercel function limit.
+- New `/jobs` page with a segmented control (New / Saved / Sources tabs), add-source dialog, and per-row Save / Applied / Ignore triage actions. Defensive `.catch` wrappers so migration 0008 not being applied yet renders empty state, not 500.
+- Sidebar entry under Workspace + palette quick-action ("Track jobs").
+- 11 new unit tests in `test/unit/job-tracker.test.ts` cover the fingerprint normalization + keyword matching edge cases (empty list, comma-separated, case, internal whitespace, blank entries).
+
 ## 🆕 What's new (2026-06-06, third batch — overnight build)
 
 **Templates UI/UX overhaul (user explicit ask)**

@@ -81,6 +81,7 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        accent="violet"
         icon={LayoutDashboard}
         title="Dashboard"
         description="Your last 30 days at a glance — sent, opens, clicks, replies, plus recent activity."

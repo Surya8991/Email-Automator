@@ -32,6 +32,7 @@ export default async function AnalyticsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        accent="fuchsia"
         icon={BarChart3}
         title="Analytics"
         description="Sent / opens / clicks / replies, plus daily series, send-time heatmap, and per-template / tag / campaign / platform breakdowns."

@@ -68,6 +68,7 @@ export default async function ContactsPage(props: { searchParams: Promise<{ page
   return (
     <div className="space-y-6">
       <PageHeader
+        accent="blue"
         icon={Users}
         title="Contacts"
         description={filterBadges || 'Recipients across your platforms. Filter, tag, import CSV, or jump into a contact for full history.'}

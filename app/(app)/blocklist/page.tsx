@@ -13,6 +13,7 @@ export default async function BlocklistPage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        accent="rose"
         icon={Ban}
         title="Blocklist"
         description="Suppress specific emails or whole domains. Unsubscribe clicks add to the global list automatically."

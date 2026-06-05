@@ -19,6 +19,7 @@ export default async function DiagnosticPage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        accent="emerald"
         icon={FlaskConical}
         title="Diagnostic"
         description="Pre-flight checks for SMTP, AI, OAuth, deliverability posture, cron, DB, and admin config. Run a Quick check after every deploy, Full check before a big send."
