@@ -5,6 +5,7 @@ import { listTemplates } from '@/server/services/templates'
 import { Card, CardContent } from '@/components/ui/card'
 import { PageHeader } from '@/components/ui/page-header'
 import { SectionHelp } from '@/components/section-help'
+import { pluralWord } from '@/lib/pluralize'
 import { DraftsClient } from './drafts-client'
 
 // Allowed page sizes — kept in lockstep with the UI selector. Anything
@@ -36,7 +37,7 @@ export default async function DraftsPage(props: { searchParams: Promise<{ page?:
         title="Drafts"
         description="Personalized emails ready to send. Edit, schedule, or fire them off in batches."
         pills={[
-          { label: 'pending', value: total, tone: total > 0 ? 'info' : 'default' },
+          { label: pluralWord(total, 'pending draft'), value: total, tone: total > 0 ? 'info' : 'default' },
           { label: 'active template', value: activeTemplate ? (activeTemplate.label || activeTemplate.key) : '—', tone: activeTemplate ? 'success' : 'warn' },
         ]}
         help={

@@ -7,6 +7,7 @@ import { Plus, Building2, ExternalLink } from 'lucide-react'
 import { PageHeader } from '@/components/ui/page-header'
 import { SectionHelp } from '@/components/section-help'
 import { EmptyState } from '@/components/ui/empty-state'
+import { pluralWord } from '@/lib/pluralize'
 
 export default async function CompaniesPage() {
   const u = await requireUser()
@@ -26,7 +27,7 @@ export default async function CompaniesPage() {
         title="Companies"
         description="Per-company research linked to your contacts by name match. Fill it in once, surface it everywhere."
         pills={[
-          { label: 'records', value: companies.length, tone: companies.length > 0 ? 'info' : 'default' },
+          { label: pluralWord(companies.length, 'record'), value: companies.length, tone: companies.length > 0 ? 'info' : 'default' },
         ]}
         actions={
           <Button asChild>

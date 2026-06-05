@@ -7,16 +7,33 @@ import { DevSignInButton } from './dev-signin'
 import { SubmitButton } from './submit-button'
 import { ThemeToggle } from '@/components/theme-toggle'
 import {
-  Workflow, BarChart3, Sparkles, Send, ShieldCheck, FileText, Clock,
+  Sparkles, ShieldCheck, ChartNoAxesCombined,
 } from 'lucide-react'
 
-const FEATURES = [
-  { icon: Send,        title: 'Bulk drafts + send',     blurb: 'Personalize with your variables, send in staggered batches.' },
-  { icon: Clock,       title: 'Schedule + sequences',   blurb: 'Queue at any time. Multi-step campaigns with delays.' },
-  { icon: BarChart3,   title: 'Tracking + analytics',   blurb: '1×1 pixel + link rewriting. See opens, clicks, replies.' },
-  { icon: Sparkles,    title: 'AI assist (Groq)',       blurb: 'Llama 3.3 rewrites your draft in one click.' },
-  { icon: FileText,    title: '20 ready templates',     blurb: 'Growth / Performance / SEO / Digital in 5 tones each.' },
-  { icon: ShieldCheck, title: 'CSP, CSRF, multi-tenant', blurb: 'Hardened defaults. Per-user data isolation.' },
+// Login page redesign (2026-06-06)
+//
+// Old: marketing-feel grid with a 6-feature wall on the left.
+// New: clean auth card centered on the left, a muted brand panel on
+// the right (≥lg) carrying a short three-point self-hosted pitch.
+// Mobile collapses to card-only. Reuses every existing server action;
+// design-only change.
+
+const BRAND_POINTS = [
+  {
+    icon: ShieldCheck,
+    title: 'Your data stays yours',
+    blurb: 'No third-party SaaS. Per-user isolation, encryption at rest, MIT licensed.',
+  },
+  {
+    icon: ChartNoAxesCombined,
+    title: 'Real outbound analytics',
+    blurb: 'Opens, clicks, replies, bounces — first-party tracking, no spreadsheet exports.',
+  },
+  {
+    icon: Sparkles,
+    title: 'AI that knows your voice',
+    blurb: 'Brand voice samples + recipient context + length/CTA controls. Groq under the hood.',
+  },
 ] as const
 
 export default async function LoginPage() {
@@ -32,66 +49,39 @@ export default async function LoginPage() {
     : []
 
   return (
-    <div className="relative grid min-h-dvh lg:grid-cols-2">
-      {/* Animated background blobs — pure CSS, no JS, no a11y impact. */}
+    <div className="relative grid min-h-dvh lg:grid-cols-[1fr,1fr]">
+      {/* Soft orbs behind the whole shell — same family as the in-app
+          orbs, slightly more saturated since this is a hero surface. */}
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
-        <div className="absolute -top-32 -left-24 h-96 w-96 rounded-full bg-primary/20 blur-3xl" />
-        <div className="absolute -bottom-32 -right-24 h-96 w-96 rounded-full bg-emerald-500/20 blur-3xl" />
+        <div className="absolute -top-40 -left-20 h-[36rem] w-[36rem] rounded-full bg-primary/25 blur-3xl" />
+        <div className="absolute -bottom-40 -right-20 h-[34rem] w-[34rem] rounded-full bg-emerald-500/20 blur-3xl" />
       </div>
 
       <div className="absolute right-4 top-4 z-10"><ThemeToggle /></div>
 
-      {/* ── Hero ─────────────────────────────────────────────────────── */}
-      <section className="hidden lg:flex flex-col justify-between p-12 border-r bg-card/30 backdrop-blur">
-        <div>
-          <div className="mb-12 flex items-center gap-2 text-xl font-semibold">
-            <Workflow className="h-6 w-6 text-primary" />
-            Email Automator
-          </div>
-          <h1 className="text-4xl font-bold tracking-tight">
-            Personalized outreach<br />at scale, on autopilot.
-          </h1>
-          <p className="mt-3 text-muted-foreground">
-            One workspace for templates, contacts, campaigns, and analytics — without a $99/mo subscription.
-          </p>
-
-          <ul className="mt-8 grid grid-cols-2 gap-x-6 gap-y-5">
-            {FEATURES.map(({ icon: Icon, title, blurb }) => (
-              <li key={title} className="flex gap-3">
-                <Icon className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
-                <div>
-                  <div className="text-sm font-semibold">{title}</div>
-                  <div className="text-xs text-muted-foreground">{blurb}</div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        <div className="text-xs text-muted-foreground">
-          v2 · Next 15 · Drizzle · Auth.js · Groq · 100% self-hosted
-        </div>
-      </section>
-
-      {/* ── Sign-in card ─────────────────────────────────────────────── */}
-      <section className="flex items-center justify-center p-6">
-        <div className="w-full max-w-sm space-y-6">
-          <div className="lg:hidden">
-            <div className="flex items-center gap-2 text-lg font-semibold">
-              <Workflow className="h-5 w-5 text-primary" /> Email Automator
-            </div>
+      {/* ── Left: auth card ───────────────────────────────────────── */}
+      <section className="flex items-center justify-center p-6 sm:p-10">
+        <div className="ea-floating w-full max-w-md rounded-2xl bg-card/80 p-8 backdrop-blur ea-fade-in">
+          {/* Brand row — small mark + wordmark. Mobile keeps it visible
+              since the right panel is hidden below lg. */}
+          <div className="flex items-center gap-2">
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-purple-500 text-white shadow-sm">
+              <EnvelopeIcon className="h-4 w-4" />
+            </span>
+            <span className="text-sm font-semibold tracking-tight">Email Automator</span>
           </div>
 
-          <div>
-            <h2 className="text-2xl font-semibold tracking-tight">Welcome back</h2>
+          <div className="mt-6">
+            <h1 className="text-2xl font-semibold tracking-tight">Welcome back</h1>
             <p className="mt-1 text-sm text-muted-foreground">Sign in to your workspace.</p>
           </div>
 
-          {/* Google = primary action. One click, no inbox round-trip,
-              also the only path that grants Gmail API scopes for the
-              reply / bounce / signature features. */}
+          {/* Primary CTA — Google, when configured. Single most-used path. */}
           {googleOk ? (
-            <form action={async () => { 'use server'; await signIn('google', { redirectTo: '/dashboard' }) }}>
+            <form
+              className="mt-6"
+              action={async () => { 'use server'; await signIn('google', { redirectTo: '/dashboard' }) }}
+            >
               <SubmitButton
                 variant="outline"
                 className="h-11 w-full justify-center gap-3 border-zinc-300 bg-white text-zinc-900 shadow-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
@@ -100,16 +90,15 @@ export default async function LoginPage() {
                 <GoogleIcon className="h-5 w-5" />
                 <span className="text-[15px] font-medium">Continue with Google</span>
               </SubmitButton>
-              <p className="mt-2 text-center text-[11px] text-muted-foreground">
-                Fastest path. Also unlocks Gmail signature / reply / bounce detection.
-              </p>
             </form>
           ) : null}
 
-          {/* GitHub — secondary social provider. Auto-shows when env vars
-              are present. Same one-click flow as Google; no extra scopes. */}
+          {/* Secondary CTA — GitHub when configured. */}
           {githubOk ? (
-            <form action={async () => { 'use server'; await signIn('github', { redirectTo: '/dashboard' }) }}>
+            <form
+              className="mt-3"
+              action={async () => { 'use server'; await signIn('github', { redirectTo: '/dashboard' }) }}
+            >
               <SubmitButton
                 variant="outline"
                 className="h-11 w-full justify-center gap-3 border-zinc-300 bg-zinc-900 text-white hover:bg-zinc-800 dark:border-zinc-700 dark:bg-zinc-950 dark:hover:bg-zinc-900"
@@ -123,32 +112,44 @@ export default async function LoginPage() {
 
           {(googleOk || githubOk) && emailOk ? <Divider label="or" /> : null}
 
+          {/* Tertiary CTA — magic link. */}
           {emailOk ? (
-            <form action={async (fd) => {
-              'use server'
-              try {
-                await signIn('nodemailer', { email: String(fd.get('email') ?? ''), redirectTo: '/dashboard' })
-              } catch (e) {
-                if (e instanceof Error && e.message.includes('NEXT_REDIRECT')) throw e
-                throw e
-              }
-            }} className="space-y-3">
+            <form
+              className="space-y-3"
+              action={async (fd) => {
+                'use server'
+                try {
+                  await signIn('nodemailer', {
+                    email: String(fd.get('email') ?? ''),
+                    redirectTo: '/dashboard',
+                  })
+                } catch (e) {
+                  if (e instanceof Error && e.message.includes('NEXT_REDIRECT')) throw e
+                  throw e
+                }
+              }}
+            >
               <div className="space-y-1.5">
-                <Label htmlFor="email">Email</Label>
-                <Input id="email" name="email" type="email" placeholder="you@example.com" required autoComplete="email" />
+                <Label htmlFor="email" className="text-xs uppercase tracking-[0.08em] text-muted-foreground">Email</Label>
+                <Input
+                  id="email" name="email" type="email"
+                  placeholder="you@example.com"
+                  required autoComplete="email"
+                  className="h-11"
+                />
               </div>
               <SubmitButton className="h-11 w-full" pendingChildren="Sending link…">
                 Send magic link
               </SubmitButton>
-              <p className="text-xs text-muted-foreground">We'll email you a one-click sign-in link.</p>
+              <p className="text-xs text-muted-foreground">
+                We&apos;ll email you a one-click sign-in link.
+              </p>
             </form>
-          ) : (
-            !googleOk ? (
-              <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
-                <strong>No sign-in providers configured.</strong> Set <code>GOOGLE_CLIENT_ID</code> / <code>SECRET</code> or <code>SMTP_USER</code> / <code>PASS</code> in <code>.env</code>.
-              </div>
-            ) : null
-          )}
+          ) : !googleOk && !githubOk ? (
+            <div className="mt-6 rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+              <strong>No sign-in providers configured.</strong> Set <code>GOOGLE_CLIENT_ID</code> + <code>GOOGLE_CLIENT_SECRET</code>, or <code>SMTP_USER</code> + <code>SMTP_PASS</code> in <code>.env</code>.
+            </div>
+          ) : null}
 
           {devBypass.length > 0 ? (
             <>
@@ -162,10 +163,46 @@ export default async function LoginPage() {
             </>
           ) : null}
 
-          <p className="pt-4 text-center text-xs text-muted-foreground">
-            Outgoing emails get a 1×1 tracking pixel and rewritten links — for your own analytics.
-            Per-user data is isolated.
+          <p className="mt-8 border-t pt-4 text-center text-[11px] text-muted-foreground">
+            Outgoing emails get a 1×1 tracking pixel and rewritten links — for your own analytics. Per-user data is isolated.
           </p>
+        </div>
+      </section>
+
+      {/* ── Right: brand panel (lg+) ──────────────────────────────── */}
+      <section className="relative hidden flex-col justify-between overflow-hidden border-l bg-card/40 p-12 backdrop-blur lg:flex">
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            Self-hosted outreach
+          </div>
+          <h2 className="mt-3 text-4xl font-semibold leading-[1.1] tracking-tight">
+            Outreach you own
+            <br />
+            <span className="bg-gradient-to-r from-primary to-purple-500 bg-clip-text text-transparent">
+              from inbox to insight.
+            </span>
+          </h2>
+          <p className="mt-4 max-w-md text-sm text-muted-foreground">
+            One workspace for templates, drafts, scheduled sends, multi-step campaigns, AI-assisted writing, and first-party analytics. No SaaS subscription. No data lock-in.
+          </p>
+
+          <ul className="mt-10 space-y-5">
+            {BRAND_POINTS.map(({ icon: Icon, title, blurb }) => (
+              <li key={title} className="flex gap-3">
+                <span className="ea-icon-halo mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border bg-gradient-to-br from-primary/15 to-primary/5 text-primary">
+                  <Icon className="h-4 w-4" />
+                </span>
+                <div>
+                  <div className="text-sm font-semibold">{title}</div>
+                  <div className="mt-0.5 text-xs text-muted-foreground">{blurb}</div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="text-[11px] text-muted-foreground">
+          Next.js · Drizzle · Auth.js · Groq · MIT licensed
         </div>
       </section>
     </div>
@@ -174,15 +211,22 @@ export default async function LoginPage() {
 
 function Divider({ label }: { label: string }) {
   return (
-    <div className="relative my-1 text-center text-xs uppercase tracking-wide text-muted-foreground">
-      <span className="relative z-10 bg-background px-2">{label}</span>
+    <div className="relative my-5 text-center text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+      <span className="relative z-10 bg-card px-2">{label}</span>
       <div aria-hidden className="absolute inset-x-0 top-1/2 -z-0 h-px bg-border" />
     </div>
   )
 }
 
-// Official GitHub Octocat — monochrome path, scales cleanly. White on the
-// near-black button.
+function EnvelopeIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="m3 7 9 6 9-6" />
+    </svg>
+  )
+}
+
 function GitHubIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={className ?? 'h-5 w-5'} aria-hidden fill="currentColor">
@@ -191,8 +235,6 @@ function GitHubIcon({ className }: { className?: string }) {
   )
 }
 
-// Official Google "G" logo per Google's branding guidelines. Four-color
-// SVG, scales cleanly. Class is applied by caller for sizing.
 function GoogleIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 48 48" className={className ?? 'mr-2 h-4 w-4'} aria-hidden>

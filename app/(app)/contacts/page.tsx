@@ -11,6 +11,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PageHeader } from '@/components/ui/page-header'
 import { SectionHelp } from '@/components/section-help'
+import { pluralWord } from '@/lib/pluralize'
 import { ContactsTable } from './contacts-table'
 import { AddContactDialog } from './add-contact-dialog'
 import { ContactsToolbar } from './contacts-toolbar'
@@ -63,9 +64,9 @@ export default async function ContactsPage(props: { searchParams: Promise<{ page
         title="Contacts"
         description={filterBadges || 'Recipients across your platforms. Filter, tag, import CSV, or jump into a contact for full history.'}
         pills={[
-          { label: 'total', value: data.total, tone: 'info' },
-          { label: 'tags', value: allTags.length },
-          { label: 'companies', value: companies.length },
+          { label: pluralWord(data.total, 'contact'), value: data.total, tone: 'info' },
+          { label: pluralWord(allTags.length, 'tag'), value: allTags.length },
+          { label: pluralWord(companies.length, 'company', 'companies'), value: companies.length },
         ]}
         actions={<>
           <ContactsToolbar />
