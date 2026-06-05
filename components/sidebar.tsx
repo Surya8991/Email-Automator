@@ -5,13 +5,14 @@ import { useState } from 'react'
 import {
   LayoutDashboard, Users, FileText, Send, CalendarClock, BarChart3, Workflow,
   Settings, Shield, Ban, ScrollText, UserCircle2, FlaskConical, Eye, BookOpen,
-  Menu, X,
+  Building2, Menu, X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const nav = [
   { href: '/dashboard',  label: 'Dashboard',  icon: LayoutDashboard },
   { href: '/contacts',   label: 'Contacts',   icon: Users },
+  { href: '/companies',  label: 'Companies',  icon: Building2 },
   { href: '/templates',  label: 'Templates',  icon: FileText },
   { href: '/drafts',     label: 'Drafts',     icon: Send },
   { href: '/dry-run',    label: 'Dry run',    icon: Eye },

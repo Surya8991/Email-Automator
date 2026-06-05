@@ -212,11 +212,18 @@ async function tickForUser(userId: string): Promise<{ sent: number; failed: numb
         await db.update(campaignEnrollments).set({ status: 'replied' }).where(eq(campaignEnrollments.id, enr.id))
         continue
       }
-      if (!step.templateId) {
+      // A/B testing: if the step has variant rows, deterministically pick
+      // one for this contact (hash-stable so the same contact always sees
+      // the same variant across retries). Falls back to step.templateId
+      // when no variants are defined — back-compat for existing campaigns.
+      const { pickVariantTemplateId } = await import('./variants')
+      const variantTemplateId = await pickVariantTemplateId(step.id, contact.id)
+      const effectiveTemplateId = variantTemplateId ?? step.templateId
+      if (!effectiveTemplateId) {
         await db.update(campaignEnrollments).set({ status: 'stopped' }).where(eq(campaignEnrollments.id, enr.id))
         continue
       }
-      const [tpl] = await db.select().from(templates).where(eq(templates.id, step.templateId))
+      const [tpl] = await db.select().from(templates).where(eq(templates.id, effectiveTemplateId))
       if (!tpl) {
         await db.update(campaignEnrollments).set({ status: 'stopped' }).where(eq(campaignEnrollments.id, enr.id))
         continue

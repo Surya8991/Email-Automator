@@ -11,7 +11,7 @@ import { sendSmtpTestAction } from '@/server/actions/diagnostic'
 
 interface Props {
   initial: { SMTP_HOST?: string; SMTP_PORT?: string; SMTP_USER?: string; SMTP_PASS?: string; EMAIL_FROM?: string }
-  source: 'user' | 'env' | 'none'
+  source: 'user' | 'env' | 'identity' | 'none'
   // True when an encrypted SMTP_PASS exists server-side. The page never
   // sends the actual ciphertext or plaintext to the client; this flag is
   // the only signal that "leave blank to keep current" is available.

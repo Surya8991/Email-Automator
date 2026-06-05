@@ -31,6 +31,8 @@ const envSchema = z.object({
   EMAIL_FROM: z.string().optional(),
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
+  GITHUB_ID: z.string().optional(),
+  GITHUB_SECRET: z.string().optional(),
   DATABASE_URL: z.string().default('./data/tracker.db'),
   TURSO_AUTH_TOKEN: z.string().optional(),
   CRON_SECRET: z.string().optional(),

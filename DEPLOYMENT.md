@@ -175,6 +175,17 @@ on a per-user basis from `/admin/users` → key icon → set a number;
 scheduler-tick honors `settings.DAILY_SEND_LIMIT_OVERRIDE` before falling
 back to env. Empty / 0 clears the override.
 
+### Sign-in providers
+
+Three sign-in paths supported. Configure any combination — empty env vars
+silently drop the corresponding provider.
+
+| Provider | Env vars | What you get |
+|---|---|---|
+| **Magic link** | `SMTP_USER`, `SMTP_PASS` | Email-only sign-in. Already required for outbound mail; doubles as auth. |
+| **Google OAuth** | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | One-click sign-in **plus** Gmail-API scopes (signature import, reply detection, bounce check). |
+| **GitHub OAuth** | `GITHUB_ID`, `GITHUB_SECRET` | One-click sign-in. Devs love it. ~10 min setup at github.com/settings/developers. Callback URL: `https://<your-app>/api/auth/callback/github`. |
+
 ### Rate limiter on multi-instance deploys
 
 `lib/rate-limit.ts` is an in-memory sliding-window limiter. On Vercel, each

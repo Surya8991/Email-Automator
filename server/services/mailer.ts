@@ -49,10 +49,12 @@ export interface OutgoingEmail {
 
 /**
  * Send via SMTP. Pass a `userId` to use that user's per-user SMTP creds
- * (with env as fallback). The worker passes a userId; ad-hoc sends from
- * the diagnostic page also pass it. Headers are CR/LF-guarded.
+ * (with env as fallback). Optionally pass `identityId` to send from a
+ * specific email_identities row (multiple Personal/Work from-addresses).
+ * When identityId is omitted or resolves to nothing, falls back to the
+ * legacy single per-user SMTP under settings.SMTP_*.
  */
-export async function sendMail(m: OutgoingEmail, userId?: string) {
+export async function sendMail(m: OutgoingEmail, userId?: string, identityId?: number) {
   assertNoCrlf('to', m.to)
   assertNoCrlf('subject', m.subject)
   if (!userId) {
@@ -66,6 +68,16 @@ export async function sendMail(m: OutgoingEmail, userId?: string) {
       from: env.EMAIL_FROM ?? env.SMTP_USER, source: 'env',
     })
     return t.sendMail({ from: env.EMAIL_FROM ?? env.SMTP_USER, to: m.to, subject: m.subject, html: m.html, text: m.text })
+  }
+  // Prefer a specific identity if asked, else fall back to legacy.
+  if (identityId) {
+    const { getIdentityCreds } = await import('./identities')
+    const c = await getIdentityCreds(userId, identityId)
+    if (c) {
+      const t = transportFor({ host: c.host, port: c.port, user: c.user, pass: c.pass, from: c.from, source: 'identity' })
+      return t.sendMail({ from: c.from, to: m.to, subject: m.subject, html: m.html, text: m.text })
+    }
+    // identityId pointed at a deleted/foreign row — fall through.
   }
   const creds = await getSmtpFor(userId)
   if (creds.source === 'none') throw new Error('SMTP not configured (Settings → Email)')

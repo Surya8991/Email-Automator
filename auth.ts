@@ -1,5 +1,6 @@
 import NextAuth from 'next-auth'
 import Google from 'next-auth/providers/google'
+import GitHub from 'next-auth/providers/github'
 import Nodemailer from 'next-auth/providers/nodemailer'
 import { DrizzleAdapter } from '@auth/drizzle-adapter'
 import { redirect } from 'next/navigation'
@@ -47,6 +48,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             },
           }),
         ]
+      : []),
+    // GitHub OAuth — free for everyone, ~10 min setup. Useful for the
+    // dev-heavy audience this app tends to attract (recruiters, founders,
+    // engineers running job-search outreach). Auto-registers if both
+    // env vars present; absent → the provider is dropped silently.
+    ...(env.GITHUB_ID && env.GITHUB_SECRET
+      ? [GitHub({ clientId: env.GITHUB_ID, clientSecret: env.GITHUB_SECRET })]
       : []),
   ],
   callbacks: {

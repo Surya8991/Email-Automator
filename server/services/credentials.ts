@@ -16,7 +16,7 @@ export interface SmtpCreds {
   user: string
   pass: string
   from: string
-  source: 'user' | 'env' | 'none'
+  source: 'user' | 'env' | 'identity' | 'none'
 }
 
 export interface AiCreds {

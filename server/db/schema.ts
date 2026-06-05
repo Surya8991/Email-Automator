@@ -198,6 +198,63 @@ export const apiKeys = sqliteTable('api_keys', {
   byHash: uniqueIndex('api_keys_hash_idx').on(t.keyHash),
 }))
 
+// B1 — per-user company enrichment. Linked to contacts.company by name
+// (case-insensitive match in the service layer; no FK because the
+// contacts.company column is free-text user input).
+export const companies = sqliteTable('companies', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  industry: text('industry').notNull().default(''),
+  hq: text('hq').notNull().default(''),
+  size: text('size').notNull().default(''),
+  funding: text('funding').notNull().default(''),
+  glassdoor: text('glassdoor').notNull().default(''),
+  techStack: text('tech_stack').notNull().default(''),
+  salaryRange: text('salary_range').notNull().default(''),
+  hiringFreq: text('hiring_freq').notNull().default(''),
+  notes: text('notes').notNull().default(''),
+  sourceUrl: text('source_url').notNull().default(''),
+  updatedAt: integer('updated_at').notNull().$defaultFn(() => Date.now()),
+  createdAt: integer('created_at').notNull().$defaultFn(() => Date.now()),
+}, (t) => ({
+  byUser: index('companies_user_idx').on(t.userId),
+  byUserName: uniqueIndex('companies_user_name_idx').on(t.userId, t.name),
+}))
+
+// Multiple per-user from-addresses (Personal vs Work vs Role-targeted).
+// SMTP password is encrypted at rest via lib/crypto.ts. The legacy
+// single per-user SMTP in settings.SMTP_* is preserved as the
+// implicit "default" identity for back-compat.
+export const emailIdentities = sqliteTable('email_identities', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  label: text('label').notNull(),
+  fromName: text('from_name').notNull().default(''),
+  fromEmail: text('from_email').notNull(),
+  smtpHost: text('smtp_host').notNull(),
+  smtpPort: integer('smtp_port').notNull().default(587),
+  smtpUser: text('smtp_user').notNull(),
+  smtpPassEnc: text('smtp_pass_enc').notNull().default(''),
+  isDefault: integer('is_default', { mode: 'boolean' }).notNull().default(false),
+  createdAt: integer('created_at').notNull().$defaultFn(() => Date.now()),
+}, (t) => ({
+  byUser: index('email_identities_user_idx').on(t.userId),
+}))
+
+// A/B variants per campaign step. Scheduler reads these; if a step has
+// rows, splits enrollments by hash(contactId) % weight-sum. Empty falls
+// back to campaignSteps.templateId so existing campaigns keep working.
+export const campaignStepVariants = sqliteTable('campaign_step_variants', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  stepId: integer('step_id').notNull().references(() => campaignSteps.id, { onDelete: 'cascade' }),
+  templateId: integer('template_id').references(() => templates.id, { onDelete: 'set null' }),
+  weight: integer('weight').notNull().default(1),
+  label: text('label').notNull().default(''),
+}, (t) => ({
+  byStep: index('campaign_step_variants_step_idx').on(t.stepId),
+}))
+
 // One row per user holding the most recent SSE/poll progress event.
 // Sits in its own table (not `settings`) so high-frequency emit() writes
 // during a bulk import don't contend with config reads. PRIMARY KEY on

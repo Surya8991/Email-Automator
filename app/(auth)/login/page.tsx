@@ -24,6 +24,7 @@ export default async function LoginPage() {
   if (session?.user) redirect('/dashboard')
 
   const googleOk = Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET)
+  const githubOk = Boolean(env.GITHUB_ID && env.GITHUB_SECRET)
   const emailOk = Boolean(env.SMTP_USER && env.SMTP_PASS)
   const allowDev = process.env.NODE_ENV !== 'production' || process.env.ALLOW_DEV_SIGNIN === 'true'
   const devBypass = allowDev
@@ -105,7 +106,22 @@ export default async function LoginPage() {
             </form>
           ) : null}
 
-          {googleOk && emailOk ? <Divider label="or" /> : null}
+          {/* GitHub — secondary social provider. Auto-shows when env vars
+              are present. Same one-click flow as Google; no extra scopes. */}
+          {githubOk ? (
+            <form action={async () => { 'use server'; await signIn('github', { redirectTo: '/dashboard' }) }}>
+              <SubmitButton
+                variant="outline"
+                className="h-11 w-full justify-center gap-3 border-zinc-300 bg-zinc-900 text-white hover:bg-zinc-800 dark:border-zinc-700 dark:bg-zinc-950 dark:hover:bg-zinc-900"
+                pendingChildren="Redirecting to GitHub…"
+              >
+                <GitHubIcon className="h-5 w-5" />
+                <span className="text-[15px] font-medium">Continue with GitHub</span>
+              </SubmitButton>
+            </form>
+          ) : null}
+
+          {(googleOk || githubOk) && emailOk ? <Divider label="or" /> : null}
 
           {emailOk ? (
             <form action={async (fd) => {
@@ -162,6 +178,16 @@ function Divider({ label }: { label: string }) {
       <span className="relative z-10 bg-background px-2">{label}</span>
       <div aria-hidden className="absolute inset-x-0 top-1/2 -z-0 h-px bg-border" />
     </div>
+  )
+}
+
+// Official GitHub Octocat — monochrome path, scales cleanly. White on the
+// near-black button.
+function GitHubIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className ?? 'h-5 w-5'} aria-hidden fill="currentColor">
+      <path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.1.79-.25.79-.56v-2c-3.2.69-3.87-1.37-3.87-1.37-.52-1.32-1.27-1.67-1.27-1.67-1.04-.71.08-.69.08-.69 1.15.08 1.76 1.18 1.76 1.18 1.02 1.74 2.67 1.24 3.32.95.1-.74.4-1.24.72-1.53-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.17-3.1-.12-.29-.51-1.45.11-3.02 0 0 .96-.31 3.16 1.18.92-.26 1.9-.39 2.88-.39.98 0 1.96.13 2.88.39 2.2-1.49 3.16-1.18 3.16-1.18.62 1.57.23 2.73.11 3.02.73.81 1.17 1.84 1.17 3.1 0 4.42-2.69 5.39-5.25 5.68.41.35.78 1.05.78 2.12v3.14c0 .31.21.66.8.55C20.21 21.39 23.5 17.08 23.5 12 23.5 5.65 18.35.5 12 .5z" />
+    </svg>
   )
 }
 

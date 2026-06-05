@@ -243,6 +243,15 @@ CLI alternative to the upload card. Refuses to run unless `ADMIN_EMAILS` is set 
 
 ---
 
+## Recently shipped (2026-06-05 — feature wave)
+
+- **GitHub OAuth** — secondary social sign-in alongside Google + magic link. `GITHUB_ID` / `GITHUB_SECRET` env vars; Auth.js wires it automatically when present.
+- **B1 Company Research** — per-user `/companies` page with industry, HQ, size, funding, tech stack, salary range, hiring frequency, notes. One row per (user, company-name); linked to contacts by case-insensitive name match. CRUD UI at `/companies`, `/companies/new`, `/companies/[id]`.
+- **Multiple email identities per user** — `email_identities` table holds additional from-addresses beyond the legacy `settings.SMTP_*`. SMTP passwords AES-GCM encrypted at rest. `sendMail(m, userId, identityId)` honors the picked identity; falls back to the legacy creds when identityId is unset or resolves to a deleted row.
+- **Campaign A/B testing** — `campaign_step_variants` table per step (multiple templates with weights). Scheduler-tick picks deterministically via `hash(stepId, contactId) % totalWeight` so the same contact always sees the same variant on every replay. Empty variant set → falls back to `step.templateId` (existing campaigns unchanged).
+- **CSP nonce middleware** (opt-in) — `middleware.ts` generates a per-request nonce and emits a strict `script-src 'self' 'nonce-X' 'strict-dynamic'` CSP. Off by default (`CSP_NONCE=true` to enable) because every inline script in the app needs to thread the nonce first.
+- **Playwright E2E impersonation spec** — `test/e2e/impersonation.spec.ts` exercises the admin → impersonate → banner → exit flow + a cookie-forgery attempt that the HMAC-signed `ea_impersonator` cookie defends against.
+
 ## Roadmap (not yet shipped)
 
 - Multiple email identities per user (L).
