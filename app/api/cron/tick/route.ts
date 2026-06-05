@@ -11,7 +11,15 @@ export const maxDuration = 60
 // Without CRON_SECRET set, this route is open — guard it in any prod deploy.
 async function unauthorized(req: Request): Promise<boolean> {
   const secret = process.env.CRON_SECRET
-  if (!secret) return false // no secret configured → open (don't enable in prod without one)
+  if (!secret) {
+    // No secret set — route is open to the public. Fine for local dev;
+    // in production this lets anyone trigger the scheduler and send emails
+    // on behalf of all users. Log loudly so it's visible in prod logs.
+    if (process.env.NODE_ENV === 'production' || process.env.VERCEL) {
+      console.error('[cron/tick] CRON_SECRET is not set — endpoint is unauthenticated. Set it in your env to secure it.')
+    }
+    return false
+  }
   const url = new URL(req.url)
   if (url.searchParams.get('secret') === secret) return false
   if ((req.headers.get('authorization') || '') === `Bearer ${secret}`) return false

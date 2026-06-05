@@ -8,7 +8,7 @@ import { actionError } from '@/lib/action-error'
 import { db } from '@/server/db/client'
 import { templates as templatesTable, auditLog } from '@/server/db/schema'
 import { draftEmail, type Tone } from '@/server/services/ai'
-import { rateLimit } from '@/lib/rate-limit'
+import { adminLimit } from '@/server/actions/admin'
 
 const NameSchema = z.object({ name: z.string().min(1).max(120) })
 
@@ -78,7 +78,7 @@ const EnrollSchema = z.object({
 const TONE_LIST = ['professional', 'friendly', 'concise', 'enthusiastic', 'formal'] as const
 export async function improveCampaignTemplateAction(templateId: number, tone: Tone = 'professional') {
   const me = await requireAdmin()
-  if (!rateLimit(`admin-write:${me.id}:improve_campaign_tpl`, 60, 60_000)) {
+  if (!adminLimit(me.id, 'improve_campaign_tpl')) {
     return { error: 'Too many admin actions — slow down' }
   }
   if (!TONE_LIST.includes(tone)) return { error: 'Invalid tone' }

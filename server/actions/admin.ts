@@ -10,11 +10,14 @@ import { parseXlsx, parseCsv, type ImportedContact } from '@/server/services/imp
 import { dupKey } from '@/server/services/contacts'
 import { emit } from '@/server/sse'
 import { rateLimit } from '@/lib/rate-limit'
+import { setSetting } from '@/server/services/settings'
 
 // Admin write actions: 60/min/admin. Stops accidental loops (a stuck
 // onClick that fires every key event, or a malicious script in a console)
 // from chewing through the audit log.
-function adminLimit(adminId: string, op: string): boolean {
+// Exported so other admin-action files can reuse the same bucket instead of
+// duplicating the rateLimit call with the same key pattern.
+export function adminLimit(adminId: string, op: string): boolean {
   return rateLimit(`admin-write:${adminId}:${op}`, 60, 60_000)
 }
 
@@ -46,8 +49,6 @@ export async function deleteUserAction(userId: string) {
 // without losing data. Their session keeps working — they can sign in,
 // view their data, even add contacts — but the worker won't send
 // anything until an admin un-suspends them.
-import { setSetting } from '@/server/services/settings'
-
 export async function suspendUserAction(userId: string, suspend: boolean) {
   const me = await requireAdmin()
   if (!adminLimit(me.id, 'suspend_user')) return { error: 'Too many admin actions — slow down' }

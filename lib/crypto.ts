@@ -15,12 +15,18 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:
 
 const PREFIX = 'enc:v1:'
 
+// Memoised: env vars are immutable after boot so we only need to derive
+// the key once. This avoids a redundant SHA-256 on every encrypt/decrypt
+// call (called once per SMTP credential load per email send in the scheduler).
+let _derivedKey: Buffer | undefined
 function key(): Buffer {
+  if (_derivedKey) return _derivedKey
   const raw = process.env.ENCRYPTION_KEY?.trim() || process.env.AUTH_SECRET?.trim()
   if (!raw) throw new Error('ENCRYPTION_KEY or AUTH_SECRET must be set for at-rest encryption')
   // Allow either a 32-byte base64 string OR an arbitrary passphrase that
   // we derive a key from. SHA-256 lands either input at exactly 32 bytes.
-  return createHash('sha256').update(raw).digest()
+  _derivedKey = createHash('sha256').update(raw).digest()
+  return _derivedKey
 }
 
 export function encryptString(plain: string): string {

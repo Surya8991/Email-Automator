@@ -22,8 +22,10 @@ export interface RichTextEditorProps {
   placeholder?: string
   rows?: number
   className?: string
-  /** Hide the Rich/HTML toggle when the caller already knows which mode they want. */
+  /** Start in a specific mode (default: 'rich'). */
   startMode?: 'rich' | 'html'
+  /** Hides the Rich/HTML mode toggle entirely when only one mode is needed. */
+  disableToggle?: boolean
 }
 
 function exec(cmd: string, value?: string) {
@@ -46,7 +48,7 @@ function ToolbarBtn({ label, onClick, children }: { label: string; onClick: () =
 }
 
 export function RichTextEditor({
-  value, onChange, placeholder, rows = 12, className, startMode = 'rich',
+  value, onChange, placeholder, rows = 12, className, startMode = 'rich', disableToggle = false,
 }: RichTextEditorProps) {
   const richRef = useRef<HTMLDivElement | null>(null)
   const [mode, setMode] = useState<'rich' | 'html'>(startMode)
@@ -66,23 +68,25 @@ export function RichTextEditor({
   return (
     <div className={className ?? 'space-y-2'}>
       <div className="flex flex-wrap items-center gap-1 rounded-md border bg-muted/30 p-1">
-        <div className="inline-flex overflow-hidden rounded-md border bg-background text-xs">
-          <button type="button"
-            className={`px-2 py-1 ${mode === 'rich' ? 'bg-muted font-medium' : 'text-muted-foreground hover:bg-accent'}`}
-            onClick={() => setMode('rich')}>
-            <Pencil className="mr-1 inline h-3 w-3" /> Rich
-          </button>
-          <button type="button"
-            className={`border-l px-2 py-1 ${mode === 'html' ? 'bg-muted font-medium' : 'text-muted-foreground hover:bg-accent'}`}
-            onClick={() => {
-              // Pull latest from contentEditable before switching so the
-              // textarea opens on what the user just typed.
-              if (richRef.current) onChange(richRef.current.innerHTML)
-              setMode('html')
-            }}>
-            <Code className="mr-1 inline h-3 w-3" /> HTML
-          </button>
-        </div>
+        {!disableToggle && (
+          <div className="inline-flex overflow-hidden rounded-md border bg-background text-xs">
+            <button type="button"
+              className={`px-2 py-1 ${mode === 'rich' ? 'bg-muted font-medium' : 'text-muted-foreground hover:bg-accent'}`}
+              onClick={() => setMode('rich')}>
+              <Pencil className="mr-1 inline h-3 w-3" /> Rich
+            </button>
+            <button type="button"
+              className={`border-l px-2 py-1 ${mode === 'html' ? 'bg-muted font-medium' : 'text-muted-foreground hover:bg-accent'}`}
+              onClick={() => {
+                // Pull latest from contentEditable before switching so the
+                // textarea opens on what the user just typed.
+                if (richRef.current) onChange(richRef.current.innerHTML)
+                setMode('html')
+              }}>
+              <Code className="mr-1 inline h-3 w-3" /> HTML
+            </button>
+          </div>
+        )}
         {mode === 'rich' ? (
           <div className="ml-2 inline-flex items-center gap-0.5">
             <ToolbarBtn label="Bold (Ctrl+B)" onClick={() => exec('bold')}><Bold className="h-3.5 w-3.5" /></ToolbarBtn>
@@ -123,12 +127,4 @@ export function RichTextEditor({
       )}
     </div>
   )
-}
-
-// Imperative ref-like helper for callers that need to read the *current*
-// editor contents before the next blur fires (e.g. clicking Save).
-export function flushRichTextEditor(container: HTMLElement | null): string | null {
-  if (!container) return null
-  const ce = container.querySelector('[contenteditable="true"]') as HTMLElement | null
-  return ce ? ce.innerHTML : null
 }

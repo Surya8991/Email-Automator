@@ -8,7 +8,7 @@ import { actionError } from '@/lib/action-error'
 import { db } from '@/server/db/client'
 import { emailLog, auditLog } from '@/server/db/schema'
 import { draftEmail, type Tone } from '@/server/services/ai'
-import { rateLimit } from '@/lib/rate-limit'
+import { adminLimit } from '@/server/actions/admin'
 
 const Schema = z.object({
   startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -100,7 +100,7 @@ export async function cancelScheduleAction() {
 const TONE_LIST = ['professional', 'friendly', 'concise', 'enthusiastic', 'formal'] as const
 export async function improveScheduledEmailAction(id: number, tone: Tone = 'professional') {
   const me = await requireAdmin()
-  if (!rateLimit(`admin-write:${me.id}:improve_scheduled`, 60, 60_000)) {
+  if (!adminLimit(me.id, 'improve_scheduled')) {
     return { error: 'Too many admin actions — slow down' }
   }
   if (!TONE_LIST.includes(tone)) return { error: 'Invalid tone' }

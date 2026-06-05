@@ -4,12 +4,13 @@
 import { and, eq, sql, lte } from 'drizzle-orm'
 import { db } from '@/server/db/client'
 import {
-  emailLog, events, campaignEnrollments, campaignSteps, contacts, settings, templates, users,
+  emailLog, events, campaignEnrollments, campaignSteps, campaigns, contacts, settings, templates, users,
 } from '@/server/db/schema'
 import { lastSentTo } from './drafts'
 import { buildEmail } from './drafts'
 import { sendMail } from './mailer'
 import { instrumentHtml } from './tracking'
+import { isBlocked } from './blocklist'
 import { maybePurgeForUser } from './retention'
 import { env } from '@/lib/env'
 import { logger } from '@/lib/logger'
@@ -55,9 +56,11 @@ async function tickForUser(userId: string): Promise<{ sent: number; failed: numb
       eq(emailLog.status, 'Sending'),
       lte(emailLog.scheduledAt, stuckCutoff),
     ))
-  const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0)
+  // Rolling 24-hour window — timezone-agnostic, avoids the UTC-vs-user-TZ
+  // mismatch that setHours(0,0,0,0) causes on cloud servers running UTC.
+  const dayAgo = now - 24 * 60 * 60_000
   const sentToday = await db.select({ n: sql<number>`COUNT(*)` }).from(events)
-    .where(and(eq(events.userId, userId), eq(events.kind, 'sent'), sql`${events.ts} >= ${startOfDay.getTime()}`))
+    .where(and(eq(events.userId, userId), eq(events.kind, 'sent'), sql`${events.ts} >= ${dayAgo}`))
   const remaining = Math.max(0, DAILY_LIMIT - Number(sentToday[0]?.n ?? 0))
   let sent = 0, failed = 0, advanced = 0
   if (remaining <= 0) return { sent, failed, advanced }
@@ -81,7 +84,7 @@ async function tickForUser(userId: string): Promise<{ sent: number; failed: numb
       .where(and(
         eq(emailLog.userId, userId),
         eq(emailLog.status, 'Sent'),
-        sql`${emailLog.scheduledAt} >= ${startOfDay.getTime()}`,
+        sql`${emailLog.scheduledAt} >= ${dayAgo}`,
       ))
     for (const r of sentRows) {
       const d = (r.email.split('@')[1] ?? '').toLowerCase()
@@ -168,50 +171,108 @@ async function tickForUser(userId: string): Promise<{ sent: number; failed: numb
   }
 
   // 2) Campaign enrollments — advance any whose nextRunAt has passed.
-  const enrolled = await db.select().from(campaignEnrollments)
-    .where(and(eq(campaignEnrollments.status, 'active'), lte(campaignEnrollments.nextRunAt, now)))
-    .limit(BATCH_PER_USER)
-  for (const enr of enrolled) {
-    const [contact] = await db.select().from(contacts).where(eq(contacts.id, enr.contactId))
-    if (!contact || contact.userId !== userId) continue
-    const [step] = await db.select().from(campaignSteps)
-      .where(and(eq(campaignSteps.campaignId, enr.campaignId), eq(campaignSteps.order, enr.currentStep)))
-    if (!step) {
-      await db.update(campaignEnrollments).set({ status: 'completed' }).where(eq(campaignEnrollments.id, enr.id))
-      continue
-    }
-    if (!step.templateId) {
-      await db.update(campaignEnrollments).set({ status: 'stopped' }).where(eq(campaignEnrollments.id, enr.id))
-      continue
-    }
-    const [tpl] = await db.select().from(templates).where(eq(templates.id, step.templateId))
-    if (!tpl) {
-      await db.update(campaignEnrollments).set({ status: 'stopped' }).where(eq(campaignEnrollments.id, enr.id))
-      continue
-    }
-    const email = buildEmail(tpl, contact)
-    try {
-      const inserted = await db.insert(emailLog).values({
-        userId, contactId: contact.id,
-        scheduleId: `camp_${enr.campaignId}_${enr.id}_${enr.currentStep}`,
-        email: contact.recruiterEmail, subject: email.subject, body: email.html,
-        scheduledAt: now, status: 'Sent', attempts: 1,
-        lastResult: formatDate(new Date()),
-      }).returning({ id: emailLog.id })
-      const logId = inserted[0]!.id
-      await sendMail({ ...email, html: instrumentHtml(email.html, logId) }, userId)
-      await db.insert(events).values({
-        userId, contactId: contact.id, templateId: tpl.id, kind: 'sent',
-        meta: JSON.stringify({ step: enr.currentStep, campaignId: enr.campaignId, emailLogId: logId }),
-      })
-      await db.update(campaignEnrollments).set({
-        currentStep: enr.currentStep + 1,
-        nextRunAt: now + step.delayHours * 60 * 60 * 1000,
-      }).where(eq(campaignEnrollments.id, enr.id))
-      advanced++
-    } catch (err) {
-      log.error({ err, enrollmentId: enr.id, campaignId: enr.campaignId }, 'enrollment send failed')
-      failed++
+  // Apply the same daily-limit budget used in section 1 (accounting for
+  // emails already sent in this tick), and join through campaigns so the
+  // LIMIT applies per-user rather than globally first-come-first-served.
+  const campaignRemaining = Math.max(0, remaining - sent)
+  if (campaignRemaining > 0) {
+    const enrolled = await db.select({
+      id: campaignEnrollments.id,
+      campaignId: campaignEnrollments.campaignId,
+      contactId: campaignEnrollments.contactId,
+      currentStep: campaignEnrollments.currentStep,
+      nextRunAt: campaignEnrollments.nextRunAt,
+      status: campaignEnrollments.status,
+    }).from(campaignEnrollments)
+      .innerJoin(campaigns, and(
+        eq(campaigns.id, campaignEnrollments.campaignId),
+        eq(campaigns.userId, userId),
+      ))
+      .where(and(eq(campaignEnrollments.status, 'active'), lte(campaignEnrollments.nextRunAt, now)))
+      .limit(Math.min(BATCH_PER_USER, campaignRemaining))
+
+    for (const enr of enrolled) {
+      const [contact] = await db.select().from(contacts).where(eq(contacts.id, enr.contactId))
+      if (!contact) continue
+      const [step] = await db.select().from(campaignSteps)
+        .where(and(eq(campaignSteps.campaignId, enr.campaignId), eq(campaignSteps.order, enr.currentStep)))
+      if (!step) {
+        await db.update(campaignEnrollments).set({ status: 'completed' }).where(eq(campaignEnrollments.id, enr.id))
+        continue
+      }
+      // stopOnReply — stop before sending if the contact has already replied
+      // and the step is configured to halt the sequence on reply.
+      if (step.stopOnReply && contact.emailStatus.startsWith('Replied')) {
+        await db.update(campaignEnrollments).set({ status: 'replied' }).where(eq(campaignEnrollments.id, enr.id))
+        continue
+      }
+      if (!step.templateId) {
+        await db.update(campaignEnrollments).set({ status: 'stopped' }).where(eq(campaignEnrollments.id, enr.id))
+        continue
+      }
+      const [tpl] = await db.select().from(templates).where(eq(templates.id, step.templateId))
+      if (!tpl) {
+        await db.update(campaignEnrollments).set({ status: 'stopped' }).where(eq(campaignEnrollments.id, enr.id))
+        continue
+      }
+      // Blocklist — respect per-user and global blocks for campaign sends.
+      if (await isBlocked(userId, contact.recruiterEmail)) {
+        await db.update(campaignEnrollments).set({ status: 'stopped' }).where(eq(campaignEnrollments.id, enr.id))
+        continue
+      }
+      // Per-recipient throttle — defer enrollment if already emailed recently.
+      if (throttleDays > 0) {
+        const last = await lastSentTo(userId, contact.recruiterEmail, throttleDays)
+        if (last) {
+          await db.update(campaignEnrollments).set({ nextRunAt: now + throttleDays * 24 * 60 * 60_000 })
+            .where(eq(campaignEnrollments.id, enr.id))
+          continue
+        }
+      }
+      // Per-domain cap — defer 1h if the domain's daily quota is exhausted.
+      const recipientDomain = (contact.recruiterEmail.split('@')[1] ?? '').toLowerCase()
+      const cap = domainCaps.get(recipientDomain)
+      if (cap !== undefined && (domainSentToday.get(recipientDomain) ?? 0) >= cap) {
+        await db.update(campaignEnrollments).set({ nextRunAt: now + 60 * 60_000 })
+          .where(eq(campaignEnrollments.id, enr.id))
+        continue
+      }
+      const email = buildEmail(tpl, contact)
+      // Insert the log row as 'Sending' so a crash between insert and
+      // sendMail doesn't leave a phantom 'Sent' record. The stuck-Sending
+      // recovery at the top of tickForUser will clean it up if needed.
+      let logId: number | undefined
+      try {
+        const inserted = await db.insert(emailLog).values({
+          userId, contactId: contact.id,
+          scheduleId: `camp_${enr.campaignId}_${enr.id}_${enr.currentStep}`,
+          email: contact.recruiterEmail, subject: email.subject, body: email.html,
+          scheduledAt: now, status: 'Sending', attempts: 1, lastResult: '',
+        }).returning({ id: emailLog.id })
+        logId = inserted[0]!.id
+        await sendMail({ ...email, html: instrumentHtml(email.html, logId) }, userId)
+        await db.update(emailLog).set({ status: 'Sent', lastResult: formatDate(new Date()) })
+          .where(eq(emailLog.id, logId))
+        await db.insert(events).values({
+          userId, contactId: contact.id, templateId: tpl.id, kind: 'sent',
+          meta: JSON.stringify({ step: enr.currentStep, campaignId: enr.campaignId, emailLogId: logId }),
+        })
+        await db.update(campaignEnrollments).set({
+          currentStep: enr.currentStep + 1,
+          nextRunAt: now + step.delayHours * 60 * 60 * 1000,
+        }).where(eq(campaignEnrollments.id, enr.id))
+        if (cap !== undefined) domainSentToday.set(recipientDomain, (domainSentToday.get(recipientDomain) ?? 0) + 1)
+        advanced++
+      } catch (err) {
+        log.error({ err, enrollmentId: enr.id, campaignId: enr.campaignId }, 'enrollment send failed')
+        if (logId !== undefined) {
+          await db.update(emailLog).set({
+            status: 'Failed',
+            lastResult: 'FAILED: ' + (err instanceof Error ? err.message : String(err)),
+          }).where(eq(emailLog.id, logId)).catch(() => {})
+        }
+        failed++
+      }
     }
   }
 

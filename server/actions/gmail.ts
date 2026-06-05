@@ -3,7 +3,7 @@ import { revalidatePath } from 'next/cache'
 import { and, eq, inArray, sql } from 'drizzle-orm'
 import { requireUser } from '@/auth'
 import { db } from '@/server/db/client'
-import { contacts, events } from '@/server/db/schema'
+import { campaignEnrollments, contacts, events } from '@/server/db/schema'
 import { detectBounces, detectReplies, fetchGmailSignature } from '@/server/services/google'
 import { setSetting } from '@/server/services/settings'
 import { dispatchAsync } from '@/server/services/webhooks'
@@ -49,6 +49,11 @@ export async function checkRepliesAction() {
         userId: u.id, contactId: c.id, kind: 'reply',
         meta: JSON.stringify({ email: c.recruiterEmail }),
       })
+      // Mark any active campaign enrollments for this contact as 'replied'
+      // so the scheduler's stopOnReply gate can act immediately on the next tick.
+      await db.update(campaignEnrollments)
+        .set({ status: 'replied' })
+        .where(and(eq(campaignEnrollments.contactId, c.id), eq(campaignEnrollments.status, 'active')))
       dispatchAsync(u.id, 'reply', { contactId: c.id, email: c.recruiterEmail })
       updated++
     }

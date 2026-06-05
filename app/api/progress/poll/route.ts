@@ -2,15 +2,14 @@
 // Vercel where the emitter and the SSE consumer live in different Lambdas
 // and the in-process Map fan-out doesn't reach the client. Returns the most
 // recent event newer than `since` (unix-ms), or 204 if there's nothing.
-import { auth } from '@/auth'
+import { requireUser } from '@/auth'
 import { readLatest } from '@/server/sse'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: Request) {
-  const session = await auth()
-  const userId = (session?.user as { id?: string } | undefined)?.id
-  if (!userId) return new Response('Unauthorized', { status: 401 })
+  const u = await requireUser()
+  const userId = u.id
   const url = new URL(req.url)
   const since = Number(url.searchParams.get('since') ?? '0')
   const latest = await readLatest(userId, Number.isFinite(since) ? since : 0)

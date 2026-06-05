@@ -1,14 +1,15 @@
-import { auth } from '@/auth'
+import { requireUser } from '@/auth'
 import { register } from '@/server/sse'
 
 // SSE — authenticated; each connection is tagged with the session user so
-// server-side emits only reach that user's open tabs. (Phase 1 fix carried
-// forward as the only path.)
+// server-side emits only reach that user's open tabs.
 export async function GET() {
-  const session = await auth()
-  const userId = (session?.user as { id?: string } | undefined)?.id
-  if (!userId) return new Response('Unauthorized', { status: 401 })
+  const u = await requireUser()
+  const userId = u.id
 
+  // Capture cleanup in a closure shared between start() and cancel() so
+  // client disconnect triggers proper teardown of the interval and registry.
+  let cleanup: (() => void) | undefined
   const stream = new ReadableStream({
     start(controller) {
       const unregister = register(userId, controller)
@@ -17,14 +18,9 @@ export async function GET() {
       const beat = setInterval(() => {
         try { controller.enqueue(new TextEncoder().encode(`: ping\n\n`)) } catch { clearInterval(beat) }
       }, 25_000)
-      ;(controller as unknown as { _cleanup?: () => void })._cleanup = () => {
-        clearInterval(beat)
-        unregister()
-      }
+      cleanup = () => { clearInterval(beat); unregister() }
     },
-    cancel() {
-      // Some runtimes invoke cancel; we rely on the cleanup function attached above.
-    },
+    cancel() { cleanup?.() },
   })
 
   return new Response(stream, {

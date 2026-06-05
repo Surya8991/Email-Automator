@@ -16,6 +16,10 @@ const LEAK_PATTERNS = [
   /\bER_[A-Z_]+/,
   /\bat\s+[A-Za-z_$][\w$.]*\s+\(/, // stack-frame line
   /[A-Z]:\\|\/(?:home|Users|var)\//,
+  // POSIX / Node.js syscall errors: ENOENT, ECONNREFUSED, ETIMEDOUT, etc.
+  /\bE[A-Z]{2,}\b/,
+  // Container / cloud paths not caught by the Windows/home pattern above
+  /\/(?:proc|run|etc|tmp|sys|app|opt)\//,
 ]
 
 function looksLikeLeak(msg: string): boolean {
