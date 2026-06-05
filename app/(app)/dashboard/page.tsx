@@ -11,6 +11,7 @@ import { PageHeader } from '@/components/ui/page-header'
 import { SectionHelp } from '@/components/section-help'
 import { getSmtpFor } from '@/server/services/credentials'
 import { getActive } from '@/server/services/templates'
+import { listLeads } from '@/server/services/job-tracker'
 import { formatDate, APP_TZ } from '@/lib/utils'
 import { getSetting } from '@/server/services/settings'
 
@@ -40,7 +41,7 @@ export default async function DashboardPage() {
   // Pick up the user's TZ for the Recent Activity timestamps. Server-rendered
   // here, so we can't use the client useFormatDate() hook — pass it as the
   // 2nd arg to formatDate instead.
-  const [k, recent, nextScheduledRow, tz, smtp, activeTpl] = await Promise.all([
+  const [k, recent, nextScheduledRow, tz, smtp, activeTpl, jobLeadsNew] = await Promise.all([
     kpis(u.id),
     db.select().from(events).where(eq(events.userId, u.id)).orderBy(desc(events.ts)).limit(10),
     // Earliest still-pending row in the queue. Drives the "Next send"
@@ -54,6 +55,9 @@ export default async function DashboardPage() {
     // dashboard doesn't 500 if either query fails.
     getSmtpFor(u.id).catch(() => ({ source: 'none' as const, user: '', host: '', port: 0, pass: '' })),
     getActive(u.id).catch(() => null),
+    // New job leads — drives the "Pick up where you left off" hint.
+    // Defensive .catch in case migration 0008 hasn't applied yet.
+    listLeads(u.id, 'new').catch(() => []),
   ])
 
   // ── Activation checklist ───────────────────────────────────────
@@ -98,6 +102,24 @@ export default async function DashboardPage() {
           />
         }
       />
+
+      {/* Pick-up-where-you-left-off — surfaces the highest-signal
+          next actions across the app so the user doesn't have to
+          scan the sidebar to find what's waiting on them. */}
+      {jobLeadsNew.length > 0 ? (
+        <Card className="ea-floating border-fuchsia-500/30 bg-gradient-to-br from-fuchsia-500/5 to-violet-500/5">
+          <CardHeader className="flex flex-row items-center gap-3">
+            <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-fuchsia-500/30 bg-fuchsia-500/10 text-fuchsia-600 dark:text-fuchsia-400">
+              <Sparkles className="h-4 w-4" />
+            </span>
+            <div className="flex-1">
+              <CardTitle className="text-base">{jobLeadsNew.length} new job {jobLeadsNew.length === 1 ? 'lead' : 'leads'} waiting</CardTitle>
+              <CardDescription className="text-xs">Triage them in the Job tracker — save the interesting ones, draft outreach, or ignore.</CardDescription>
+            </div>
+            <Button asChild size="sm" variant="outline"><Link href="/jobs">Open Job tracker →</Link></Button>
+          </CardHeader>
+        </Card>
+      ) : null}
 
       {/* Activation checklist — surfaces until all three steps are done,
           then fades. Replaces the old "empty if no contacts" empty
