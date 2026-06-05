@@ -6,6 +6,8 @@ import { listContacts, listTags, listDistinct } from '@/server/services/contacts
 import { listCampaigns } from '@/server/services/campaigns'
 import { getSetting } from '@/server/services/settings'
 import { followUpBuckets } from '@/server/services/analytics'
+import { listSavedViews } from '@/server/services/saved-views'
+import { SavedViewsBar } from './saved-views-bar'
 import { parseCustomFieldKeys } from '@/lib/custom-fields'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -25,7 +27,7 @@ export default async function ContactsPage(props: { searchParams: Promise<{ page
   const u = await requireUser()
   const requestedSize = Number(search.pageSize ?? 50)
   const pageSize = PAGE_SIZES.includes(requestedSize) ? requestedSize : 50
-  const [data, allTags, companies, locations, platforms, rawCfKeys, allCampaigns, followUps] = await Promise.all([
+  const [data, allTags, companies, locations, platforms, rawCfKeys, allCampaigns, followUps, savedViewsRows] = await Promise.all([
     listContacts(u.id, {
       page: Number(search.page ?? 1),
       pageSize,
@@ -43,6 +45,12 @@ export default async function ContactsPage(props: { searchParams: Promise<{ page
     getSetting(u.id, 'CUSTOM_FIELD_KEYS'),
     listCampaigns(u.id),
     followUpBuckets(u.id),
+    // Defensive: saved_views may not exist on prod DB until migration
+    // 0007 applies. Empty list lets the page render the "no saved
+    // views yet" empty state instead of 500.
+    listSavedViews(u.id, 'contacts').catch((e) => {
+      console.error('[contacts] listSavedViews failed:', e); return []
+    }),
   ])
   // Only enrollable campaigns end up in the picker — active or draft.
   const enrollableCampaigns = allCampaigns
@@ -89,6 +97,9 @@ export default async function ContactsPage(props: { searchParams: Promise<{ page
           />
         }
       />
+      {/* Saved views — named filter combos persisted per user. */}
+      <SavedViewsBar views={savedViewsRows.map((v) => ({ id: v.id, name: v.name, filters: v.filters }))} />
+
       {/* Follow-up reminders — buckets of active contacts by last-send recency. */}
       {(followUps.overdue + followUps.soon + followUps.onTrack + followUps.neverSent) > 0 ? (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">

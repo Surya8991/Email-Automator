@@ -19,6 +19,7 @@ import { AiImprovePicker } from '@/components/ai-improve-picker'
 import { CreateDraftsDialog, type TemplateOption } from './create-drafts-dialog'
 import { ScheduleSendDialog } from './schedule-send-dialog'
 import { SendConfirmDialog } from './send-confirm-dialog'
+import { SpamCheckChip } from '@/components/spam-check-chip'
 
 const PAGE_SIZE_OPTIONS = [50, 100, 500, 1000]
 
@@ -219,6 +220,10 @@ export function DraftsClient({
                         rows={12}
                         placeholder="Body"
                       />
+                      {/* Spam-trigger lint while editing — shows the same
+                          chip pattern as Templates so users get a single
+                          consistent signal across the app. */}
+                      <SpamCheckChip subject={editSubject} body={editBody} />
                     </div>
                   ) : (
                     <details className="group">

@@ -266,6 +266,21 @@ export const progressEvents = sqliteTable('progress_events', {
   payload: text('payload').notNull(),
 })
 
+// Saved views on /contacts. A "view" is a named bundle of filters the
+// user uses repeatedly (e.g. "Hot leads — LinkedIn — Bangalore"). The
+// `filters` blob is a JSON snapshot of the URLSearchParams keys the
+// contacts page reads (search/tag/status/company/location/platform).
+export const savedViews = sqliteTable('saved_views', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  scope: text('scope').notNull(), // 'contacts' today; expansion-ready for other lists
+  name: text('name').notNull(),
+  filters: text('filters').notNull(), // JSON
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),
+}, (t) => ({
+  byUserScope: index('saved_views_user_scope_idx').on(t.userId, t.scope),
+}))
+
 // Outbound webhooks. `events` is a comma-separated kind list ("sent,open,click,…").
 export const webhooks = sqliteTable('webhooks', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -279,6 +294,7 @@ export const webhooks = sqliteTable('webhooks', {
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),
 }, (t) => ({ byUser: index('webhooks_user_idx').on(t.userId) }))
 
+export type SavedView = typeof savedViews.$inferSelect
 export type User = typeof users.$inferSelect
 export type ApiKey = typeof apiKeys.$inferSelect
 export type Webhook = typeof webhooks.$inferSelect
