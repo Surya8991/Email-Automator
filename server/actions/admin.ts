@@ -9,17 +9,11 @@ import { adminEmails } from '@/lib/env'
 import { parseXlsx, parseCsv, type ImportedContact } from '@/server/services/importer'
 import { dupKey } from '@/server/services/contacts'
 import { emit } from '@/server/sse'
-import { rateLimit } from '@/lib/rate-limit'
+import { adminLimit } from '@/lib/admin-limit'
 import { setSetting } from '@/server/services/settings'
 
-// Admin write actions: 60/min/admin. Stops accidental loops (a stuck
-// onClick that fires every key event, or a malicious script in a console)
-// from chewing through the audit log.
-// Exported so other admin-action files can reuse the same bucket instead of
-// duplicating the rateLimit call with the same key pattern.
-export function adminLimit(adminId: string, op: string): boolean {
-  return rateLimit(`admin-write:${adminId}:${op}`, 60, 60_000)
-}
+// adminLimit lives in lib/admin-limit.ts — 'use server' files reject
+// non-async exports at build time, so the helper can't live here.
 
 // Tiny audit-log helper for admin actions. Keeps the call sites one-line
 // so contributors don't forget to log new admin operations. Errors are

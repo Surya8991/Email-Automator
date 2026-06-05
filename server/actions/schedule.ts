@@ -8,7 +8,7 @@ import { actionError } from '@/lib/action-error'
 import { db } from '@/server/db/client'
 import { emailLog, auditLog } from '@/server/db/schema'
 import { draftEmail, type Tone } from '@/server/services/ai'
-import { adminLimit } from '@/server/actions/admin'
+import { adminLimit } from '@/lib/admin-limit'
 
 const Schema = z.object({
   startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),

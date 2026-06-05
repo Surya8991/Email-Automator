@@ -8,7 +8,7 @@ import { actionError } from '@/lib/action-error'
 import { db } from '@/server/db/client'
 import { templates as templatesTable, auditLog } from '@/server/db/schema'
 import { draftEmail, type Tone } from '@/server/services/ai'
-import { adminLimit } from '@/server/actions/admin'
+import { adminLimit } from '@/lib/admin-limit'
 
 const NameSchema = z.object({ name: z.string().min(1).max(120) })
 
