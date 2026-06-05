@@ -152,7 +152,14 @@ export default async function SettingsPage() {
           <Card>
             <CardHeader><CardTitle className="flex items-center gap-2"><Database className="h-4 w-4" /> Data</CardTitle></CardHeader>
             <CardContent className="space-y-2 text-sm">
-              <p className="text-muted-foreground">SQLite, WAL mode, foreign keys ON. File at <code>{env.DATABASE_URL}</code>.</p>
+              {/* Never leak the raw DATABASE_URL to the client — on Turso/libsql
+                  deployments it includes the host you'd rather not advertise.
+                  Show the driver shape only. */}
+              <p className="text-muted-foreground">
+                {env.DATABASE_URL.startsWith('libsql:') || env.DATABASE_URL.startsWith('https:')
+                  ? 'Turso / libSQL (remote, hosted).'
+                  : 'SQLite, WAL mode, foreign keys ON. Stored locally.'}
+              </p>
               <a className="block text-xs underline" href="/api/contacts/export" download>Export contacts as CSV</a>
               {u.isAdmin ? <a className="block text-xs underline" href="/api/backup" download>Download full .db backup (admin)</a> : null}
             </CardContent>
