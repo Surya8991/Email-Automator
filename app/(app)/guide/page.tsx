@@ -35,6 +35,7 @@ const TOC = [
   ['schedule',    '6. Schedule (one-off blast)'],
   ['campaigns',   '7. Campaigns (multi-step sequences)'],
   ['analytics',   '8. Analytics & tracking'],
+  ['jobs',        '8b. Job tracker (board / careers scanning)'],
   ['blocklist',   '9. Blocklist & unsubscribe'],
   ['settings',    '10. Settings, profile, signature'],
   ['custom-fields','10b. Custom contact fields'],
@@ -333,6 +334,27 @@ Bob Smith,Globex,CTO,bob@globex.com,,,,
         </ul>
         <p className="text-sm">Admins also get a <strong>Job-search pipeline KPI row</strong> at the top — Applied / Active pipeline / Offers / Response rate / Rejections — derived from <Code>contacts.status</Code> (Applied / Phone Screen / Interview 1-2 / Final Round / Offer* / Hired / Reject*). Only renders when <Code>session.user.isAdmin</Code>.</p>
         <p className="text-sm text-muted-foreground">Cross-user instance-wide analytics (top senders, 30-day chart across all users, failure heatmap) live at <Link href="/admin" className="underline">/admin</Link>.</p>
+      </Section>
+
+      <Section id="jobs" title="8b. Job tracker (board / careers scanning)">
+        <p className="text-sm">Tracks user-supplied job-board / company-careers URLs and tells you when new listings appear. Lives at <Link href="/jobs" className="underline">/jobs</Link>. <strong>No external API keys</strong> beyond the AI key you already use for templates — every source is fetched server-side via the same SSRF-defended fetcher the AI uses.</p>
+        <p className="text-sm font-semibold">How it works</p>
+        <ol className="list-decimal pl-6 text-sm space-y-1">
+          <li>You add a <em>source</em> — either through the <strong>Add from preset</strong> picker (LinkedIn / Wellfound / Naukri / Indeed / Remote OK / We Work Remotely / Y Combinator / Greenhouse / Lever / company careers) or paste any URL via <strong>Add source</strong>.</li>
+          <li>An hourly cron tick at <Code>/api/cron/job-tracker</Code> (gated by <Code>CRON_SECRET</Code>, same secret as the schedule cron) walks each source, fetches it via the SSRF guard (HTTPS-only in prod, private IPs / loopback / link-local blocked, 1 MB cap, 5 s timeout, content-type whitelist).</li>
+          <li>The page text is stripped of HTML and passed to your Groq model with a JSON-only prompt to extract <Code>title / company / link / location</Code>. Capped at 30 listings per tick.</li>
+          <li>Each listing's fingerprint is <Code>title|company</Code> lowercased + whitespace-collapsed. A <Code>(source_id, fingerprint)</Code> unique index dedupes — re-running a tick never produces dupes.</li>
+          <li>Per-source comma-separated keywords narrow what's kept ("PM, Product Manager, Growth"). Empty = capture all.</li>
+          <li>If you've configured a Slack/Discord webhook in <Link href="/profile" className="underline">/profile</Link>, you get a ping with each batch of new leads.</li>
+        </ol>
+        <p className="text-sm font-semibold">Triage a lead</p>
+        <ul className="list-disc pl-6 text-sm space-y-1">
+          <li><strong>Draft</strong> — creates a placeholder contact (recruiter name / company / role / location / source link) plus a pre-filled outreach draft with <Code>{'{{name}}'}</Code> + <Code>{'{{company}}'}</Code> vars. Lead moves to <em>applied</em>.</li>
+          <li><strong>Save</strong> — moves to the Saved tab so it doesn't disappear when you refresh.</li>
+          <li><strong>Applied / Ignore</strong> — leave the New tray.</li>
+          <li>CSV export per tab via the <strong>CSV</strong> button (<Code>/api/jobs/export?status=…</Code>).</li>
+        </ul>
+        <p className="text-sm text-muted-foreground"><strong>Gotchas:</strong> LinkedIn search behind an auth wall returns very few listings — try a logged-out public URL or a company careers page. Cron schedule is global to the instance; if you self-host without Vercel cron, hit <Code>/api/cron/job-tracker?secret=$CRON_SECRET</Code> from any scheduler (system cron, GitHub Actions, etc).</p>
       </Section>
 
       <Section id="blocklist" title="9. Blocklist & unsubscribe">

@@ -169,7 +169,15 @@ DATABASE_URL='libsql://YOUR-DB.turso.io' TURSO_AUTH_TOKEN='eyJ...' npm run db:mi
   <li><input type="checkbox" id="h3" /><label for="h3">Redeploy</label></li>
 </ul>
 
-<h3>3.2 — Confirm <code>CRON_SECRET</code> is set</h3>
+<h3>3.2 — Confirm <code>CRON_SECRET</code> is set + wire the new job-tracker cron</h3>
+<div class="ok-box">
+  <strong>New (2026-06-06)</strong> — the Job tracker introduces a second cron endpoint at
+  <code>GET /api/cron/job-tracker?secret=$CRON_SECRET</code>. It walks every user's active job sources
+  hourly, fetches them via the SSRF-defended fetcher, AI-extracts new listings, and writes them to
+  <code>job_leads</code>. Same <code>CRON_SECRET</code> as the schedule tick; no new env var needed.
+  Add it to your Vercel <code>vercel.json</code> crons or your external scheduler — recommended cadence:
+  every hour. The endpoint caps each tick at 40 sources to stay inside the Vercel function limit.
+</div>
 <div class="danger">
   Without <code>CRON_SECRET</code>, the <code>/api/cron/tick</code> endpoint is open to the public
   in production. Anyone who finds the URL can trigger the scheduler to send emails on behalf of
