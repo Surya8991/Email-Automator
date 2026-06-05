@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { GenerateFromContext } from './generate-from-context'
 import { Segmented } from '@/components/ui/segmented'
+import { SpamCheckChip } from '@/components/spam-check-chip'
 import { cn } from '@/lib/utils'
 import { useSaveShortcut } from '@/components/use-save-shortcut'
 import { useUnsavedGuard } from '@/components/use-unsaved-guard'
@@ -90,6 +91,27 @@ export function TemplateEditor({
   // state so accepting a generated draft drops you back into 'edit'
   // with the new subject + body in place.
   const [mode, setMode] = useState<'edit' | 'generate'>('edit')
+
+  // ── Inline-edit template label ─────────────────────────────────
+  // Double-click a label in the sidebar list → input → Enter or blur
+  // to save, Escape to cancel. Calls saveTemplateAction with the
+  // existing row's other fields untouched. No-ops on empty / unchanged.
+  const [inlineEditId, setInlineEditId] = useState<number | null>(null)
+  function saveInlineLabel(t: Template, nextRaw: string) {
+    setInlineEditId(null)
+    const next = nextRaw.trim()
+    if (!next || next === (t.label || t.key)) return
+    start(async () => {
+      const r = await saveTemplateAction({
+        key: t.key, label: next, category: t.category,
+        subject: t.subject, initialMsg: t.initialMsg,
+        follow1Msg: t.follow1Msg, lastFollowMsg: t.lastFollowMsg,
+      })
+      if ('error' in r && r.error) { toast.error(r.error); return }
+      toast.success('Label updated')
+      router.refresh()
+    })
+  }
 
   // ── Editor lifecycle hooks ─────────────────────────────────────
   // Dirty when the in-memory draft diverges from the currently-loaded
@@ -213,11 +235,36 @@ export function TemplateEditor({
           ) : null}
           {visibleTemplates.map((t) => {
             const s = stats[t.id]
+            const isInlineEditing = inlineEditId === t.id
             return (
-              <button key={t.id} onClick={() => load(t)}
+              <div key={t.id}
                 className={`flex w-full flex-col gap-1 rounded-md border px-3 py-2 text-left text-sm hover:bg-accent ${pickedId === t.id ? 'border-primary' : ''}`}>
                 <div className="flex w-full items-center justify-between gap-2">
-                  <span className="truncate font-medium">{t.label || t.key}</span>
+                  {isInlineEditing ? (
+                    <input
+                      autoFocus
+                      defaultValue={t.label || t.key}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') saveInlineLabel(t, (e.target as HTMLInputElement).value)
+                        else if (e.key === 'Escape') setInlineEditId(null)
+                      }}
+                      onBlur={(e) => saveInlineLabel(t, e.target.value)}
+                      className="h-6 flex-1 rounded border bg-background px-1.5 text-sm font-medium outline-none focus:ring-1 focus:ring-ring"
+                      aria-label={`Edit label for ${t.label || t.key}`}
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => load(t)}
+                      // Double-click to inline-edit the label — fast path
+                      // without leaving the page.
+                      onDoubleClick={(e) => { e.stopPropagation(); setInlineEditId(t.id) }}
+                      className="min-w-0 flex-1 truncate text-left font-medium"
+                      title="Click to load · double-click to rename"
+                    >
+                      {t.label || t.key}
+                    </button>
+                  )}
                   {t.active ? <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" /> : null}
                 </div>
                 {/* 30-day stats. Suppressed when no sends yet — empty pill
@@ -233,7 +280,7 @@ export function TemplateEditor({
                 ) : t.category ? (
                   <span className="text-[10px] text-muted-foreground">{t.category}</span>
                 ) : null}
-              </button>
+              </div>
             )
           })}
         </div>
@@ -399,6 +446,12 @@ export function TemplateEditor({
               </div>
             </div>
           </div>
+        ) : null}
+
+        {/* Deliverability lint — surfaces SpamAssassin-style risks on
+            the current subject + body. Pure-local heuristic, no API. */}
+        {(draft.subject || draft.initialMsg) ? (
+          <SpamCheckChip subject={draft.subject ?? ''} body={draft.initialMsg ?? ''} />
         ) : null}
 
         {/* AI panel — tone + goal + Improve/Draft buttons */}

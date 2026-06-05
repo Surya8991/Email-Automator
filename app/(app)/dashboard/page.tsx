@@ -6,9 +6,11 @@ import { events, emailLog, contacts } from '@/server/db/schema'
 import { and, asc, desc, eq, inArray, or } from 'drizzle-orm'
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Users, Send, MailCheck, MousePointerClick, Reply, AlertTriangle, Sparkles, Upload, FileText, Activity, Clock, LayoutDashboard } from 'lucide-react'
+import { Users, Send, MailCheck, MousePointerClick, Reply, AlertTriangle, Sparkles, Upload, FileText, Activity, Clock, LayoutDashboard, Check } from 'lucide-react'
 import { PageHeader } from '@/components/ui/page-header'
 import { SectionHelp } from '@/components/section-help'
+import { getSmtpFor } from '@/server/services/credentials'
+import { getActive } from '@/server/services/templates'
 import { formatDate, APP_TZ } from '@/lib/utils'
 import { getSetting } from '@/server/services/settings'
 
@@ -38,7 +40,7 @@ export default async function DashboardPage() {
   // Pick up the user's TZ for the Recent Activity timestamps. Server-rendered
   // here, so we can't use the client useFormatDate() hook — pass it as the
   // 2nd arg to formatDate instead.
-  const [k, recent, nextScheduledRow, tz] = await Promise.all([
+  const [k, recent, nextScheduledRow, tz, smtp, activeTpl] = await Promise.all([
     kpis(u.id),
     db.select().from(events).where(eq(events.userId, u.id)).orderBy(desc(events.ts)).limit(10),
     // Earliest still-pending row in the queue. Drives the "Next send"
@@ -48,7 +50,21 @@ export default async function DashboardPage() {
       .where(and(eq(emailLog.userId, u.id), or(eq(emailLog.status, 'Scheduled'), eq(emailLog.status, 'Retrying'))!))
       .orderBy(asc(emailLog.scheduledAt)).limit(1),
     getSetting(u.id, 'TIMEZONE').then((v) => v || APP_TZ).catch(() => APP_TZ),
+    // Activation-checklist signals. Both are best-effort so the
+    // dashboard doesn't 500 if either query fails.
+    getSmtpFor(u.id).catch(() => ({ source: 'none' as const, user: '', host: '', port: 0, pass: '' })),
+    getActive(u.id).catch(() => null),
   ])
+
+  // ── Activation checklist ───────────────────────────────────────
+  // Fade out once all three steps are done; show otherwise.
+  const checklist = [
+    { key: 'smtp',     label: 'Configure SMTP',         href: '/settings',   done: smtp.source !== 'none' },
+    { key: 'template', label: 'Activate a template',    href: '/templates',  done: Boolean(activeTpl) },
+    { key: 'send',     label: 'Send your first email',  href: '/drafts',     done: k.sent > 0 },
+  ] as const
+  const checklistComplete = checklist.every((c) => c.done)
+  const checklistDone = checklist.filter((c) => c.done).length
   // Look up contact emails for the recent-activity rows so they show
   // "Sent · to alice@x.co" not just "Sent · subject".
   const contactIds = Array.from(new Set(recent.map((e) => e.contactId).filter((id): id is number => typeof id === 'number')))
@@ -82,17 +98,56 @@ export default async function DashboardPage() {
         }
       />
 
-      {empty ? (
+      {/* Activation checklist — surfaces until all three steps are done,
+          then fades. Replaces the old "empty if no contacts" empty
+          state with a richer progressive disclosure. */}
+      {!checklistComplete ? (
+        <Card className="ea-floating">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-primary" /> Get started — {checklistDone} of {checklist.length} done
+            </CardTitle>
+            <CardDescription>
+              Three steps to your first send. The card disappears once all are complete.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <ol className="space-y-2">
+              {checklist.map((c, i) => (
+                <li key={c.key} className={`flex items-center gap-3 rounded-md border bg-card/50 px-3 py-2 ${c.done ? 'opacity-60' : ''}`}>
+                  <span className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${c.done ? 'bg-emerald-500 text-white' : 'bg-muted text-foreground'}`}>
+                    {c.done ? <Check className="h-3.5 w-3.5" /> : i + 1}
+                  </span>
+                  <span className={`flex-1 text-sm ${c.done ? 'line-through' : 'font-medium'}`}>{c.label}</span>
+                  {!c.done ? (
+                    <Button size="sm" variant="outline" asChild>
+                      <Link href={c.href}>Open</Link>
+                    </Button>
+                  ) : null}
+                </li>
+              ))}
+            </ol>
+            <div className="mt-3 flex flex-wrap gap-2 border-t pt-3">
+              <Button variant="ghost" asChild><Link href="/guide">Read the guide →</Link></Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {/* The old totalContacts==0 empty state stays as a separate hint
+          when the checklist is done but contacts is still empty (rare
+          but possible if the user sent themselves a test, then deletes
+          contacts). */}
+      {empty && checklistComplete ? (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Sparkles className="h-5 w-5 text-primary" /> Get started in 3 steps</CardTitle>
-            <CardDescription>You don't have any contacts yet — let's fix that.</CardDescription>
+            <CardTitle className="flex items-center gap-2"><Sparkles className="h-5 w-5 text-primary" /> Add contacts to keep going</CardTitle>
+            <CardDescription>You&apos;ve done the basics — now bring in your audience.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">
             <Button asChild><Link href="/contacts"><Upload className="mr-1.5 h-4 w-4" /> Import contacts</Link></Button>
-            <Button variant="outline" asChild><Link href="/templates"><FileText className="mr-1.5 h-4 w-4" /> Pick a template</Link></Button>
+            <Button variant="outline" asChild><Link href="/templates"><FileText className="mr-1.5 h-4 w-4" /> Tweak template</Link></Button>
             <Button variant="outline" asChild><Link href="/drafts"><Send className="mr-1.5 h-4 w-4" /> Create drafts</Link></Button>
-            <Button variant="ghost" asChild><Link href="/guide">Read the guide →</Link></Button>
           </CardContent>
         </Card>
       ) : null}

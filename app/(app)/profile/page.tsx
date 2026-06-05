@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { ProfileForm } from './profile-form'
 import { GmailCard } from './gmail-card'
 import { AccentPicker } from './accent-picker'
+import { OnboardingReplayButton } from './onboarding-replay-button'
 import { ExportDataCard } from './export-data-card'
 import { NotificationsCard } from './notifications-card'
 import { Mail, BriefcaseBusiness, CalendarDays, BadgeCheck, ShieldCheck } from 'lucide-react'
@@ -188,6 +189,16 @@ export default async function ProfilePage() {
       ) : null}
 
       <AccentPicker current={settings.ACCENT ?? ''} />
+
+      {/* Onboarding replay — small action card. Pair next to AccentPicker
+          so personalization knobs live together. */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-4 ea-fade-in">
+        <div>
+          <div className="text-sm font-semibold">First-time tour</div>
+          <div className="text-xs text-muted-foreground">Re-show the 4-slide onboarding for a refresher or to demo it to a teammate.</div>
+        </div>
+        <OnboardingReplayButton />
+      </div>
 
       <NotificationsCard
         currentUrl={settings.NOTIFY_WEBHOOK_URL ?? ''}
