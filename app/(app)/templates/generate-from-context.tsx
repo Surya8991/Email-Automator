@@ -59,7 +59,7 @@ export function GenerateFromContext({
         goal: goal.trim() || undefined,
       })
       if ('error' in r && r.error) { toast.error(r.error); return }
-      if ('draft' in r) setDraft(r.draft)
+      if ('draft' in r && r.draft) setDraft(r.draft)
     })
   }
 

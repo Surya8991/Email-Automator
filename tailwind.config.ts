@@ -21,6 +21,20 @@ const config: Config = {
         card: { DEFAULT: 'hsl(var(--card))', foreground: 'hsl(var(--card-foreground))' },
       },
       borderRadius: { lg: 'var(--radius)', md: 'calc(var(--radius) - 2px)', sm: 'calc(var(--radius) - 4px)' },
+      // CSS-var-backed font stacks so next/font's auto-generated value
+      // wins, with sensible system-font fallbacks for the first paint.
+      fontFamily: {
+        sans: [
+          'var(--font-sans)',
+          'ui-sans-serif', 'system-ui', '-apple-system', 'BlinkMacSystemFont',
+          'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'sans-serif',
+        ],
+        mono: [
+          'var(--font-mono)',
+          'ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco',
+          'Consolas', 'Liberation Mono', 'Courier New', 'monospace',
+        ],
+      },
     },
   },
   plugins: [require('tailwindcss-animate'), require('@tailwindcss/typography')],

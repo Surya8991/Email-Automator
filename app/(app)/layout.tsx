@@ -6,6 +6,7 @@ import { CommandPalette } from '@/components/command-palette'
 import { ShortcutsHelp } from '@/components/shortcuts-help'
 import { AccentProvider } from '@/components/accent-provider'
 import { InstallPrompt } from '@/components/install-prompt'
+import { AppShellOrbs } from '@/components/app-shell-orbs'
 import { TimezoneProvider } from '@/components/timezone-provider'
 import { ensureSeededTemplatesFor } from '@/server/services/onboarding'
 import { getSetting } from '@/server/services/settings'
@@ -55,7 +56,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const impersonating = Boolean(verifyCookieValue(jar.get('ea_impersonator')?.value))
   return (
     <TimezoneProvider tz={userTz}>
-      <div className="flex h-dvh flex-col">
+      <AppShellOrbs />
+      <div className="relative flex h-dvh flex-col">
         {devSigninRisky && (
           <div className="border-b border-red-600 bg-red-600 px-4 py-1.5 text-center text-xs font-medium text-white">
             ⚠ ALLOW_DEV_SIGNIN=true on a deployed instance — anyone on DEV_BYPASS_EMAILS can sign in without auth. Unset before sharing.

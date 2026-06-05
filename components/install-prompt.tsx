@@ -15,20 +15,18 @@ interface DeferredPrompt extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
 }
 
-const SUPPRESS_KEY = 'ea-pwa-install-dismissed-until'
-const SUPPRESS_DAYS = 30
+// Session-only dismissal — show at most once per browser tab session.
+// We deliberately use sessionStorage (per-tab, cleared on close) rather
+// than localStorage so a returning user who restarts their browser sees
+// the prompt again. The prior 30-day localStorage gate was too sticky.
+const SUPPRESS_KEY = 'ea-pwa-install-dismissed'
 
 function isSuppressed(): boolean {
-  try {
-    const v = localStorage.getItem(SUPPRESS_KEY)
-    if (!v) return false
-    const until = Number(v)
-    return Number.isFinite(until) && until > Date.now()
-  } catch { return true }
+  try { return sessionStorage.getItem(SUPPRESS_KEY) === '1' } catch { return true }
 }
 
 function suppress() {
-  try { localStorage.setItem(SUPPRESS_KEY, String(Date.now() + SUPPRESS_DAYS * 24 * 60 * 60 * 1000)) } catch { /* localStorage may be disabled */ }
+  try { sessionStorage.setItem(SUPPRESS_KEY, '1') } catch { /* sessionStorage may be disabled */ }
 }
 
 export function InstallPrompt() {

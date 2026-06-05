@@ -1,7 +1,25 @@
 import type { Metadata } from 'next'
+import { Inter, JetBrains_Mono } from 'next/font/google'
 import { ThemeProvider } from '@/components/theme-provider'
 import { Toaster } from 'sonner'
 import './globals.css'
+
+// Inter via next/font — self-hosted, subset, no CLS. CSS variable so
+// tailwind can read it and globals.css can apply Inter's tabular and
+// stylistic feature-settings (cv11 = single-storey "a", ss01/ss03 =
+// clean glyph alternates) site-wide.
+const inter = Inter({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-sans',
+})
+// JetBrains Mono for kbd / code blocks — better-than-default for
+// monospace alternates without bringing in another big family.
+const mono = JetBrains_Mono({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-mono',
+})
 
 export const metadata: Metadata = {
   title: 'Email Automator',
@@ -23,13 +41,13 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning className={`${inter.variable} ${mono.variable}`}>
       {/* suppressHydrationWarning on body too — Kaspersky / Grammarly /
           password managers inject attributes (`__processed_<uuid>__`, etc.)
           before React hydrates, which would otherwise log a mismatch every
           page load. The page renders fine either way; this just silences the
           noise. */}
-      <body className="min-h-dvh" suppressHydrationWarning>
+      <body className="min-h-dvh font-sans" suppressHydrationWarning>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           {children}
           {/* Global toast. richColors gives green/red variants automatically. */}

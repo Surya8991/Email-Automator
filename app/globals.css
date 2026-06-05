@@ -47,7 +47,33 @@
     --ring: 240 4.9% 83.9%;
   }
   * { @apply border-border; }
-  body { @apply bg-background text-foreground antialiased; }
+  body {
+    @apply bg-background text-foreground antialiased;
+    /* Inter's stylistic alternates for cleaner typography across the
+       app. cv11 = single-storey "a" (legibility); ss01 = enable typo
+       polish; ss03 = curly to straight quotes; "tnum" = tabular nums
+       for the stat pills + tables. */
+    font-feature-settings: "cv11", "ss01", "ss03", "tnum" 0;
+    text-rendering: optimizeLegibility;
+  }
+  /* Typography scale tightened — Inter at small sizes wants tighter
+     tracking than the system default. */
+  h1 { letter-spacing: -0.012em; }
+  h2 { letter-spacing: -0.008em; }
+  h3, h4, h5, h6 { letter-spacing: -0.004em; }
+  /* Tabular numerals where they matter — stat pills, counters,
+     timestamps, money. Inline `tabular-nums` class still works for
+     edge cases. */
+  .tabular-nums { font-feature-settings: "tnum" 1; }
+  /* Code + kbd use the monospace stack. */
+  code, kbd, pre, samp { font-family: var(--font-mono, ui-monospace, monospace); }
+  /* Refined focus ring — 2px primary at 2px offset. Replaces the
+     default `ring` for keyboard users without affecting click. */
+  :where(button, a, [role="button"], input, select, textarea, [tabindex]):focus-visible {
+    @apply outline-none;
+    box-shadow: 0 0 0 2px hsl(var(--background)), 0 0 0 4px hsl(var(--primary) / 0.85);
+    border-radius: calc(var(--radius) - 2px);
+  }
 
   /* Smoother default focus rings — accessible without the harsh blue. */
   :focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; }
@@ -172,4 +198,123 @@
   ) hsl(var(--card));
   background-size: 200% 100%;
   animation: ea-shimmer 6s linear infinite;
+}
+
+/* ── Visual depth tiers (2026-06-05) ──────────────────────────────────
+   Three card elevations so the eye knows what to look at first. Apply
+   alongside the existing Card class.
+
+     - .ea-surface  — flat, no shadow. Sub-cards inside a Section.
+     - .ea-raised   — default Card behavior already; alias for clarity.
+     - .ea-floating — strong shadow. Reserve for the page's hero card
+                      / single most important surface.
+
+   `ring` on dark mode adds a hairline highlight that keeps the card
+   from disappearing into the body color. */
+.ea-surface {
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  box-shadow: none;
+}
+.ea-raised {
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  box-shadow: 0 1px 0 0 hsl(var(--foreground) / 0.04);
+}
+.ea-floating {
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  box-shadow:
+    0 1px 0 0 hsl(var(--foreground) / 0.04),
+    0 12px 32px -16px hsl(var(--foreground) / 0.18),
+    0 0 0 1px hsl(var(--foreground) / 0.02);
+}
+.dark .ea-floating {
+  box-shadow:
+    0 1px 0 0 hsl(0 0% 100% / 0.04),
+    0 24px 48px -24px hsl(0 0% 0% / 0.6);
+}
+
+/* App-shell background — faint orbs + subtle noise so the body isn't
+   a flat slab. Mounted via <AppShellOrbs /> in the (app) layout. */
+.ea-shell-orbs {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+}
+.ea-shell-orbs::before,
+.ea-shell-orbs::after {
+  content: '';
+  position: absolute;
+  width: 38rem;
+  height: 38rem;
+  border-radius: 50%;
+  filter: blur(96px);
+  opacity: 0.35;
+}
+.ea-shell-orbs::before {
+  background: radial-gradient(circle, hsl(var(--primary) / 0.5), transparent 60%);
+  top: -10rem;
+  left: -10rem;
+}
+.ea-shell-orbs::after {
+  background: radial-gradient(circle, hsl(262 83% 58% / 0.4), transparent 60%);
+  bottom: -12rem;
+  right: -8rem;
+}
+.dark .ea-shell-orbs::before,
+.dark .ea-shell-orbs::after { opacity: 0.22; }
+
+/* Skeleton primitive — used in <Skeleton /> for async regions. Wider
+   than shadcn's default. Honors prefers-reduced-motion via the global
+   block above (animation falls back to a static pulse). */
+@keyframes ea-skeleton {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.ea-skeleton {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--muted)) 0%,
+    hsl(var(--muted) / 0.6) 50%,
+    hsl(var(--muted)) 100%
+  );
+  background-size: 200% 100%;
+  animation: ea-skeleton 1.5s ease-in-out infinite;
+  border-radius: calc(var(--radius) - 4px);
+}
+
+/* Segmented control — three-state pill row used in place of shadcn
+   Tabs for short option groups (≤4). Compose with the markup in
+   components/ui/segmented.tsx. */
+.ea-segmented {
+  display: inline-flex;
+  padding: 3px;
+  background: hsl(var(--muted));
+  border: 1px solid hsl(var(--border));
+  border-radius: calc(var(--radius));
+  position: relative;
+}
+.ea-segmented > button {
+  position: relative;
+  z-index: 1;
+  padding: 0.375rem 0.875rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+  border-radius: calc(var(--radius) - 3px);
+  transition: color 160ms ease;
+}
+.ea-segmented > button[aria-pressed="true"],
+.ea-segmented > button[data-active="true"] {
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+  box-shadow: 0 1px 0 0 hsl(var(--foreground) / 0.06), 0 2px 6px -2px hsl(var(--foreground) / 0.08);
+}
+.dark .ea-segmented > button[aria-pressed="true"],
+.dark .ea-segmented > button[data-active="true"] {
+  background: hsl(var(--background));
+  box-shadow: 0 1px 0 0 hsl(0 0% 100% / 0.04);
 }
