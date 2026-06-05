@@ -3,6 +3,14 @@
 Everything Email Automator currently does, grouped by section.
 Last refreshed: 2026-06-05.
 
+## 🆕 What's new (2026-06-06, fifth batch — Job tracker polish)
+
+- **Job-board preset picker** — new `Add from preset` button on `/jobs` with 10 popular sources: LinkedIn, Wellfound (AngelList), Naukri, Indeed, Remote OK, We Work Remotely, Y Combinator, Greenhouse company URL, Lever company URL, and generic company careers pages. Fill in role + (optional) location → we build the URL + label + suggested keywords. The SSRF-defended fetcher still validates whatever URL we end up with.
+- **Lead → Draft action** — one click on any job lead creates a placeholder contact (recruiter name, company, role, location, source URL) + a pre-filled draft outreach email with `{{name}}` and `{{company}}` variables. Lead status flips to `applied` automatically.
+- **Search filter within leads** — client-side substring match against title / company / location.
+- **CSV export** — `GET /api/jobs/export?status=new|saved|ignored|applied` returns a download for the user's leads in that bucket. CSV-safe escaping (commas / quotes / newlines).
+- **8 new tests** in `test/unit/job-board-presets.test.ts` covering the preset catalog shape (unique ids, non-empty templates), `buildPresetUrl` substitution (LinkedIn encoded, Naukri hyphenated, Greenhouse pass-through), and the label / keywords assembly.
+
 ## 🆕 What's new (2026-06-06, fourth batch — colors + Job tracker)
 
 **Sectional color system (every page now has identity)**
