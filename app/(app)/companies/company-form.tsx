@@ -2,11 +2,12 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Save, Trash2 } from 'lucide-react'
+import { Save, Sparkles, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { saveCompanyAction, deleteCompanyAction } from '@/server/actions/companies'
+import { aiEnrichCompanyAction } from '@/server/actions/ai'
 
 interface Initial {
   id?: number
@@ -38,6 +39,29 @@ export function CompanyForm({ initial }: { initial?: Initial }) {
     })
   }
 
+  function aiEnrich() {
+    if (!state.name.trim()) { toast.error('Type the company name first.'); return }
+    start(async () => {
+      const r = await aiEnrichCompanyAction({ name: state.name })
+      if ('error' in r) { toast.error(r.error ?? 'AI failed'); return }
+      // Only fill in empty fields — never overwrite the user's edits.
+      // Banner-style toast prompts a manual verify since the model can
+      // hallucinate.
+      const filled: string[] = []
+      const next = { ...state }
+      for (const k of ['industry', 'hq', 'size', 'funding', 'glassdoor', 'techStack', 'salaryRange', 'hiringFreq', 'notes'] as const) {
+        const v = r.data?.[k]
+        if (typeof v === 'string' && v.trim() && !next[k].trim()) {
+          next[k] = v
+          filled.push(k)
+        }
+      }
+      setState(next)
+      if (filled.length === 0) toast('AI had nothing new — fields look complete already.')
+      else toast.success(`AI filled ${filled.length} field${filled.length === 1 ? '' : 's'} — verify before saving.`)
+    })
+  }
+
   function destroy() {
     if (!initial?.id) return
     if (!confirm(`Delete ${state.name}? This removes the research record, not the contact rows.`)) return
@@ -50,7 +74,17 @@ export function CompanyForm({ initial }: { initial?: Initial }) {
 
   return (
     <form onSubmit={(e) => { e.preventDefault(); submit() }} className="grid gap-4 md:grid-cols-2">
-      <Field id="name" label="Company name *" value={state.name} onChange={set('name')} placeholder="Acme Corp" required />
+      <div className="grid gap-1.5">
+        <Label htmlFor="name">Company name *</Label>
+        <div className="flex gap-2">
+          <Input id="name" value={state.name} onChange={(e) => set('name')(e.target.value)} placeholder="Acme Corp" required />
+          <Button type="button" variant="outline" disabled={pending || !state.name.trim()}
+            onClick={aiEnrich}
+            title="Use AI (Groq) to fill in industry, HQ, size, tech stack, etc.">
+            <Sparkles className="mr-1 h-3.5 w-3.5" /> AI fill
+          </Button>
+        </div>
+      </div>
       <Field id="industry" label="Industry" value={state.industry} onChange={set('industry')} placeholder="SaaS · Fintech · Health" />
       <Field id="hq" label="HQ" value={state.hq} onChange={set('hq')} placeholder="Bengaluru, India" />
       <Field id="size" label="Size" value={state.size} onChange={set('size')} placeholder="50-200 / 1000+ / etc." />

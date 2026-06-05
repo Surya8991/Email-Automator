@@ -66,6 +66,87 @@ export async function draftEmail(userId: string, opts: DraftOpts): Promise<strin
   return content
 }
 
+/**
+ * AI-enrich a company name with best-effort guesses for the research
+ * fields (industry, HQ, size, etc.). Output is structured JSON the
+ * Companies form can spread directly. Values are model-derived, so the
+ * UI should mark this as "AI guess — verify before saving".
+ */
+export interface CompanyEnrichment {
+  industry?: string; hq?: string; size?: string; funding?: string
+  glassdoor?: string; techStack?: string; salaryRange?: string
+  hiringFreq?: string; notes?: string; sourceUrl?: string
+}
+
+export async function enrichCompany(userId: string, name: string): Promise<CompanyEnrichment> {
+  const data = await groqJson(userId, {
+    temperature: 0.4,
+    max_tokens: 512,
+    response_format: { type: 'json_object' },
+    messages: [
+      {
+        role: 'system',
+        content:
+          'You are a research assistant. Return ONLY JSON with these optional keys: ' +
+          'industry, hq, size, funding, glassdoor, techStack, salaryRange, hiringFreq, notes. ' +
+          'No prose, no markdown. Leave keys out when you genuinely do not know — DO NOT fabricate. ' +
+          'Values must be short (under 120 chars each). techStack is comma-separated. ' +
+          'salaryRange is a single range like "₹40-60L" or "$120-180k".',
+      },
+      { role: 'user', content: `Research the company: ${name}. Respond in JSON.` },
+    ],
+  }) as { choices?: Array<{ message?: { content?: string } }> }
+  const txt = data.choices?.[0]?.message?.content ?? '{}'
+  try {
+    const parsed = JSON.parse(txt) as CompanyEnrichment
+    // Defensive clamp — model can return arrays / objects despite the
+    // instructions. Stringify anything non-string per field; clip length.
+    const out: CompanyEnrichment = {}
+    for (const k of ['industry', 'hq', 'size', 'funding', 'glassdoor', 'techStack', 'salaryRange', 'hiringFreq', 'notes'] as const) {
+      const v = parsed[k]
+      if (typeof v === 'string' && v.trim()) out[k] = v.trim().slice(0, 480)
+    }
+    return out
+  } catch {
+    return {}
+  }
+}
+
+/**
+ * AI personalization: short, recipient-aware opening line for an outreach
+ * email. Given a contact's name/role/company and a goal, returns a single
+ * sentence the user can paste into the template.
+ */
+export async function suggestOpener(
+  userId: string,
+  contact: { name?: string; role?: string; company?: string; notes?: string },
+  goal: string,
+): Promise<string> {
+  const data = await groqJson(userId, {
+    temperature: 0.7,
+    max_tokens: 120,
+    messages: [
+      {
+        role: 'system',
+        content:
+          'Write ONE short opening sentence (under 25 words) for a cold outreach email. ' +
+          'Avoid clichés ("I hope this finds you well"). Reference the recipient only with facts ' +
+          'I provide — do not invent. No greeting like "Hi [name]" — just the body opener. No quotes.',
+      },
+      {
+        role: 'user',
+        content:
+          `Contact: ${contact.name ?? '(unknown)'}` +
+          (contact.role ? `, ${contact.role}` : '') +
+          (contact.company ? ` at ${contact.company}` : '') +
+          (contact.notes ? `. Notes: ${contact.notes}` : '') +
+          `\nGoal: ${goal}`,
+      },
+    ],
+  }) as { choices?: Array<{ message?: { content?: string } }> }
+  return (data.choices?.[0]?.message?.content ?? '').trim().replace(/^["']|["']$/g, '')
+}
+
 /** Generate N short subject-line variants for a given topic. */
 export async function suggestSubjects(userId: string, topic: string, n = 5): Promise<string[]> {
   const data = await groqJson(userId, {

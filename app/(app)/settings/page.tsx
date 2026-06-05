@@ -28,15 +28,38 @@ function Status({ ok, label, detail }: { ok: boolean; label: string; detail?: st
 
 export default async function SettingsPage() {
   const u = await requireUser()
+  // Defensive wrapping — if any individual fetch fails (a missing prod
+  // migration, a decryption error from a rotated ENCRYPTION_KEY, a
+  // connection blip), the page still renders with sensible defaults
+  // instead of returning a generic Vercel 500. The actual error is
+  // logged via pino so it's visible in Vercel logs.
   const cur = await getMany(u.id, [
     'DAILY_SEND_LIMIT', 'TIMEZONE', 'DEFAULT_ROLE_NAME', 'USER_PORTFOLIO_LINK',
     'CACHED_SIGNATURE', 'UNSUBSCRIBE_TEXT', 'UNSUBSCRIBE_ENABLED', 'SENDS_PAUSED',
     'PER_RECIPIENT_THROTTLE_DAYS', 'PER_DOMAIN_DAILY_CAP', 'CUSTOM_FIELD_KEYS',
     'SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'EMAIL_FROM',
     'GROQ_API_KEY', 'GROQ_MODEL',
-  ])
+  ]).catch((e) => {
+    console.error('[settings] getMany failed:', e)
+    return {} as Record<string, string>
+  })
   const [smtp, ai, apiKeyRows, webhookRows] = await Promise.all([
-    getSmtpFor(u.id), getAiFor(u.id), listKeys(u.id), listWebhooks(u.id),
+    getSmtpFor(u.id).catch((e) => {
+      console.error('[settings] getSmtpFor failed:', e)
+      return { host: '', port: 587, user: '', pass: '', from: '', source: 'none' as const }
+    }),
+    getAiFor(u.id).catch((e) => {
+      console.error('[settings] getAiFor failed:', e)
+      return { apiKey: '', model: '', source: 'none' as const }
+    }),
+    listKeys(u.id).catch((e) => {
+      console.error('[settings] listKeys failed:', e)
+      return [] as Awaited<ReturnType<typeof listKeys>>
+    }),
+    listWebhooks(u.id).catch((e) => {
+      console.error('[settings] listWebhooks failed:', e)
+      return [] as Awaited<ReturnType<typeof listWebhooks>>
+    }),
   ])
 
   // SECURITY: never send the encrypted secret strings to the client. Use

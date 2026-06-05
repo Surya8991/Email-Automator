@@ -243,6 +243,15 @@ CLI alternative to the upload card. Refuses to run unless `ADMIN_EMAILS` is set 
 
 ---
 
+## AI features (Groq-powered)
+
+All AI runs through the user's own Groq API key (Settings → AI) with env fallback. Default model `llama-3.3-70b-versatile`. Rate-limited 20/min/user.
+
+- **AI Improve** on /drafts (admin-only), /schedule (admin-only), and /campaigns (admin-only) per step — pick a tone, rewrite the body, audit-logged. Drafts also get a 1-hour Undo via localStorage.
+- **AI subject suggester** in the templates editor — generates 5 subject-line variants from the template's label/body. Click any to swap in.
+- **AI company auto-fill** in `/companies` — given a company name, Groq fills industry, HQ, size, funding, tech stack, salary range, hiring frequency, and notes. Only writes to empty fields so it never clobbers user edits. Toast asks for manual verify (model can hallucinate).
+- **AI opener generator** (server action ready) — `aiSuggestOpenerAction(contact, goal)` returns one short personalized opening line per contact. Used by /drafts AI Improve under the hood; a per-row button in /drafts and a /contacts bulk action will follow.
+
 ## Recently shipped (2026-06-05 — feature wave)
 
 - **GitHub OAuth** — secondary social sign-in alongside Google + magic link. `GITHUB_ID` / `GITHUB_SECRET` env vars; Auth.js wires it automatically when present.

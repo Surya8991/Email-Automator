@@ -1,7 +1,7 @@
 'use server'
 import { z } from 'zod'
 import { requireUser } from '@/auth'
-import { draftEmail, suggestSubjects, type Tone } from '@/server/services/ai'
+import { draftEmail, enrichCompany, suggestOpener, suggestSubjects, type Tone } from '@/server/services/ai'
 import { rateLimit } from '@/lib/rate-limit'
 import { actionError } from '@/lib/action-error'
 
@@ -44,7 +44,43 @@ export async function aiSuggestSubjectsAction(input: z.infer<typeof SubjectSchem
   if (!rateLimit(`ai:${u.id}`, 20, 60_000)) return { error: 'Too many AI requests — please wait a minute.' }
   try {
     const subjects = await suggestSubjects(u.id, parsed.data.topic, parsed.data.count ?? 5)
-    return { ok: true, subjects }
+    return { ok: true as const, subjects }
+  } catch (e) {
+    return actionError(e, 'AI request failed')
+  }
+}
+
+const EnrichSchema = z.object({ name: z.string().min(1).max(200) })
+export async function aiEnrichCompanyAction(input: z.infer<typeof EnrichSchema>) {
+  const u = await requireUser()
+  const parsed = EnrichSchema.safeParse(input)
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Invalid input' }
+  if (!rateLimit(`ai:${u.id}`, 20, 60_000)) return { error: 'Too many AI requests — please wait a minute.' }
+  try {
+    const data = await enrichCompany(u.id, parsed.data.name)
+    return { ok: true as const, data }
+  } catch (e) {
+    return actionError(e, 'AI request failed')
+  }
+}
+
+const OpenerSchema = z.object({
+  contact: z.object({
+    name: z.string().max(200).optional(),
+    role: z.string().max(200).optional(),
+    company: z.string().max(200).optional(),
+    notes: z.string().max(500).optional(),
+  }),
+  goal: z.string().min(1).max(500),
+})
+export async function aiSuggestOpenerAction(input: z.infer<typeof OpenerSchema>) {
+  const u = await requireUser()
+  const parsed = OpenerSchema.safeParse(input)
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Invalid input' }
+  if (!rateLimit(`ai:${u.id}`, 20, 60_000)) return { error: 'Too many AI requests — please wait a minute.' }
+  try {
+    const opener = await suggestOpener(u.id, parsed.data.contact, parsed.data.goal)
+    return { ok: true as const, opener }
   } catch (e) {
     return actionError(e, 'AI request failed')
   }

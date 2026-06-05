@@ -44,18 +44,20 @@ export function signCookieValue(payload: string): string {
 
 // Return the payload if the signature checks out, else null. Timing-safe
 // comparison so an attacker can't measure how long verify takes to learn
-// individual bytes of the signature.
+// individual bytes of the signature. Never throws — a missing AUTH_SECRET
+// or malformed cookie is treated as "no signed value" rather than blowing
+// up the layout that calls this on every page render.
 export function verifyCookieValue(signed: string | undefined): string | null {
   if (!signed) return null
   const dot = signed.lastIndexOf('.')
   if (dot <= 0) return null
-  const payload = signed.slice(0, dot)
-  const provided = signed.slice(dot + 1)
-  const expected = createHmac('sha256', authSecret()).update(payload).digest('base64url')
-  const a = Buffer.from(provided)
-  const b = Buffer.from(expected)
-  if (a.length !== b.length) return null
   try {
+    const payload = signed.slice(0, dot)
+    const provided = signed.slice(dot + 1)
+    const expected = createHmac('sha256', authSecret()).update(payload).digest('base64url')
+    const a = Buffer.from(provided)
+    const b = Buffer.from(expected)
+    if (a.length !== b.length) return null
     return timingSafeEqual(a, b) ? payload : null
   } catch {
     return null
