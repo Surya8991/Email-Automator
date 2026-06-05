@@ -173,7 +173,7 @@ Last refreshed: 2026-06-05.
 
 ## Templates
 
-- **Split seed sets** — every new user gets a **public starter set of 5 generic templates** auto-seeded on first sign-in. Accounts whose email is in `ADMIN_EMAILS` additionally receive a **23-template admin overlay** with role-targeted copy (Growth / Performance / SEO / Digital × 5 styles + 3 universal). The split lives in `data/seed-templates.json` (public) and `data/seed-templates.admin.json` (admin overlay).
+- **Split seed sets (curated 2026-06-06)** — every new user gets a **public starter set of 5 generic templates** auto-seeded on first sign-in (`cold short`, `JD response`, `referral intro`, `thank you post-interview`, `60 day re-engage`). Accounts whose email is in `ADMIN_EMAILS` additionally receive a **10-template role-targeted admin overlay** covering Growth / Performance / SEO / Digital Marketing × {friendly, JD-response} + Growth/SEO referrals (total = 15). Existing users from earlier seed versions get retired keys pruned only if `version === 1` (unedited). The split lives in `data/seed-templates.json` (public) and `data/seed-templates.admin.json` (admin overlay).
 - **`{{var|fallback}}` syntax** in `personalize()` — `{{name|there}}` renders "there" when the CSV row's name is empty, so "Hi ," never happens.
 - **Sidebar search + category filter** for picking among your templates.
 - **Clickable variable palette** — recipient fields (`{{name}}`, `{{company}}`, `{{role_name}}`, `{{email}}`, `{{location}}`, `{{platform}}`) plus HTML snippets (salutation, paragraph, bullet list, sign-off, divider) plus any **user-declared custom fields** (Settings → Custom contact fields). Click → token lands at cursor.

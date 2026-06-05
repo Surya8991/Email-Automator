@@ -36,7 +36,7 @@ const SLIDES: Slide[] = [
     title: 'Pick a template',
     body: (
       <>
-        <p>20 starter templates live at <Link href="/templates" className="underline">/templates</Link>. Edit, clone, or write your own — variables like <code>{'{{name}}'}</code>, <code>{'{{company}}'}</code>, and <code>{'{{role_name|fallback}}'}</code> are substituted per recipient at send time.</p>
+        <p>15 curated starter templates live at <Link href="/templates" className="underline">/templates</Link> (5 universal + 10 role-targeted for admins). Edit, clone, or write your own. Variables like <code>{'{{name}}'}</code>, <code>{'{{company}}'}</code>, and <code>{'{{role_name|fallback}}'}</code> are substituted per recipient at send time.</p>
         <p>Click <strong>Activate</strong> on one to make it the default for the next round of drafts.</p>
       </>
     ),

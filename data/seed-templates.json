@@ -1,42 +1,42 @@
 {
-  "starter_formal_app": {
-    "category": "Starter",
-    "label": "Formal Application",
-    "subject": "Application — {{role_name|the open role}} at {{company}}",
-    "initialMsg": "<p>Hi {{name|there}},</p><p>I'd like to apply for the <b>{{role_name|open role}}</b> at <b>{{company}}</b>. My background looks like a strong fit, and I've attached my resume for your review.</p><p>Happy to share more context whenever it's useful.</p>",
-    "follow1Msg": "<p>Hi {{name|there}},</p><p>Following up on my note about the <b>{{role_name|open role}}</b> at <b>{{company}}</b>. Is there a good time this week or next for a short call?</p>",
-    "lastFollowMsg": "<p>Hi {{name|there}},</p><p>One last note — if the timing isn't right at <b>{{company}}</b>, no problem. Happy to circle back next quarter.</p>"
-  },
-  "starter_friendly_intro": {
-    "category": "Starter",
-    "label": "Friendly Intro",
-    "subject": "Quick intro — would love to connect",
-    "initialMsg": "<p>Hi {{name|there}},</p><p>I've been following <b>{{company}}</b> and wanted to introduce myself. I think there's overlap between what you're building and what I work on.</p><p>Open to a quick chat?</p>",
-    "follow1Msg": "<p>Hi {{name|there}},</p><p>Bumping this up. Any 15-min window that works for you in the next week or two?</p>",
-    "lastFollowMsg": "<p>Hi {{name|there}},</p><p>Last note from me — if now isn't the right time, no worries. I'll keep an eye on <b>{{company}}</b>.</p>"
+  "universal_short_cold": {
+    "category": "Universal",
+    "label": "Cold short, proof-first",
+    "subject": "Quick question about {{company}}",
+    "initialMsg": "<p>Hi {{name|there}},</p><p>{{one_line_proof|Recent work that maps to what {{company}} is building, happy to share specifics in 15 min.}}</p><p>Worth a short call this week or next?</p><p>Best,<br>{{my_name|}}</p>",
+    "follow1Msg": "<p>Hi {{name|there}},</p><p>Bumping last week's note. Tuesday 3 to 5 pm or Thursday morning work on my side, whichever's easier on yours.</p>",
+    "lastFollowMsg": "<p>Hi {{name|there}},</p><p>Last nudge from me. If the timing isn't right at {{company}}, no problem at all.</p>"
   },
   "starter_jobpost_reply": {
     "category": "Starter",
-    "label": "Job Posting Reply",
-    "subject": "{{role_name|Applicant}} — applying via {{platform|your posting}}",
-    "initialMsg": "<p>Hi {{name|there}},</p><p>I came across the <b>{{role_name|open role}}</b> posting on <b>{{platform|your careers page}}</b> and would like to apply. Resume attached, portfolio at {{portfolio_link|the link in my signature}}.</p><p>Open to a short conversation about the role whenever it's useful.</p>",
-    "follow1Msg": "<p>Hi {{name|there}},</p><p>Checking in on my application for <b>{{role_name|the open role}}</b>. Happy to share more detail on anything that would help.</p>",
-    "lastFollowMsg": "<p>Hi {{name|there}},</p><p>Final note on the <b>{{role_name|open role}}</b> — if the role's been filled or the timing's off, no problem.</p>"
+    "label": "JD response (any role)",
+    "subject": "{{role_name|Applicant}} via {{platform|your posting}}",
+    "initialMsg": "<p>Hi {{name|there}},</p><p>Applying for the <b>{{role_name|open role}}</b> at <b>{{company}}</b> from <b>{{platform|your careers page}}</b>. Resume attached, portfolio at {{portfolio_link|the link in my signature}}.</p><p>{{proof_bullet|One result worth flagging up front: see resume for context.}}</p><p>Happy to share a short Loom on prior work if that speeds the screen.</p>",
+    "follow1Msg": "<p>Hi {{name|there}},</p><p>Quick check on the <b>{{role_name|open role}}</b> application. Glad to send a tailored walk-through of any specific area on the JD if useful.</p>",
+    "lastFollowMsg": "<p>Hi {{name|there}},</p><p>Final note on the <b>{{role_name|open role}}</b>. If it's filled, no worries, happy to be considered for the next opening.</p>"
   },
   "starter_referral": {
     "category": "Starter",
-    "label": "Referral",
-    "subject": "Referred to you — quick hello",
-    "initialMsg": "<p>Hi {{name|there}},</p><p>I was pointed your way regarding opportunities at <b>{{company}}</b>. Resume attached for context.</p><p>Would a brief call this week or next work on your side?</p>",
-    "follow1Msg": "<p>Hi {{name|there}},</p><p>Following up on the referral note. Any time this week or next that works?</p>",
-    "lastFollowMsg": "<p>Hi {{name|there}},</p><p>Closing the loop on this — if nothing's open at <b>{{company}}</b> right now, no worries.</p>"
+    "label": "Referral intro",
+    "subject": "Referred your way: {{topic|quick hello}}",
+    "initialMsg": "<p>Hi {{name|there}},</p><p>{{referrer_name|A mutual contact}} suggested I reach out about <b>{{company}}</b>. Quick context attached.</p><p>{{proof_bullet|One specific thing worth talking about, I'll save the rest for the call.}}</p><p>Would a 20 min slot next Tuesday or Wednesday work on your side?</p>",
+    "follow1Msg": "<p>Hi {{name|there}},</p><p>Bumping the note from {{referrer_name|our mutual contact}}. Any window next week that works?</p>",
+    "lastFollowMsg": "<p>Hi {{name|there}},</p><p>Closing the loop. If nothing's open at <b>{{company}}</b> right now, no worries, I'll watch the space.</p>"
   },
-  "starter_thankyou": {
-    "category": "Starter",
-    "label": "Thank You (Post-Interview)",
+  "universal_thankyou": {
+    "category": "Universal",
+    "label": "Thank you, post-interview",
     "subject": "Thanks for your time today",
-    "initialMsg": "<p>Hi {{name|there}},</p><p>Thanks for the conversation today about <b>{{role_name|the role}}</b> at <b>{{company}}</b>. I enjoyed it and came away more excited about the work.</p><p>Happy to share anything else that would be useful — references, samples, additional context.</p>",
+    "initialMsg": "<p>Hi {{name|there}},</p><p>Thanks for the conversation about <b>{{role_name|the role}}</b> at <b>{{company}}</b>. Came away more excited about the work and the team.</p><p>{{followup_offer|Happy to share any extra context that would be useful for the next round, references, samples, or a short Loom walking through prior work.}}</p>",
     "follow1Msg": "",
     "lastFollowMsg": ""
+  },
+  "universal_reengage": {
+    "category": "Universal",
+    "label": "60 day re-engage",
+    "subject": "Following up from a couple months back",
+    "initialMsg": "<p>Hi {{name|there}},</p><p>We spoke (or I reached out) about <b>{{company}}</b> a couple of months back, wanted to circle back. Things have moved on my side since:</p><p>{{recent_wins|One or two recent wins worth flagging, swap with your latest.}}</p><p>If anything's changed on your end, happy to chat. If not, no worries, I'll keep an eye on <b>{{company}}</b>.</p>",
+    "follow1Msg": "<p>Hi {{name|there}},</p><p>Bumping this re-engage note in case it got buried.</p>",
+    "lastFollowMsg": "<p>Hi {{name|there}},</p><p>Closing the loop fully on this one. If <b>{{company}}</b> ever needs a hand, my inbox is open.</p>"
   }
 }
