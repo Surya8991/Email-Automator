@@ -3,6 +3,15 @@
 Everything Email Automator currently does, grouped by section.
 Last refreshed: 2026-06-05.
 
+## 🆕 What's new (2026-06-06, second batch)
+
+- **URGENT prod fix** — `/profile` (and other pages using the sign-out form) returned Vercel ERROR 259737202. Root cause: the Topbar inlined sign-out as an arrow function with embedded `'use server'`, which gave the action a new id on every server render in production. Extracted to `server/actions/auth.ts` with a module-level `'use server'` directive.
+- **Defensive `.catch` on every `/profile` server read** — single failed query degrades to an empty card instead of blanking the whole page. Same pattern we already use on `/settings`, `/companies`, `/contacts/[id]`, `/campaigns/[id]`, `server/sse`.
+- **Mobile bottom nav (J shipped)** — fixed bottom bar visible only on `< md` with Dashboard / Contacts / Drafts / Campaigns + a More cell that opens the burger drawer. Honors `safe-area-inset-bottom` for iOS notch / home indicator.
+- **Palette quick actions** — typing a verb (`new`, `import`, `send`, `schedule`, `export`, `diagnose`) surfaces 8 hard-wired "do something" entries above the data-search results. Massively reduces "where is X" friction.
+- **`FUTURE_FEATURES.html`** at the project root — a sorted-by-impact catalog of 40+ ideas worth building (Deliverability / AI / Productivity / Data / Mobile / Admin / Growth / Observability / Commerce). Cross-references `docs/todo.md`.
+- **`pluralize.test.ts`** — covers singular / zero-as-plural / large counts / negative edge cases.
+
 ## 🆕 What's new (2026-06-06)
 
 - **Typography upgrade** — Inter via `next/font/google` self-hosted, Inter feature-settings (cv11, ss01, ss03, tabular nums), JetBrains Mono for code, tightened heading letter-spacing, refined 2px+2px focus ring.

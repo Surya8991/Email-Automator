@@ -2,6 +2,13 @@
 
 > Captured 2026-06-01, refreshed 2026-06-06.
 
+## 🟧 Deferred — see [FUTURE_FEATURES.html](../FUTURE_FEATURES.html)
+
+The full catalog of next-up features (sorted by impact × effort across
+9 categories) lives in `FUTURE_FEATURES.html` at the project root.
+The summary below is the short list called out in the design-pass
+debrief.
+
 ## 🟧 Deferred from the 2026-06-06 design pass (next session)
 
 These were called out in the plan but didn't ship in the design overhaul

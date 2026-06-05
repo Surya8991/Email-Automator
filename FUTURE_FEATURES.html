@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Email Automator — future features</title>
+  <style>
+    :root { --bg:#0b0f17; --fg:#e6edf3; --muted:#9aa4b2; --line:#1e2632; --card:#111827; --accent:#6366f1; --warn:#f59e0b; --ok:#10b981; }
+    @media (prefers-color-scheme: light) {
+      :root { --bg:#fafaf9; --fg:#111827; --muted:#6b7280; --line:#e5e7eb; --card:#ffffff; }
+    }
+    * { box-sizing: border-box }
+    body { margin: 0; font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--fg) }
+    .wrap { max-width: 920px; margin: 0 auto; padding: 32px 20px 80px }
+    h1 { margin: 0 0 8px; font-size: 30px; letter-spacing: -0.01em }
+    h2 { margin: 28px 0 12px; font-size: 19px; letter-spacing: -0.005em; border-top: 1px solid var(--line); padding-top: 20px }
+    h3 { margin: 18px 0 4px; font-size: 15px }
+    .muted { color: var(--muted) }
+    .grid { display: grid; gap: 14px; margin-top: 14px }
+    @media (min-width: 720px) { .grid.cols-2 { grid-template-columns: 1fr 1fr } }
+    .item { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px }
+    .tag { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; padding: 2px 8px; border-radius: 999px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; margin-right: 6px }
+    .tag.high  { background: #ef444420; color: #ef4444 }
+    .tag.med   { background: #f59e0b20; color: #b45309 }
+    .tag.low   { background: #6366f120; color: #6366f1 }
+    .tag.size-s { background: #10b98120; color: #047857 }
+    .tag.size-m { background: #f59e0b20; color: #b45309 }
+    .tag.size-l { background: #ef444420; color: #ef4444 }
+    @media (prefers-color-scheme: dark) {
+      .tag.med    { color: #f59e0b }
+      .tag.size-m { color: #f59e0b }
+      .tag.size-s { color: #34d399 }
+    }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--line); padding: 1px 6px; border-radius: 4px; font-size: 0.92em }
+    p { margin: 6px 0 }
+    .toc { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 14px 20px }
+    .toc ol { margin: 0; padding-left: 22px }
+    header p { color: var(--muted) }
+  </style>
+</head>
+<body><div class="wrap">
+
+<header>
+  <h1>📋 Future features — Email Automator</h1>
+  <p>Capture of ideas worth building, sorted by impact and effort. Each item names the area, the user value, and a rough effort estimate.</p>
+  <p><strong>Legend:</strong> <span class="tag high">High impact</span> <span class="tag med">Medium</span> <span class="tag low">Low</span> · <span class="tag size-s">S (≤1 day)</span> <span class="tag size-m">M (1-3 days)</span> <span class="tag size-l">L (1+ week)</span></p>
+</header>
+
+<div class="toc">
+  <strong>Sections</strong>
+  <ol>
+    <li><a href="#deliverability">Deliverability</a></li>
+    <li><a href="#ai">AI &amp; intelligence</a></li>
+    <li><a href="#productivity">Productivity &amp; workflows</a></li>
+    <li><a href="#data">Data, exports &amp; integrations</a></li>
+    <li><a href="#mobile">Mobile &amp; offline</a></li>
+    <li><a href="#admin">Admin &amp; operations</a></li>
+    <li><a href="#growth">Growth &amp; collaboration</a></li>
+    <li><a href="#observability">Observability &amp; quality</a></li>
+    <li><a href="#commerce">Commerce / billing (if multi-tenant SaaS)</a></li>
+  </ol>
+</div>
+
+<!-- ── 1. Deliverability ────────────────────────────────────────── -->
+<h2 id="deliverability">1. Deliverability</h2>
+<div class="grid cols-2">
+
+  <div class="item">
+    <span class="tag high">High</span><span class="tag size-m">M</span>
+    <h3>SMTP warmup mode</h3>
+    <p>Ramp daily send count gradually (e.g. 10 → 50 → 100 → 200) for new credentials so a fresh sender doesn't trigger Gmail's anti-spam.</p>
+    <p class="muted">Add a <code>warmup_started_at</code> per-identity column; scheduler-tick honors the cap.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag high">High</span><span class="tag size-m">M</span>
+    <h3>Recipient-TZ send window</h3>
+    <p>Only fire sends between 09:00–18:00 in the recipient's local time. Push outside-window sends to the next valid hour. Reads <code>timezone</code> from contact custom field with a per-platform default.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag high">High</span><span class="tag size-m">M</span>
+    <h3>Subject A/B winner picker</h3>
+    <p>After N sends across a template's <code>subject</code>/<code>subjectB</code>, auto-promote the higher-reply-rate variant. Show "promoted by X% reply rate at sample=Y" in analytics.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag med">Med</span><span class="tag size-s">S</span>
+    <h3>Pre-flight spam-trigger lint</h3>
+    <p>Before send, scan body for words / patterns that score on SpamAssassin or Apple Mail filters (ALL CAPS, "FREE!!", excessive exclamation, suspicious links). Surface as a warning chip in the editor.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag med">Med</span><span class="tag size-s">S</span>
+    <h3>One-click DKIM helper</h3>
+    <p>If <code>diagnostic</code> finds no DKIM record, show the recommended TXT entry and a copy button. Reduces manual lookup of provider docs.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag med">Med</span><span class="tag size-m">M</span>
+    <h3>Per-recipient send-cap memory</h3>
+    <p>Hard-block re-sending to the same address within <em>X</em> days even if the user manually retries. Surfaces the existing duplicate-send warning as an actual <em>block</em> with override.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag low">Low</span><span class="tag size-l">L</span>
+    <h3>Per-IP rotation</h3>
+    <p>Multiple SMTP credentials per user → scheduler-tick round-robins to spread load and reputation risk.</p>
+  </div>
+</div>
+
+<!-- ── 2. AI ──────────────────────────────────────────────────────── -->
+<h2 id="ai">2. AI &amp; intelligence</h2>
+<div class="grid cols-2">
+
+  <div class="item">
+    <span class="tag high">High</span><span class="tag size-m">M</span>
+    <h3>AI Improve diff view</h3>
+    <p>Old / new side-by-side with Keep / Revert. Currently the rewrite silently overwrites, which is hostile to iteration.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag high">High</span><span class="tag size-m">M</span>
+    <h3>Reply-classifier</h3>
+    <p>Auto-tag inbound replies as <em>interested / needs follow-up / out of office / not interested / unsubscribe</em> via a cheap LLM call. Feeds into the campaign stop-on-reply logic so OOO replies don't end the sequence.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag med">Med</span><span class="tag size-m">M</span>
+    <h3>Recipient enrichment from email signature</h3>
+    <p>When a contact replies, parse their signature for title / company / phone and offer to update the contact record.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag med">Med</span><span class="tag size-s">S</span>
+    <h3>Tone match across campaign steps</h3>
+    <p>If step 1 was sent in a "friendly" tone, suggest the same tone for follow-ups so the sequence reads as one voice.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag med">Med</span><span class="tag size-m">M</span>
+    <h3>Best-time-to-send predictor</h3>
+    <p>Per-recipient (or per-platform) best send hour learned from open-time data. Currently the heatmap visualizes; this would act on it.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag low">Low</span><span class="tag size-l">L</span>
+    <h3>Self-hosted LLM swap</h3>
+    <p>Drop-in Ollama / vLLM backend so users worried about Groq data residency can swap to a local model. Service interface is already abstracted.</p>
+  </div>
+</div>
+
+<!-- ── 3. Productivity ──────────────────────────────────────────── -->
+<h2 id="productivity">3. Productivity &amp; workflows</h2>
+<div class="grid cols-2">
+
+  <div class="item">
+    <span class="tag high">High</span><span class="tag size-s">S</span>
+    <h3>Saved views on /contacts</h3>
+    <p>Named filter combos: "Hot leads — LinkedIn — Bangalore". Persisted per user. Sidebar shortcuts.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag high">High</span><span class="tag size-m">M</span>
+    <h3>Bulk-edit a field on a filtered set</h3>
+    <p>Filter to a slice then edit one field across every row. Currently bulk actions only support add/remove tag, block, delete.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag high">High</span><span class="tag size-m">M</span>
+    <h3>Activation checklist on /dashboard</h3>
+    <p>3-step "set SMTP / add a contact / send a first draft" tracker that fades when complete. Replaces the current static empty-state.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag med">Med</span><span class="tag size-s">S</span>
+    <h3>Inline-edit template label</h3>
+    <p>Double-click a label in the sidebar list → input → save. Currently requires loading the template, editing the label field, saving.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag med">Med</span><span class="tag size-s">S</span>
+    <h3>⌘↵ to send a draft</h3>
+    <p>Hook (<code>useSendShortcut</code>) is shipped; wire it on the per-draft row when the editor body has focus.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag med">Med</span><span class="tag size-m">M</span>
+    <h3>Swipe actions on draft rows (mobile)</h3>
+    <p>Left = delete, right = send. Honor reduced-motion preference. Tap target ≥ 44 × 44.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag med">Med</span><span class="tag size-m">M</span>
+    <h3>Onboarding re-trigger button</h3>
+    <p>Profile → "Replay onboarding tour". Currently only the version-bump path can re-show the modal.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag low">Low</span><span class="tag size-s">S</span>
+    <h3>Drag-to-reorder campaign steps</h3>
+    <p>Replace the current up/down buttons. Use HTML5 drag + reorder API.</p>
+  </div>
+</div>
+
+<!-- ── 4. Data ───────────────────────────────────────────────────── -->
+<h2 id="data">4. Data, exports &amp; integrations</h2>
+<div class="grid cols-2">
+
+  <div class="item">
+    <span class="tag high">High</span><span class="tag size-m">M</span>
+    <h3>Restore-from-backup admin tool</h3>
+    <p>Upload a GDPR JSON export and restore into a target user (admin-only). Useful for moving a user between instances or recovering from accidental delete.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag high">High</span><span class="tag size-m">M</span>
+    <h3>HubSpot / Salesforce sync</h3>
+    <p>One-way contact sync, opt-in. Could land as a webhook + transformer pattern.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag med">Med</span><span class="tag size-m">M</span>
+    <h3>Google Sheets bidirectional</h3>
+    <p>"Sync this view to a Sheet" — write contacts to a sheet, watch the sheet for edits. Lighter than a full CRM, hits a real workflow gap.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag med">Med</span><span class="tag size-s">S</span>
+    <h3>Notion link rewriter</h3>
+    <p>Paste a Notion page URL in a campaign body → rewrite to a public, tracked share link on send.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag med">Med</span><span class="tag size-m">M</span>
+    <h3>Zapier / Make.com triggers</h3>
+    <p>Webhook events already exist — add a public Trigger spec so users can wire EA into their stack without code.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag low">Low</span><span class="tag size-l">L</span>
+    <h3>iCal / Google Calendar export of scheduled sends</h3>
+    <p>Subscribe-able feed of "things going out this week."</p>
+  </div>
+</div>
+
+<!-- ── 5. Mobile ─────────────────────────────────────────────────── -->
+<h2 id="mobile">5. Mobile &amp; offline</h2>
+<div class="grid cols-2">
+
+  <div class="item">
+    <span class="tag high">High</span><span class="tag size-m">M</span>
+    <h3>Offline-first PWA</h3>
+    <p>Service-worker cache of the last contacts + drafts so the app loads on a flaky connection. Reads stay live, writes queue + retry.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag high">High</span><span class="tag size-m">M</span>
+    <h3>Pull-to-refresh on lists</h3>
+    <p>Native-feeling refresh on /drafts, /contacts, /campaigns. Especially valuable on mobile where the desktop refresh shortcut isn't available.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag med">Med</span><span class="tag size-s">S</span>
+    <h3>Haptic feedback on key actions</h3>
+    <p><code>navigator.vibrate(10)</code> on Send, Delete, Schedule — adds physical confidence on supported devices.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag low">Low</span><span class="tag size-l">L</span>
+    <h3>Share-to-EA from any app</h3>
+    <p>iOS / Android share-target so "share this LinkedIn profile" auto-creates a contact draft. PWA manifest already declares the shortcuts surface.</p>
+  </div>
+</div>
+
+<!-- ── 6. Admin ──────────────────────────────────────────────────── -->
+<h2 id="admin">6. Admin &amp; operations</h2>
+<div class="grid cols-2">
+
+  <div class="item">
+    <span class="tag high">High</span><span class="tag size-m">M</span>
+    <h3>Per-user quota visualization</h3>
+    <p>/admin/users gets a small inline sparkline of last-7-day sends per user so an admin can spot abuse at a glance.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag high">High</span><span class="tag size-s">S</span>
+    <h3>Slack/Discord weekly digest</h3>
+    <p>Weekly summary of sends, replies, bounces, top template per user — fires through the existing notify webhook.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag med">Med</span><span class="tag size-m">M</span>
+    <h3>Pause/resume tenant</h3>
+    <p>Admin-only "freeze" toggle per user — pauses all scheduled sends + blocks new ones. Useful for incident response.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag med">Med</span><span class="tag size-m">M</span>
+    <h3>Compliance export bundle</h3>
+    <p>Admin can generate a single audited zip of (data export + audit log + impersonation history) for a given user — for GDPR data-subject requests.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag low">Low</span><span class="tag size-s">S</span>
+    <h3>Admin Command palette</h3>
+    <p>A second palette scoped to admin actions: jump to user, impersonate, broadcast, freeze, drain queue.</p>
+  </div>
+</div>
+
+<!-- ── 7. Growth ─────────────────────────────────────────────────── -->
+<h2 id="growth">7. Growth &amp; collaboration</h2>
+<div class="grid cols-2">
+
+  <div class="item">
+    <span class="tag high">High</span><span class="tag size-l">L</span>
+    <h3>Workspace / multi-seat</h3>
+    <p>A "workspace" is a group of users sharing contacts, templates, identities. Roles: owner / member / viewer. The biggest architectural step — current data model is per-user.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag med">Med</span><span class="tag size-m">M</span>
+    <h3>Template library / sharing</h3>
+    <p>Publish a template as public so other instance users can clone it. Initially scoped to within-instance; could expand to a public registry later.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag med">Med</span><span class="tag size-m">M</span>
+    <h3>Real-time co-edit on campaigns</h3>
+    <p>Presence pill is shipped; next step is conflict-free co-editing of campaign step copy. Yjs + a small WebSocket.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag low">Low</span><span class="tag size-s">S</span>
+    <h3>Referral / "powered by" footer</h3>
+    <p>Toggleable footer link on outgoing emails. Off by default; off feels right for a self-hosted tool.</p>
+  </div>
+</div>
+
+<!-- ── 8. Observability ──────────────────────────────────────────── -->
+<h2 id="observability">8. Observability &amp; quality</h2>
+<div class="grid cols-2">
+
+  <div class="item">
+    <span class="tag high">High</span><span class="tag size-m">M</span>
+    <h3>Suspense streaming + skeleton on slow widgets</h3>
+    <p>Analytics heatmap, dashboard activity feed, admin drill-down — wrap in <code>&lt;Suspense&gt;</code> so the rest of the page paints first. Lighthouse audit recommended first to size the win.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag high">High</span><span class="tag size-s">S</span>
+    <h3>Sentry / OpenTelemetry hookup</h3>
+    <p>Wire <code>next-sentry</code> or equivalent so the prod 500 we just fixed would have been visible in an error-tracking dashboard before the user reported it.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag med">Med</span><span class="tag size-s">S</span>
+    <h3>Playwright E2E coverage uplift</h3>
+    <p>One E2E test exists (impersonation). Add: sign-in → create draft → send. Sign-in → import CSV → schedule. Reply detection happy-path.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag med">Med</span><span class="tag size-s">S</span>
+    <h3>Bundle-size budget in CI</h3>
+    <p>Fail CI when client JS exceeds 250 KB for the (app) route group. Catches accidental "import the whole library" regressions.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag med">Med</span><span class="tag size-s">S</span>
+    <h3>Lazy SectionHelp dialog body</h3>
+    <p>Only mount the dialog body the first time the user opens it. Currently each PageHeader mounts the whole content tree.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag low">Low</span><span class="tag size-m">M</span>
+    <h3>React.memo on heavy renders</h3>
+    <p>Template editor body + per-draft row. Use after a real perf measurement, not before.</p>
+  </div>
+</div>
+
+<!-- ── 9. Commerce ───────────────────────────────────────────────── -->
+<h2 id="commerce">9. Commerce / billing (only if you intend to host it as SaaS)</h2>
+<div class="grid cols-2">
+
+  <div class="item">
+    <span class="tag high">High</span><span class="tag size-l">L</span>
+    <h3>Stripe billing + per-seat or per-message pricing</h3>
+    <p>Only relevant if EA goes from "self-hosted" to "managed". Current code stays pluggable — billing would live in <code>server/billing/</code> and only the scheduler reads quota.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag med">Med</span><span class="tag size-m">M</span>
+    <h3>Free-tier soft cap</h3>
+    <p>Show a tasteful "5 free sends this week" header for unpaid users. Couples with the existing per-user quota.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag low">Low</span><span class="tag size-l">L</span>
+    <h3>Marketplace for templates / sequences</h3>
+    <p>If multi-tenant, paid template packs. Revenue share to creator. Heavy lift — only justified if the product takes off as SaaS.</p>
+  </div>
+</div>
+
+<p class="muted" style="margin-top: 36px; padding-top: 16px; border-top: 1px solid var(--line)">
+  Generated 2026-06-06. Cross-references the deferred items in <code>docs/todo.md</code> and the change log in <code>FEATURES.md</code>.
+</p>
+
+</div></body></html>
