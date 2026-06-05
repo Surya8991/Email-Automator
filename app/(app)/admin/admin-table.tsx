@@ -1,5 +1,5 @@
 'use client'
-import { useMemo, useState, useTransition } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Trash2, Shield, User, Pause, Play, Search, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -28,6 +28,10 @@ export function AdminTable({ rows }: { rows: Row[] }) {
     if (q.trim() && !r.email.toLowerCase().includes(q.toLowerCase()) && !r.name.toLowerCase().includes(q.toLowerCase())) return false
     return true
   }), [rows, filter, q])
+
+  // Clear selection whenever the view changes so stale (invisible) rows
+  // can't be silently included in a bulk action.
+  useEffect(() => { setSelected(new Set()) }, [filter, q])
 
   // Selectable rows = non-admin, non-self. The bulk actions skip protected
   // rows anyway, but disabling the checkbox prevents the user from
@@ -80,7 +84,8 @@ export function AdminTable({ rows }: { rows: Row[] }) {
           <Button size="sm" variant="outline" disabled={pending}
             onClick={() => start(async () => {
               setErr(null)
-              const r = await bulkSuspendUsersAction(Array.from(selected), true)
+              const ids = selectableVisible.filter((r) => selected.has(r.id)).map((r) => r.id)
+              const r = await bulkSuspendUsersAction(ids, true)
               if ('error' in r && r.error) setErr(r.error)
               clearSelection(); router.refresh()
             })}>
@@ -89,7 +94,8 @@ export function AdminTable({ rows }: { rows: Row[] }) {
           <Button size="sm" variant="outline" disabled={pending}
             onClick={() => start(async () => {
               setErr(null)
-              const r = await bulkSuspendUsersAction(Array.from(selected), false)
+              const ids = selectableVisible.filter((r) => selected.has(r.id)).map((r) => r.id)
+              const r = await bulkSuspendUsersAction(ids, false)
               if ('error' in r && r.error) setErr(r.error)
               clearSelection(); router.refresh()
             })}>

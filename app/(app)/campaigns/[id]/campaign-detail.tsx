@@ -152,11 +152,16 @@ export function CampaignDetail({ campaign, steps, enrollments, templates, tags, 
                                 const tid = s.templateId!
                                 setAiBusy(stepId); setAiRowId(null)
                                 start(async () => {
-                                  const r = await improveCampaignTemplateAction(tid, aiTone)
-                                  setAiBusy(null)
-                                  if ('error' in r) { toast.error(r.error); return }
-                                  toast.success('Template improved — future sends use new body')
-                                  setOpenPreview((o) => ({ ...o, [stepId]: r.initialMsg }))
+                                  try {
+                                    const r = await improveCampaignTemplateAction(tid, aiTone)
+                                    if ('error' in r) { toast.error(r.error); return }
+                                    toast.success('Template improved — future sends use new body')
+                                    setOpenPreview((o) => ({ ...o, [stepId]: r.initialMsg }))
+                                  } catch {
+                                    toast.error('AI Improve failed — please try again')
+                                  } finally {
+                                    setAiBusy(null)
+                                  }
                                 })
                               }}>
                                 <Sparkles className="mr-1 h-3.5 w-3.5" /> Improve

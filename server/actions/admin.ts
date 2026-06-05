@@ -220,9 +220,14 @@ export async function purgeRetentionNowAction() {
   const { purgeOldEvents, purgeOldAudit } = await import('@/server/services/retention')
   const all = await db.select({ id: users.id }).from(users)
   let events = 0, audit = 0
+  const now = String(Date.now())
   for (const u of all) {
     events += await purgeOldEvents(u.id).catch(() => 0)
     audit += await purgeOldAudit(u.id).catch(() => 0)
+    // Stamp LAST_PURGE_AT so the scheduler's 24h gate is reset and it
+    // doesn't immediately re-purge on its next tick.
+    await db.delete(settings).where(and(eq(settings.userId, u.id), eq(settings.key, 'LAST_PURGE_AT'))).catch(() => {})
+    await db.insert(settings).values({ userId: u.id, key: 'LAST_PURGE_AT', value: now }).catch(() => {})
   }
   await logAdmin(me.id, 'admin.purge_retention', `events=${events} audit=${audit}`)
   revalidatePath('/admin')

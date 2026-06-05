@@ -44,7 +44,13 @@ export function useProgress(): ProgressEvent | null {
     const openSse = () => {
       es = new EventSource('/api/progress')
       es.onmessage = (e) => {
-        try { apply(JSON.parse(e.data) as ProgressEvent, Date.now()) } catch { /* ignore */ }
+        try {
+          // SSE payload is { at: number, data: ProgressEvent } — same shape
+          // as the polling fallback so both transports use the server-issued
+          // timestamp for dedup instead of the client clock.
+          const wrapper = JSON.parse(e.data) as { at?: number; data?: ProgressEvent }
+          if (wrapper?.data) apply(wrapper.data, wrapper.at)
+        } catch { /* ignore */ }
       }
       es.onerror = () => {
         es?.close()

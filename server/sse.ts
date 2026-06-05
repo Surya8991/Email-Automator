@@ -29,10 +29,14 @@ export function register(userId: string, controller: Controller): () => void {
   }
 }
 
+// Serialise persist calls per user via a promise chain so concurrent emits
+// from a fast import loop don't race on the delete+insert upsert.
+const persistQueue = new Map<string, Promise<void>>()
+
 // Persist the latest event to the settings table. Polling clients read this
 // row; the timestamp lets them skip events they've already seen.
-async function persistLatest(userId: string, data: unknown) {
-  const payload = JSON.stringify({ at: Date.now(), data })
+async function persistLatest(userId: string, at: number, data: unknown) {
+  const payload = JSON.stringify({ at, data })
   try {
     // Two-step upsert (delete + insert) — dialect-portable across better-sqlite3 / libsql.
     await db.delete(settings).where(and(eq(settings.userId, userId), eq(settings.key, 'PROGRESS_LATEST')))
@@ -40,16 +44,28 @@ async function persistLatest(userId: string, data: unknown) {
   } catch { /* non-fatal — SSE will still deliver to local clients */ }
 }
 
+function enqueuePersist(userId: string, at: number, data: unknown) {
+  const prev = persistQueue.get(userId) ?? Promise.resolve()
+  const next = prev.then(() => persistLatest(userId, at, data))
+  persistQueue.set(userId, next)
+  // Prune the queue entry once this chain link settles.
+  void next.then(() => { if (persistQueue.get(userId) === next) persistQueue.delete(userId) })
+}
+
 export function emit(userId: string, data: unknown): void {
+  const at = Date.now()
   const set = clients.get(userId)
   if (set) {
-    const payload = encoder.encode(`data: ${JSON.stringify(data)}\n\n`)
+    // Include the server-issued `at` in the SSE wire payload so the client
+    // can use the same timestamp for dedup as the polling fallback.
+    const payload = encoder.encode(`data: ${JSON.stringify({ at, data })}\n\n`)
     for (const c of set) {
       try { c.enqueue(payload) } catch { /* client gone */ }
     }
   }
-  // Fire-and-forget — we don't want to slow the emitter on a slow DB.
-  void persistLatest(userId, data)
+  // Serialised fire-and-forget — doesn't block the emitter, but FIFO per
+  // user so a later event never overwrites a more recent one in the DB.
+  enqueuePersist(userId, at, data)
 }
 
 /**

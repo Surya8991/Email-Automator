@@ -103,6 +103,7 @@ export function RichTextEditor({
           data-placeholder={placeholder ?? ''}
           className="prose prose-sm dark:prose-invert max-w-none rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring empty:before:text-muted-foreground empty:before:content-[attr(data-placeholder)]"
           style={{ minHeight: `${Math.max(8, rows) * 1.25}rem` }}
+          onInput={(e) => onChange((e.target as HTMLDivElement).innerHTML)}
           onBlur={(e) => onChange((e.target as HTMLDivElement).innerHTML)}
           onKeyDown={(e) => {
             if (e.ctrlKey || e.metaKey) {

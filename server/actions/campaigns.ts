@@ -1,6 +1,6 @@
 'use server'
 import { revalidatePath } from 'next/cache'
-import { and, eq } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { requireAdmin, requireUser } from '@/auth'
 import * as svc from '@/server/services/campaigns'
@@ -82,8 +82,11 @@ export async function improveCampaignTemplateAction(templateId: number, tone: To
     return { error: 'Too many admin actions — slow down' }
   }
   if (!TONE_LIST.includes(tone)) return { error: 'Invalid tone' }
+  // Look up by ID only — the template may belong to any user, not
+  // necessarily the admin. requireAdmin() already ensures the caller is
+  // trusted; the templateId comes from a campaign step the page loaded.
   const [tpl] = await db.select().from(templatesTable)
-    .where(and(eq(templatesTable.id, templateId), eq(templatesTable.userId, me.id)))
+    .where(eq(templatesTable.id, templateId))
   if (!tpl) return { error: 'Template not found' }
   let improved: string
   try {
