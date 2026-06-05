@@ -2,8 +2,21 @@ import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { eq } from 'drizzle-orm'
 import { db } from '@/server/db/client'
-import { sessions, users } from '@/server/db/schema'
+import { auditLog, sessions, users } from '@/server/db/schema'
 import { clientKey, rateLimit } from '@/lib/rate-limit'
+
+// Best-effort audit row for failed sign-in attempts. Uses a sentinel
+// 'system' userId since the column is nullable in the schema; surfaces
+// at /audit?scope=all so admins can spot probing patterns.
+async function logSignInFailure(reason: string, ip: string, email: string) {
+  try {
+    await db.insert(auditLog).values({
+      userId: null, action: 'security.dev_signin_denied',
+      detail: `reason=${reason} email=${email || '(empty)'}`,
+      ip,
+    })
+  } catch { /* non-fatal */ }
+}
 
 // Dev-only sign-in. Guarded by:
 //   1. NODE_ENV must NOT be 'production'
@@ -17,20 +30,26 @@ function bypassList(): string[] {
 }
 
 export async function POST(req: Request) {
+  const ip = (req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+    || req.headers.get('x-real-ip')
+    || 'anon')
   // Disabled in prod UNLESS the operator explicitly opts in with
   // ALLOW_DEV_SIGNIN=true. Keep that off the moment Google OAuth is wired.
   const allowed = process.env.NODE_ENV !== 'production' || process.env.ALLOW_DEV_SIGNIN === 'true'
   if (!allowed) {
+    void logSignInFailure('disabled_in_prod', ip, '')
     return NextResponse.json({ error: 'Disabled in production' }, { status: 403 })
   }
   // 10 attempts / minute per IP — generous for legit dev use, harsh enough
   // to make brute-force discovery of allow-listed emails uninteresting.
   if (!rateLimit(clientKey(req, 'dev-signin'), 10, 60_000)) {
+    void logSignInFailure('rate_limited', ip, '')
     return NextResponse.json({ error: 'Too many requests' }, { status: 429 })
   }
   const { email: rawEmail } = (await req.json().catch(() => ({}))) as { email?: string }
   const email = String(rawEmail ?? '').toLowerCase().trim()
   if (!email || !bypassList().includes(email)) {
+    void logSignInFailure('not_allowlisted', ip, email)
     return NextResponse.json({ error: 'Email not on dev allowlist' }, { status: 403 })
   }
 

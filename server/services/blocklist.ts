@@ -65,8 +65,21 @@ export async function countBlockedContacts(userId: string): Promise<number> {
 }
 
 export async function isBlocked(userId: string, email: string): Promise<boolean> {
-  const list = await listBlocklist(userId)
-  const domain = (email.split('@')[1] ?? '').toLowerCase()
-  const lc = email.toLowerCase()
-  return list.some((b) => (b.type === 'email' ? b.pattern === lc : b.pattern === domain))
+  // Targeted WHERE — touches at most 2 rows (one email match + one domain
+  // match) instead of loading the full per-user + global blocklist into
+  // memory and filtering in JS. Significant win when blocklists grow
+  // (auto-blocks from unsubscribes, bulk paste-adds) and called per send
+  // by the scheduler. LIMIT 1 stops the scan on first match.
+  const lc = email.toLowerCase().trim()
+  if (!lc) return false
+  const domain = (lc.split('@')[1] ?? '').toLowerCase()
+  const conds = [and(eq(blocklist.type, 'email'), eq(blocklist.pattern, lc))]
+  if (domain) conds.push(and(eq(blocklist.type, 'domain'), eq(blocklist.pattern, domain)))
+  const rows = await db.select({ id: blocklist.id }).from(blocklist)
+    .where(and(
+      or(eq(blocklist.userId, userId), isNull(blocklist.userId)),
+      or(...conds)!,
+    ))
+    .limit(1)
+  return rows.length > 0
 }

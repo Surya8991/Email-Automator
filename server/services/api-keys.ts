@@ -54,8 +54,10 @@ export async function userIdAndScopesFromKey(raw: string): Promise<{ userId: str
   ))
   const row = rows[0]
   if (!row) return null
-  // Update lastUsedAt opportunistically — non-blocking is fine, but the
-  // strict-mode requires we await it. The cost is one fast UPDATE per call.
-  await db.update(apiKeys).set({ lastUsedAt: new Date() }).where(eq(apiKeys.id, row.id))
+  // Update lastUsedAt fire-and-forget — awaiting it on every authenticated
+  // request serializes concurrent API calls behind SQLite's exclusive
+  // write lock. The display value can drift by a few ms and nobody cares.
+  void db.update(apiKeys).set({ lastUsedAt: new Date() }).where(eq(apiKeys.id, row.id))
+    .catch(() => { /* non-fatal — last-used is best-effort */ })
   return { userId: row.userId, scopes: row.scopes ?? '' }
 }

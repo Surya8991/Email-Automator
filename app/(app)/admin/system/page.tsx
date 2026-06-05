@@ -3,11 +3,12 @@ import { adminEmails, env } from '@/lib/env'
 import { RetentionCard } from '../retention-card'
 import { AdminImportContactsCard } from '../import-contacts-card'
 import { GlobalBlocklistCard } from './global-blocklist-card'
-import { dbHealth, quotaUsage, listGlobalBlocklist, campaignHealth } from '@/server/services/admin-analytics'
+import { dbHealth, dbLatencyProbe, quotaUsage, listGlobalBlocklist, campaignHealth } from '@/server/services/admin-analytics'
 
 export default async function AdminSystemPage() {
-  const [db, quotas, globalBlocks, campaigns] = await Promise.all([
+  const [db, latency, quotas, globalBlocks, campaigns] = await Promise.all([
     dbHealth(),
+    dbLatencyProbe(),
     quotaUsage(),
     listGlobalBlocklist(),
     campaignHealth(),
@@ -39,6 +40,21 @@ export default async function AdminSystemPage() {
               </tbody>
             </table>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Database latency (sampled)</CardTitle></CardHeader>
+        <CardContent>
+          <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
+            <Cell label="p50" v={`${latency.p50} ms`} tone={latency.p50 > 50 ? 'warn' : 'ok'} />
+            <Cell label="p95" v={`${latency.p95} ms`} tone={latency.p95 > 200 ? 'warn' : undefined} />
+            <Cell label="max" v={`${latency.max} ms`} tone={latency.max > 500 ? 'bad' : undefined} />
+            <Cell label="samples" v={String(latency.samples)} />
+          </div>
+          <p className="mt-3 text-xs text-muted-foreground">
+            Sampled with a single-row COUNT(*) on this page render. p95 above 200 ms usually means a SQLite write-lock is being held (heavy import / scheduler tick) or a libSQL round-trip is degraded. Reload to re-sample.
+          </p>
         </CardContent>
       </Card>
 

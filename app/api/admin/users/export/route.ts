@@ -28,7 +28,7 @@ export async function GET() {
     await db.insert(auditLog).values({ userId: adminId, action: 'admin.users_export', detail: '', ip: '' })
   } catch (err) { log.warn({ err }, 'audit insert failed') }
 
-  const header = 'id,email,name,created_at,contacts,drafts_pending,events,suspended\n'
+  const header = 'id,email,name,created_at,contacts,drafts_pending,events,suspended,daily_limit_override\n'
   const stream = streamCsv<string>({
     header,
     initialCursor: '',
@@ -42,7 +42,7 @@ export async function GET() {
       // Compute per-user metrics in one round trip per page rather than per row.
       const ids = rows.map((r) => r.id)
       const inClause = sql.join(ids.map((id) => sql`${id}`), sql`, `)
-      const [contactRows, draftRows, eventRows, suspRows] = await Promise.all([
+      const [contactRows, draftRows, eventRows, suspRows, quotaRows] = await Promise.all([
         db.select({ uid: contacts.userId, n: sql<number>`COUNT(*)` })
           .from(contacts).where(sql`${contacts.userId} IN (${inClause})`).groupBy(contacts.userId),
         db.select({ uid: drafts.userId, n: sql<number>`COUNT(*)` })
@@ -52,11 +52,14 @@ export async function GET() {
           .from(events).where(sql`${events.userId} IN (${inClause})`).groupBy(events.userId),
         db.select({ uid: settings.userId, v: settings.value }).from(settings)
           .where(and(sql`${settings.userId} IN (${inClause})`, eq(settings.key, 'SENDS_PAUSED'))),
+        db.select({ uid: settings.userId, v: settings.value }).from(settings)
+          .where(and(sql`${settings.userId} IN (${inClause})`, eq(settings.key, 'DAILY_SEND_LIMIT_OVERRIDE'))),
       ])
       const cMap = new Map(contactRows.map((r) => [r.uid, Number(r.n)]))
       const dMap = new Map(draftRows.map((r) => [r.uid, Number(r.n)]))
       const eMap = new Map(eventRows.map((r) => [r.uid, Number(r.n)]))
       const sMap = new Map(suspRows.map((r) => [r.uid, r.v === 'true']))
+      const qMap = new Map(quotaRows.map((r) => [r.uid, r.v ?? '']))
       const lines = rows.map((u) =>
         [
           u.id, u.email ?? '', u.name ?? '',
@@ -65,6 +68,7 @@ export async function GET() {
           dMap.get(u.id) ?? 0,
           eMap.get(u.id) ?? 0,
           sMap.get(u.id) ? 'true' : 'false',
+          qMap.get(u.id) || '',
         ].map(csvCell).join(',')
       )
       return {

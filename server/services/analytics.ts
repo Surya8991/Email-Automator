@@ -172,6 +172,79 @@ export async function breakdownByTag(userId: string, days = 30): Promise<Breakdo
   return aggregate(expanded)
 }
 
+// B6 — Follow-up reminders. Buckets active contacts (not Replied/Bounced/
+// Blocked) by days-since-last-send. Surfaces an at-a-glance "who needs
+// a nudge" widget on /contacts: Overdue >14d, Soon 7-13d, On track <7d,
+// Never sent. Sent-but-no-reply is the implicit target — these are
+// contacts you've already started a conversation with but the thread has
+// gone quiet.
+export interface FollowUpBuckets {
+  overdue: number      // last sent > 14 days ago
+  soon: number         // last sent 7-13 days ago
+  onTrack: number      // last sent < 7 days ago
+  neverSent: number    // active contact, no send recorded
+}
+
+export async function followUpBuckets(userId: string): Promise<FollowUpBuckets> {
+  const now = Date.now()
+  const overdueCut = now - 14 * DAY_MS
+  const soonCut = now - 7 * DAY_MS
+  // Active contacts: not in BLOCKED / BOUNCED / Replied states. We treat
+  // any emailStatus starting with "Replied" as resolved (no further nudge).
+  const activeRows = await db.select({ id: contacts.id, emailStatus: contacts.emailStatus })
+    .from(contacts).where(eq(contacts.userId, userId))
+  const activeIds = new Set<number>()
+  for (const r of activeRows) {
+    const s = r.emailStatus
+    if (s === 'BLOCKED' || s === 'BOUNCED' || s.startsWith('Replied')) continue
+    activeIds.add(r.id)
+  }
+  if (activeIds.size === 0) return { overdue: 0, soon: 0, onTrack: 0, neverSent: 0 }
+
+  // Last-sent-per-contact in one grouped query.
+  const lastRows = await db.select({
+    contactId: events.contactId,
+    lastTs: sql<number>`MAX(${events.ts})`,
+  }).from(events)
+    .where(and(eq(events.userId, userId), eq(events.kind, 'sent')))
+    .groupBy(events.contactId)
+  const lastByContact = new Map<number, number>()
+  for (const r of lastRows) if (r.contactId) lastByContact.set(r.contactId, Number(r.lastTs))
+
+  const buckets: FollowUpBuckets = { overdue: 0, soon: 0, onTrack: 0, neverSent: 0 }
+  for (const id of activeIds) {
+    const last = lastByContact.get(id)
+    if (!last) { buckets.neverSent++; continue }
+    if (last < overdueCut) buckets.overdue++
+    else if (last < soonCut) buckets.soon++
+    else buckets.onTrack++
+  }
+  return buckets
+}
+
+// B7 — per-platform activity tracker. Slice events by the source
+// platform of each event's contact (LinkedIn / Indeed / Naukri / etc.).
+// Helps the user see "where am I actually getting replies from" so they
+// can double down on high-response sources and drop low ones.
+export async function breakdownByPlatform(userId: string, days = 30): Promise<BreakdownRow[]> {
+  const since = Date.now() - days * DAY_MS
+  const evRows = await db.select({
+    contactId: events.contactId, kind: events.kind, n: sql<number>`COUNT(*)`,
+  }).from(events)
+    .where(and(eq(events.userId, userId), gte(events.ts, since)))
+    .groupBy(events.contactId, events.kind)
+  const conRows = await db.select({ id: contacts.id, platform: contacts.platform })
+    .from(contacts).where(eq(contacts.userId, userId))
+  const platformFor = new Map(conRows.map((c) => [c.id, c.platform || '_unknown']))
+  const expanded: Array<{ key: string; label: string; kind: string; n: number }> = []
+  for (const r of evRows) {
+    const platform = r.contactId ? (platformFor.get(r.contactId) ?? '_unknown') : '_unknown'
+    const label = platform === '_unknown' ? '— no platform —' : platform
+    expanded.push({ key: platform, label, kind: r.kind, n: Number(r.n) })
+  }
+  return aggregate(expanded)
+}
+
 export async function breakdownByCampaign(userId: string, days = 30): Promise<BreakdownRow[]> {
   const since = Date.now() - days * DAY_MS
   // We don't have campaignId as a column on events; parse the meta JSON.

@@ -64,8 +64,17 @@ export async function recentFailures(limit = 20) {
 }
 
 // ─── A3: Active Send Queue ───────────────────────────────────────────
-export async function activeSendQueue(limit = 25, userId?: string) {
-  const baseWhere = inArray(emailLog.status, ['Scheduled', 'Retrying', 'Sending'])
+export type QueueStatusFilter = 'Scheduled' | 'Retrying' | 'Sending'
+const DEFAULT_ACTIVE_STATUSES: QueueStatusFilter[] = ['Scheduled', 'Retrying', 'Sending']
+
+export async function activeSendQueue(
+  limit = 25,
+  userId?: string,
+  statuses?: QueueStatusFilter[],
+  offset = 0,
+) {
+  const statusList = statuses && statuses.length > 0 ? statuses : DEFAULT_ACTIVE_STATUSES
+  const baseWhere = inArray(emailLog.status, statusList)
   const where = userId ? and(baseWhere, eq(emailLog.userId, userId)) : baseWhere
   const rows = await db.select({
     id: emailLog.id,
@@ -79,11 +88,17 @@ export async function activeSendQueue(limit = 25, userId?: string) {
     .where(where)
     .orderBy(asc(emailLog.scheduledAt))
     .limit(limit)
-  return rows.map((r) => ({
-    ...r,
-    userEmail: r.userEmail ?? '—',
-    scheduledAt: new Date(r.scheduledAt).toISOString(),
-  }))
+    .offset(offset)
+  // Total count for pagination — counts ALL matching rows, not just the page.
+  const totalRows = await db.select({ n: sql<number>`COUNT(*)` }).from(emailLog).where(where)
+  return {
+    rows: rows.map((r) => ({
+      ...r,
+      userEmail: r.userEmail ?? '—',
+      scheduledAt: new Date(r.scheduledAt).toISOString(),
+    })),
+    total: Number(totalRows[0]?.n ?? 0),
+  }
 }
 
 // Compact user list for admin filter dropdowns — id + email only.
@@ -191,6 +206,29 @@ export async function userDetail(userId: string) {
     },
     lastSentAt: byKind.sent?.lastTs ? new Date(byKind.sent.lastTs).toISOString() : null,
     recentSends: recentSends.map((r) => ({ ...r, scheduledAt: new Date(r.scheduledAt).toISOString() })),
+  }
+}
+
+// ─── DB latency probe — samples a handful of cheap reads, returns
+// p50 / p95 / max in ms. Useful for spotting slow-query regressions or
+// SQLite write-lock contention on the System tab. Cheap to run on every
+// page render (each probe is a single-row read).
+export async function dbLatencyProbe(samples = 5) {
+  const ms: number[] = []
+  for (let i = 0; i < samples; i++) {
+    const start = performance.now()
+    try {
+      await db.select({ n: sql<number>`COUNT(*)` }).from(users).limit(1)
+    } catch { /* skip the failed sample */ }
+    ms.push(performance.now() - start)
+  }
+  ms.sort((a, b) => a - b)
+  const p = (q: number) => ms[Math.min(ms.length - 1, Math.floor(ms.length * q))] ?? 0
+  return {
+    p50: Math.round(p(0.5)),
+    p95: Math.round(p(0.95)),
+    max: Math.round(ms[ms.length - 1] ?? 0),
+    samples: ms.length,
   }
 }
 
@@ -347,23 +385,31 @@ export async function topSenders(days = 30, limit = 10) {
 }
 
 // ─── A15: Failed-send heatmap (day-of-week × hour, IST) ──────────────
+// SQL-bucketed: SQLite's strftime supports offset modifiers, so we shift
+// the unix-ms timestamp into IST (+5:30) inside the query and bucket
+// directly. Returns 168 rows max (7×24) instead of every failed-send row.
+// Massive win on instances with many failures.
 export async function failureHeatmap(days = 30) {
   const since = Date.now() - days * DAY_MS
-  const rows = await db.select({ scheduledAt: emailLog.scheduledAt }).from(emailLog)
+  const buckets = await db.select({
+    dow: sql<string>`strftime('%w', ${emailLog.scheduledAt}/1000, 'unixepoch', '+330 minutes')`,
+    hour: sql<string>`strftime('%H', ${emailLog.scheduledAt}/1000, 'unixepoch', '+330 minutes')`,
+    n: sql<number>`COUNT(*)`,
+  }).from(emailLog)
     .where(and(eq(emailLog.status, 'Failed'), gte(emailLog.scheduledAt, since)))
+    .groupBy(
+      sql`strftime('%w', ${emailLog.scheduledAt}/1000, 'unixepoch', '+330 minutes')`,
+      sql`strftime('%H', ${emailLog.scheduledAt}/1000, 'unixepoch', '+330 minutes')`,
+    )
+  // Build the full 168-cell grid and overlay the rows we got. strftime('%w')
+  // returns Sun=0..Sat=6 matching our grid convention.
   const grid: { dow: number; hour: number; n: number }[] = []
   for (let d = 0; d < 7; d++) for (let h = 0; h < 24; h++) grid.push({ dow: d, hour: h, n: 0 })
-  const DOW_MAP: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }
-  const istFmt = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Asia/Kolkata', weekday: 'short', hour: '2-digit', hour12: false,
-  })
-  for (const r of rows) {
-    const parts = istFmt.formatToParts(new Date(r.scheduledAt))
-    const dow = DOW_MAP[parts.find((p) => p.type === 'weekday')?.value ?? 'Sun'] ?? 0
-    let hour = Number(parts.find((p) => p.type === 'hour')?.value ?? 0)
-    if (!Number.isFinite(hour) || hour < 0 || hour > 23) hour = 0
-    const cell = grid[dow * 24 + hour]
-    if (cell) cell.n++
+  for (const b of buckets) {
+    const d = Number(b.dow); const h = Number(b.hour)
+    if (!Number.isFinite(d) || !Number.isFinite(h) || d < 0 || d > 6 || h < 0 || h > 23) continue
+    const cell = grid[d * 24 + h]
+    if (cell) cell.n = Number(b.n)
   }
   return grid
 }

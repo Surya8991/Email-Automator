@@ -30,13 +30,21 @@ const nextConfig = {
       : "script-src 'self' 'unsafe-inline'"
     // Dev also needs connect-src 'self' + the HMR websocket; Next handles
     // both with 'self' since the WS is on the same origin.
+    const prodOnly = isDev ? [] : [
+      // HSTS — force HTTPS for 1 year. The preload directive is the strong
+      // form (eligible for the browser-baked preload list at hstspreload.org).
+      // Only set in prod because local dev runs over http://localhost.
+      { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains; preload' },
+    ]
     return [
       {
         source: '/(.*)',
         headers: [
+          ...prodOnly,
           { key: 'X-Frame-Options', value: 'DENY' },
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'Referrer-Policy', value: 'no-referrer' },
+          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=()' },
           {
             key: 'Content-Security-Policy',
             value: [

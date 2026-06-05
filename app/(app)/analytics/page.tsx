@@ -1,16 +1,17 @@
 import { requireUser } from '@/auth'
-import { dailySeries, kpis, breakdownByTemplate, breakdownByTag, breakdownByCampaign, sendTimeHeatmap, pipelineKpis } from '@/server/services/analytics'
+import { dailySeries, kpis, breakdownByTemplate, breakdownByTag, breakdownByCampaign, breakdownByPlatform, sendTimeHeatmap, pipelineKpis } from '@/server/services/analytics'
 import { Heatmap } from './heatmap'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Chart } from './chart'
 
 export default async function AnalyticsPage() {
   const u = await requireUser()
-  const [k, series, byTpl, byTag, byCamp, heatmap, pipeline] = await Promise.all([
+  const [k, series, byTpl, byTag, byCamp, byPlatform, heatmap, pipeline] = await Promise.all([
     kpis(u.id), dailySeries(u.id, 14),
     breakdownByTemplate(u.id, 30),
     breakdownByTag(u.id, 30),
     breakdownByCampaign(u.id, 30),
+    breakdownByPlatform(u.id, 30),
     sendTimeHeatmap(u.id, 30),
     // Admin-only pipeline row — non-admins get the work skipped.
     u.isAdmin ? pipelineKpis(u.id) : Promise.resolve(null),
@@ -48,10 +49,11 @@ export default async function AnalyticsPage() {
         <CardContent><Chart data={data} /></CardContent>
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
         <BreakdownCard title="By template" rows={byTpl} />
         <BreakdownCard title="By campaign" rows={byCamp} />
         <BreakdownCard title="By tag" rows={byTag} />
+        <BreakdownCard title="By platform" rows={byPlatform} />
       </div>
 
       <Card>

@@ -1,8 +1,10 @@
+import Link from 'next/link'
 import { Suspense } from 'react'
 import { requireUser } from '@/auth'
 import { listContacts, listTags, listDistinct } from '@/server/services/contacts'
 import { listCampaigns } from '@/server/services/campaigns'
 import { getSetting } from '@/server/services/settings'
+import { followUpBuckets } from '@/server/services/analytics'
 import { parseCustomFieldKeys } from '@/lib/custom-fields'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -19,7 +21,7 @@ export default async function ContactsPage(props: { searchParams: Promise<{ page
   const u = await requireUser()
   const requestedSize = Number(search.pageSize ?? 50)
   const pageSize = PAGE_SIZES.includes(requestedSize) ? requestedSize : 50
-  const [data, allTags, companies, locations, platforms, rawCfKeys, allCampaigns] = await Promise.all([
+  const [data, allTags, companies, locations, platforms, rawCfKeys, allCampaigns, followUps] = await Promise.all([
     listContacts(u.id, {
       page: Number(search.page ?? 1),
       pageSize,
@@ -36,6 +38,7 @@ export default async function ContactsPage(props: { searchParams: Promise<{ page
     listDistinct(u.id, 'platform'),
     getSetting(u.id, 'CUSTOM_FIELD_KEYS'),
     listCampaigns(u.id),
+    followUpBuckets(u.id),
   ])
   // Only enrollable campaigns end up in the picker — active or draft.
   const enrollableCampaigns = allCampaigns
@@ -62,6 +65,15 @@ export default async function ContactsPage(props: { searchParams: Promise<{ page
           <AddContactDialog customFieldKeys={customFieldKeys} />
         </div>
       </div>
+      {/* Follow-up reminders — buckets of active contacts by last-send recency. */}
+      {(followUps.overdue + followUps.soon + followUps.onTrack + followUps.neverSent) > 0 ? (
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <FollowUpCard label="Overdue (14+ days)" v={followUps.overdue} tone="bad" hint="Last send was more than 14 days ago — likely time to nudge." />
+          <FollowUpCard label="Soon (7–13 days)" v={followUps.soon} tone="warn" hint="Approaching the typical follow-up window." />
+          <FollowUpCard label="On track (<7 days)" v={followUps.onTrack} tone="ok" hint="Recent contact — give the recipient time." />
+          <FollowUpCard label="Never sent" v={followUps.neverSent} hint="Active contacts you haven't emailed yet — candidates for an initial draft." />
+        </div>
+      ) : null}
       <Card>
         <CardContent className="p-0">
           <Suspense fallback={<div className="p-6 space-y-2"><Skeleton className="h-6 w-full" /><Skeleton className="h-6 w-full" /><Skeleton className="h-6 w-full" /></div>}>
@@ -87,5 +99,21 @@ export default async function ContactsPage(props: { searchParams: Promise<{ page
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+function FollowUpCard({ label, v, tone, hint }: { label: string; v: number; tone?: 'ok' | 'warn' | 'bad'; hint?: string }) {
+  const cls =
+    tone === 'ok' ? 'text-emerald-600 dark:text-emerald-400'
+    : tone === 'warn' ? 'text-amber-600 dark:text-amber-400'
+    : tone === 'bad' ? 'text-red-600 dark:text-red-400'
+    : ''
+  return (
+    <Card>
+      <CardContent className="space-y-1 p-3">
+        <div className="text-xs text-muted-foreground" title={hint}>{label}</div>
+        <div className={`text-2xl font-semibold tabular-nums ${cls}`}>{v}</div>
+      </CardContent>
+    </Card>
   )
 }
