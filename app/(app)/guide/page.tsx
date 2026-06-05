@@ -80,14 +80,20 @@ export default function GuidePage() {
       </Section>
 
       <Section id="quick-start" title="1. Quick start (5 minutes)">
+        <p className="text-sm text-muted-foreground">
+          On first sign-in the in-app onboarding modal walks the same path with one slide per step.
+          If you skipped it, this section is the same flow in 5 minutes.
+        </p>
         <ol className="list-decimal pl-6 space-y-2 text-sm">
-          <li>Go to <Link href="/profile" className="underline">Profile</Link>. Set your name, portfolio link, and signature (HTML).</li>
-          <li>Open <Link href="/templates" className="underline">Templates</Link>. Pick one (e.g. "Growth Marketer · Professional & Formal"), click <strong>Activate</strong>.</li>
-          <li>Open <Link href="/contacts" className="underline">Contacts</Link> → <strong>Sample CSV</strong> downloads a starter. Edit it, save, then <strong>Import</strong>.</li>
-          <li>Open <Link href="/dry-run" className="underline">Dry run</Link>. First 100 eligible contacts show with their personalized subject + body. Nothing is sent.</li>
-          <li>Open <Link href="/drafts" className="underline">Drafts</Link> → set count to 5 → <strong>Create drafts</strong>. SSE progress fills.</li>
-          <li>Click <strong>Send</strong> on each draft. The send injects a tracking pixel + rewrites links automatically.</li>
+          <li>Go to <Link href="/profile" className="underline">Profile</Link>. Set your name, portfolio link, and signature (rich-text or HTML).</li>
+          <li>Open <Link href="/templates" className="underline">Templates</Link>. 20 starter templates are auto-seeded on first visit. Pick one (e.g. "Growth Marketer · Professional & Formal"), click <strong>Activate</strong>.</li>
+          <li>Open <Link href="/contacts" className="underline">Contacts</Link> → <strong>Sample CSV</strong> downloads a starter file with canonical headers and 5 realistic rows. Edit, save, then <strong>Import</strong> — SSE progress bar shows live import status.</li>
+          <li>Open <Link href="/dry-run" className="underline">Dry run</Link>. First 100 eligible contacts render with their personalized subject + body. Nothing is sent — just visual verification before you commit.</li>
+          <li>Open <Link href="/drafts" className="underline">Drafts</Link> → set count to 5 → <strong>Create drafts</strong>. SSE progress fills as drafts materialize.</li>
+          <li>Click <strong>Send</strong> on each draft. The send injects a tracking pixel + rewrites links automatically, then writes an <Code>email_log</Code> row.</li>
+          <li>Visit <Link href="/analytics" className="underline">Analytics</Link> — opens and clicks start landing as recipients interact.</li>
         </ol>
+        <p className="text-sm">For scale, swap step 5–6 for <Link href="/schedule" className="underline">Schedule</Link> (one-off staggered blast) or <Link href="/campaigns" className="underline">Campaigns</Link> (multi-step sequences).</p>
       </Section>
 
       <Section id="concepts" title="2. How it all fits together">
@@ -195,7 +201,14 @@ Bob Smith,Globex,CTO,bob@globex.com,,,,
         <p className="text-sm">Fill in optional <em>Subject B</em>. At send time the recipient gets A or B by <Code>contact.id % 2</Code> — deterministic, so the same person never sees both.</p>
 
         <h3 className="text-sm font-semibold mt-3">AI Improve (Groq)</h3>
-        <p className="text-sm">Click <strong>AI Improve</strong> → sends your body to Groq (<Code>llama-3.3-70b-versatile</Code>) → replaces it with the rewrite. Needs <Code>GROQ_API_KEY</Code> in <Code>.env</Code>.</p>
+        <p className="text-sm">Click the <strong>Sparkles</strong> button → pop a tone picker (Professional / Friendly / Concise / Enthusiastic / Formal) → Groq (<Code>llama-3.3-70b-versatile</Code>) rewrites the body in your chosen tone. Needs <Code>GROQ_API_KEY</Code> in <Code>.env</Code>.</p>
+        <ul className="list-disc pl-6 text-sm space-y-1">
+          <li><strong>Admin-only</strong> on /drafts, /schedule, and /campaigns. The /templates editor is open to every user.</li>
+          <li><strong>Rate-limited</strong> 60/min/admin per operation — stops accidental loops from chewing through Groq quota.</li>
+          <li><strong>Audit-logged</strong> — every rewrite writes a row to <Code>auditLog</Code> visible at <Link href="/audit?scope=all" className="underline">/audit?scope=all</Link>.</li>
+          <li><strong>Undo</strong> (drafts only, 1 hour) — the success toast surfaces an Undo action that restores the pre-improve body from <Code>localStorage</Code>. Survives page navigation; expires on tab close + 1 h.</li>
+          <li><strong>Variables stay intact</strong> — the prompt explicitly tells Groq to preserve <Code>{'{{placeholders}}'}</Code>, so personalization still works on the rewrite.</li>
+        </ul>
       </Section>
 
       <Section id="drafts" title="5. Drafts & sending">
@@ -242,6 +255,14 @@ Bob Smith,Globex,CTO,bob@globex.com,,,,
           <li><strong>Eye</strong> — toggle the rendered body of the queued email (the exact HTML the worker will send, still with <Code>{'{{personalized}}'}</Code> placeholders).</li>
           <li><strong>Sparkles (admin only)</strong> — pick a tone, rewrite the queued <Code>email_log.body</Code> in place. The scheduler picks up the new body on its next pass — no schedule change.</li>
         </ul>
+        <h3 className="text-sm font-semibold mt-3">How the worker tick actually works</h3>
+        <ul className="list-disc pl-6 text-sm space-y-1">
+          <li><strong>Atomic claim</strong> — every candidate row is flipped <Code>Scheduled → Sending</Code> in a single conditional UPDATE before the SMTP attempt. A second concurrent tick (Vercel cron + long-running worker can overlap) sees the row already in <Code>Sending</Code> and skips it — no double-sends.</li>
+          <li><strong>Stuck recovery</strong> — if a row sits in <Code>Sending</Code> for more than 10 minutes the next tick auto-reverts it to <Code>Scheduled</Code> for retry. Means a crashed mid-send doesn't leave a row stuck forever. Admins can also click <strong>Recover stuck</strong> on <Link href="/admin/queue" className="underline">/admin/queue</Link> to flip them immediately.</li>
+          <li><strong>Daily limit window</strong> is a rolling 24-hour count (now − 24h), so your limit resets continuously instead of jumping at UTC midnight. IST users no longer hit "limit reached" at 5:30am.</li>
+          <li><strong>Per-user override</strong> — admins can override <Code>DAILY_SEND_LIMIT</Code> per user from <Link href="/admin/users" className="underline">/admin/users</Link> → key icon. Scheduler honors the override before falling back to env default.</li>
+          <li><strong>Failure retries</strong> — failed SMTP attempts retry up to 3 times with exponential backoff (1m → 2m → 4m, capped at 30 min). After 3 attempts the row is marked <Code>Failed</Code> with the SMTP error message in <Code>lastResult</Code>.</li>
+        </ul>
       </Section>
 
       <Section id="campaigns" title="7. Campaigns (multi-step sequences)">
@@ -254,7 +275,21 @@ Bob Smith,Globex,CTO,bob@globex.com,,,,
           <li><strong>Activate</strong>.</li>
         </ol>
         <p className="text-sm">Worker advances each enrollment by its <Code>nextRunAt</Code>. Each step is its own send — analytics show per-step open rate. Statuses: <Code>draft</Code> · <Code>active</Code> · <Code>paused</Code> · <Code>archived</Code>.</p>
-        <p className="text-sm">A contact is unique per (campaign, contact) — re-enrolling is a no-op.</p>
+        <p className="text-sm">A contact is unique per (campaign, contact) — re-enrolling is a no-op (enforced by a unique index, not just an application check).</p>
+
+        <h3 className="text-sm font-semibold mt-3">stop-on-reply</h3>
+        <p className="text-sm">Tick the <strong>stop on reply</strong> checkbox on any step. When the worker is about to send that step, it checks the contact's <Code>emailStatus</Code> — if it starts with <Code>Replied</Code>, the enrollment status flips to <Code>replied</Code> and no further steps fire.</p>
+        <p className="text-sm">Replies are detected by <Link href="/diagnostic" className="underline">/diagnostic → Check Replies (Gmail)</Link> — that action scans your Gmail inbox for replies from contacts you've sent to and marks both the contact (<Code>emailStatus = "Replied! (timestamp)"</Code>) AND any active campaign enrollments for that contact (<Code>status = "replied"</Code>) in one pass. Run it before you launch a follow-up step if your last manual check was a while ago.</p>
+
+        <h3 className="text-sm font-semibold mt-3">Send-safety guards (all apply to campaign sends)</h3>
+        <p className="text-sm">Every campaign step send goes through the same gates as a one-off scheduled send:</p>
+        <ul className="list-disc pl-6 text-sm space-y-1">
+          <li><strong>Daily limit</strong> (env <Code>DAILY_SEND_LIMIT</Code> or admin per-user override) — campaign sends count against the same rolling-24h budget as scheduled sends.</li>
+          <li><strong>Blocklist</strong> — per-user + global. Enrollment is auto-stopped if the contact is blocked.</li>
+          <li><strong>Per-recipient throttle</strong> — if you set "max 1 per N days" in Settings, the enrollment defers (<Code>nextRunAt</Code> pushed) until the window clears, instead of double-tapping the contact.</li>
+          <li><strong>Per-domain daily cap</strong> — same domain-cap defer-by-1h logic as one-off sends.</li>
+        </ul>
+
         <h3 className="text-sm font-semibold mt-3">Per-step preview + admin AI Improve</h3>
         <ul className="list-disc pl-6 text-sm space-y-1">
           <li><strong>Eye</strong> on each step — shows the underlying template's <Code>initialMsg</Code> body so you don't have to jump to /templates.</li>
@@ -269,21 +304,27 @@ Bob Smith,Globex,CTO,bob@globex.com,,,,
         <p className="text-sm">/analytics shows:</p>
         <ul className="list-disc pl-6 text-sm space-y-1">
           <li><strong>KPI cards</strong> — 30-day sent / open / click / reply rates.</li>
-          <li><strong>14-day chart</strong> — daily sent / open / click / reply / bounce.</li>
-          <li><strong>Three breakdown cards</strong> (30d, top 10) — by template, by campaign, by tag. Multi-tag contacts count for each tag they have.</li>
-          <li><strong>Send-time heatmap</strong> — 7-day × 24-hour grid bucketed in IST. Cell shade scales with send count; hover for open-rate. Opens are attributed back to the original send-hour so it actually answers "when should I send?"</li>
+          <li><strong>14-day chart</strong> — daily sent / open / click / reply / bounce. Recharts loaded via <Code>dynamic(&hellip;, {`{ ssr: false }`})</Code> so the bundle stays small.</li>
+          <li><strong>Three breakdown cards</strong> (30d, top 10) — by template, by campaign, by tag. Multi-tag contacts count for each tag they have, so totals can exceed the underlying send count.</li>
+          <li><strong>Send-time heatmap</strong> — 7-day × 24-hour grid bucketed in IST regardless of where the server runs. Cell shade scales with send count; hover for open-rate. <strong>Opens are attributed to the original send-hour</strong>, not the open-hour, so the grid actually answers "when should I send?" rather than "when do people open mail?".</li>
         </ul>
+        <p className="text-sm">Admins also get a <strong>Job-search pipeline KPI row</strong> at the top — Applied / Active pipeline / Offers / Response rate / Rejections — derived from <Code>contacts.status</Code> (Applied / Phone Screen / Interview 1-2 / Final Round / Offer* / Hired / Reject*). Only renders when <Code>session.user.isAdmin</Code>.</p>
+        <p className="text-sm text-muted-foreground">Cross-user instance-wide analytics (top senders, 30-day chart across all users, failure heatmap) live at <Link href="/admin" className="underline">/admin</Link>.</p>
       </Section>
 
       <Section id="blocklist" title="9. Blocklist & unsubscribe">
         <ul className="list-disc pl-6 text-sm space-y-1">
           <li><strong>Per-user</strong> — add from <Link href="/blocklist" className="underline">/blocklist</Link>. Single pattern or <strong>Bulk add</strong> paste-list (newline/comma; <Code>@</Code> autodetects email vs domain).</li>
-          <li><strong>Global</strong> — auto-created when a recipient clicks unsubscribe.</li>
+          <li><strong>Global</strong> (<Code>userId = null</Code>) — applies to every user on the instance. Auto-created when a recipient clicks unsubscribe. Admins can also add/remove global entries manually from <Link href="/admin/system" className="underline">/admin/system → Global blocklist</Link> — duplicates are deduplicated on add so a double-click is safe.</li>
           <li><strong>Search + type filter</strong> over the list.</li>
         </ul>
-        <p className="text-sm">Matched recipients are silently skipped during draft/schedule/campaign sends.</p>
+        <p className="text-sm">Matched recipients are silently skipped during draft / schedule / campaign sends — every send path consults <Code>isBlocked()</Code> before SMTP.</p>
+
+        <h3 className="text-sm font-semibold mt-3">Soft-block + unblock-restore</h3>
+        <p className="text-sm">Using the <strong>Block</strong> bulk action on /contacts soft-deletes those contacts (sets <Code>emailStatus = "BLOCKED"</Code>) AND adds them to your blocklist. The default contacts list hides BLOCKED rows. If you later remove the email from /blocklist, the contact reappears at the bottom of your list (<Code>num</Code> bumped to <Code>max + 1</Code>) — useful when you unblock by mistake or change your mind.</p>
+
         <h3 className="text-sm font-semibold mt-3">Unsubscribe footer</h3>
-        <p className="text-sm">Toggle in Settings → General. Footer text is sanitized — only a small whitelist of inline tags survives. Link uses an HMAC token so only the recipient can unsub. RFC 8058 <Code>POST /unsubscribe</Code> wired — Gmail's one-click button works.</p>
+        <p className="text-sm">Toggle in Settings → General. Footer text is sanitized — only a small whitelist of inline tags survives. Link uses an HMAC token signed with <Code>AUTH_SECRET</Code> so only the recipient can unsub. RFC 8058 <Code>POST /unsubscribe</Code> wired — Gmail's one-click button works without rendering the confirmation page.</p>
       </Section>
 
       <Section id="settings" title="10. Settings, profile, signature">
@@ -293,15 +334,21 @@ Bob Smith,Globex,CTO,bob@globex.com,,,,
         </ul>
         <h3 className="text-sm font-semibold mt-3">General tab fields</h3>
         <ul className="list-disc pl-6 text-sm space-y-1">
-          <li><strong>Daily send limit</strong> — hard cap per user; worker enforces.</li>
-          <li><strong>Timezone</strong> — dropdown of 13 zones (IST default). Drives every visible timestamp in the UI.</li>
-          <li><strong>Per-recipient throttle (days)</strong> — worker cancels any queued send to a recipient already emailed in the window. <Code>0</Code> = off. Stops overlapping campaigns from double-tapping a contact.</li>
+          <li><strong>Daily send limit</strong> — hard cap per user over a rolling 24-hour window. Worker enforces. The default comes from <Code>env.DAILY_SEND_LIMIT</Code>; admins can override per-user from <Link href="/admin/users" className="underline">/admin/users</Link> → key icon (stored in <Code>DAILY_SEND_LIMIT_OVERRIDE</Code> setting and read by the scheduler before falling back to env).</li>
+          <li><strong>Timezone</strong> — dropdown of 13 zones (IST default). Drives every visible timestamp in the UI via <Code>useFormatDate()</Code>. Server-rendered pages read it via <Code>getSetting(u.id, 'TIMEZONE')</Code>.</li>
+          <li><strong>Per-recipient throttle (days)</strong> — worker cancels any queued one-off send (or defers any campaign step) to a recipient already emailed in the window. <Code>0</Code> = off. Stops overlapping campaigns from double-tapping a contact.</li>
           <li><strong>Custom contact fields</strong> — comma-separated keys (snake_case). Inputs appear in the AddContact dialog and chips appear in the template editor.</li>
-          <li><strong>Per-domain daily cap</strong> — <Code>gmail.com=50,outlook.com=30</Code> format. Worker <em>defers</em> (not cancels) over-cap rows by 1h.</li>
-          <li><strong>Default role / Portfolio link</strong> — fallbacks for <Code>{'{{role_name}}'}</Code> / <Code>{'{{portfolio_link}}'}</Code>.</li>
+          <li><strong>Per-domain daily cap</strong> — <Code>gmail.com=50,outlook.com=30</Code> format. Worker <em>defers</em> (not cancels) over-cap rows by 1h so they eventually send on a less-busy day.</li>
+          <li><strong>Default role / Portfolio link</strong> — fallbacks for <Code>{'{{role_name}}'}</Code> / <Code>{'{{portfolio_link}}'}</Code> when the contact has none.</li>
           <li><strong>Unsubscribe footer + toggle</strong>.</li>
-          <li><strong>Emergency Pause sends</strong> — kill-switch; worker skips your queue while on.</li>
+          <li><strong>Emergency Pause sends</strong> — kill-switch (<Code>SENDS_PAUSED=true</Code>); worker skips your queue entirely while on. Same setting an admin's "Suspend user" toggle flips.</li>
         </ul>
+        <h3 className="text-sm font-semibold mt-3">Email tab</h3>
+        <p className="text-sm">Per-user SMTP credentials (host, port, user, pass, From). Stored AES-GCM encrypted at rest via <Code>ENCRYPTION_KEY</Code> (falls back to <Code>AUTH_SECRET</Code>). Falls back to env <Code>SMTP_*</Code> vars when unset. Saving or clearing creds invalidates the cached nodemailer transport so rotations take effect on the next send instead of waiting for a process restart.</p>
+        <h3 className="text-sm font-semibold mt-3">AI tab</h3>
+        <p className="text-sm">Per-user <Code>GROQ_API_KEY</Code> override + model selection. Encrypted at rest the same way SMTP creds are. Falls back to env when unset.</p>
+        <h3 className="text-sm font-semibold mt-3">API keys tab</h3>
+        <p className="text-sm">Create / revoke. <Code>ea_…</Code> prefix, SHA-256 hashed at rest, plaintext shown ONCE at creation. Pick scopes (<Code>read:contacts</Code>, <Code>write:contacts</Code>) at creation — routes return 403 if the required scope is missing. Pre-0004 keys with no scopes recorded keep working as full-access for back-compat.</p>
         <p className="text-sm">Danger tab supports scoped wipes (contacts / drafts / events / everything). Type <Code>DELETE</Code> to enable.</p>
       </Section>
 
@@ -426,25 +473,33 @@ Bob Smith,Globex,CTO,bob@globex.com,,,,
           <tbody className="font-mono">
             {[
               ['ADMIN_EMAILS', '(empty)', 'Comma-separated emails that get admin privileges'],
-              ['ALLOW_DEV_SIGNIN', 'false', 'Enable the dev sign-in API in production'],
+              ['ALLOW_DEV_SIGNIN', 'false', 'Enable the dev sign-in API in production. Triggers red sticky banner.'],
               ['APP_URL', 'http://localhost:3000', 'Used in tracking + unsubscribe URLs'],
-              ['AUTH_SECRET', '(required)', 'Auth.js session secret + signs tracking/unsubscribe HMACs'],
-              ['DAILY_SEND_LIMIT', '50', 'Hard cap per user per day; worker honors it'],
+              ['AUTH_SECRET', '(required)', 'Auth.js session secret + signs tracking/unsubscribe HMACs. Also the fallback ENCRYPTION_KEY source.'],
+              ['CRON_SECRET', '—', 'Bearer token GitHub Actions sends to /api/cron/tick. UNSET = endpoint is OPEN to the public — logs a loud console.error in prod.'],
+              ['DAILY_SEND_LIMIT', '50', 'Default hard cap per user (rolling 24h). Admins override per-user from /admin/users.'],
               ['DATABASE_URL', './data/tracker.db', 'SQLite file path locally, or a libsql:// URL (Turso) on Vercel. Driver picked from prefix.'],
-              ['TURSO_AUTH_TOKEN', '—', 'Auth token for the libSQL/Turso connection (Vercel only)'],
-              ['CRON_SECRET', '—', 'Bearer token GitHub Actions sends to /api/cron/tick'],
               ['DEV_BYPASS_EMAILS', 'test@gmail.com', 'Emails the dev sign-in route accepts'],
               ['EMAIL_FROM', '(falls back to SMTP_USER)', 'From: header on outgoing mail'],
+              ['ENCRYPTION_KEY', '(falls back to AUTH_SECRET)', 'AES-GCM key for at-rest encryption of SMTP_PASS + GROQ_API_KEY in settings. RECOMMENDED to set explicitly on prod — decouples credential encryption from Auth.js. Rotating it invalidates every saved per-user credential.'],
+              ['EVENTS_RETENTION_DAYS', '180', 'Per-user setting (not env). Override from settings table. Scheduler purges events older than this once per 24h.'],
+              ['AUDIT_RETENTION_DAYS', '365', 'Per-user setting. Audit-log rows older than this are purged.'],
               ['GOOGLE_CLIENT_ID', '—', 'Google OAuth — Continue-with-Google'],
               ['GOOGLE_CLIENT_SECRET', '—', 'Google OAuth secret'],
-              ['GROQ_API_KEY', '—', 'Powers AI Improve'],
-              ['GROQ_MODEL', 'llama-3.3-70b-versatile', 'Which Groq model to use'],
+              ['GROQ_API_KEY', '—', 'Powers AI Improve. Encrypted at rest when set per-user.'],
+              ['GROQ_MODEL', 'llama-3.3-70b-versatile', 'Which Groq model to use for AI Improve'],
+              ['MULTI_INSTANCE', 'false', 'Set to "true" alongside VERCEL=1 to acknowledge the in-memory rate-limiter is ineffective. Real fix: REDIS_URL.'],
               ['NEXTAUTH_URL', 'http://localhost:3000', 'Used by Auth.js for callback URLs'],
+              ['NODE_ENV', '—', 'Standard. "production" enables several invariants (CSP unsafe-eval off, dev-signin banner trigger, pino JSON logs).'],
+              ['REDIS_URL', '—', 'Future: backend for a distributed rate limiter. Not yet wired — lib/rate-limit.ts warns when running on Vercel without this.'],
               ['SMTP_HOST', 'smtp.gmail.com', 'SMTP host'],
-              ['SMTP_PASS', '—', 'SMTP password (Gmail App Password)'],
+              ['SMTP_PASS', '—', 'SMTP password (Gmail App Password recommended). Encrypted at rest when stored per-user.'],
               ['SMTP_PORT', '587', 'SMTP port (465 → secure mode auto-on)'],
               ['SMTP_USER', '—', 'SMTP username / from address'],
               ['TIMEZONE', 'Asia/Kolkata', 'Display timezone for UI strings'],
+              ['TURSO_AUTH_TOKEN', '—', 'Auth token for the libSQL/Turso connection (Vercel only)'],
+              ['UPSTASH_REDIS_REST_URL', '—', 'Alternative to REDIS_URL for Upstash; same purpose.'],
+              ['VERCEL', '—', 'Auto-set by Vercel. Triggers multi-instance warnings + production code paths.'],
             ].map(([v, d, p]) => (
               <tr key={v} className="border-t"><td className="p-1">{v}</td><td className="p-1 text-muted-foreground">{d}</td><td className="p-1 font-sans text-muted-foreground">{p}</td></tr>
             ))}
@@ -568,18 +623,51 @@ docker run -d -p 3000:3000 -v $PWD/data:/app/data --env-file .env email-automato
           </div>
           <div>
             <dt className="font-medium">Vercel deploy returns 500 on every route</dt>
-            <dd className="text-muted-foreground">Check Vercel Logs. The known traps: (1) <Code>"type":"module"</Code> in package.json — Vercel's CJS wrapper can't <Code>require()</Code> ESM page output; (2) missing <Code>TURSO_AUTH_TOKEN</Code> env in Production; (3) missing redirect URI in Google OAuth (<Code>https://yourapp.vercel.app/api/auth/callback/google</Code>).</dd>
+            <dd className="text-muted-foreground">Check Vercel Logs. The known traps: (1) <Code>"type":"module"</Code> in package.json — Vercel's CJS wrapper can't <Code>require()</Code> ESM page output; (2) missing <Code>TURSO_AUTH_TOKEN</Code> env in Production; (3) missing redirect URI in Google OAuth (<Code>https://yourapp.vercel.app/api/auth/callback/google</Code>); (4) a sync function exported from a <Code>'use server'</Code> file — Turbopack rejects this at build with "Server Actions must be async functions".</dd>
+          </div>
+          <div>
+            <dt className="font-medium">Queue shows rows stuck in "Sending"</dt>
+            <dd className="text-muted-foreground">Normal — the scheduler auto-recovers any row older than 10 min back to <Code>Scheduled</Code> on the next tick. For an immediate flip, an admin can hit <Link href="/admin/queue" className="underline">/admin/queue → Recover stuck (N)</Link>. The button is scoped to the exact ids seen at SELECT, so the count it reports is accurate.</dd>
+          </div>
+          <div>
+            <dt className="font-medium">Broadcast banner doesn't appear right after posting</dt>
+            <dd className="text-muted-foreground">The layout caches the latest broadcast via <Code>unstable_cache(['current-broadcast'], &hellip;, {`{ revalidate: 300 }`})</Code>. <Code>broadcastAction</Code> calls <Code>revalidatePath('/', 'layout')</Code> so it should refresh immediately on the next navigation; worst-case staleness is 5 minutes if revalidation misses. Hard-refresh forces re-render.</dd>
+          </div>
+          <div>
+            <dt className="font-medium">Per-user quota override isn't applying</dt>
+            <dd className="text-muted-foreground">Check the user's <strong>Quota/day</strong> column on <Link href="/admin/users" className="underline">/admin/users</Link>. It should show your override as a primary-tinted chip rather than "default". If empty, the env <Code>DAILY_SEND_LIMIT</Code> is in effect. The scheduler reads <Code>DAILY_SEND_LIMIT_OVERRIDE</Code> from the user's settings BEFORE the env default, so any positive integer here wins. Setting to 0 or empty clears the override.</dd>
+          </div>
+          <div>
+            <dt className="font-medium">SSE progress bar stays empty during a bulk operation</dt>
+            <dd className="text-muted-foreground">On Vercel the SSE socket may connect but the emitter (server action) runs in a different Lambda — events never arrive over SSE. The client falls back to <Code>/api/progress/poll?since=&hellip;</Code> every 2 s. If the poll is also failing, check Network tab for 401s (session expired) or 204s (no events — the operation may have already completed).</dd>
+          </div>
+          <div>
+            <dt className="font-medium">Campaign step keeps firing after the contact replied</dt>
+            <dd className="text-muted-foreground">Reply detection is not automatic — run <Link href="/diagnostic" className="underline">/diagnostic → Check Replies (Gmail)</Link>. That scans your inbox, marks the contact (<Code>emailStatus = "Replied!"</Code>) AND any active campaign enrollments (<Code>status = "replied"</Code>) so the scheduler's <Code>stopOnReply</Code> gate fires on the next tick. Without running it, the scheduler has no way to know the contact replied.</dd>
+          </div>
+          <div>
+            <dt className="font-medium">Rate-limit doesn't seem to enforce on Vercel</dt>
+            <dd className="text-muted-foreground">The in-memory limiter is per-Lambda. With multiple concurrent instances, the effective limit is <Code>max × instance_count</Code>. A loud one-shot warning logs on first use; until <Code>REDIS_URL</Code> is wired, treat the limits as soft hints, not hard security gates.</dd>
           </div>
         </dl>
       </Section>
 
       <Section id="shortcuts" title="17. Keyboard shortcuts">
+        <h3 className="text-sm font-semibold">Command palette</h3>
         <div className="text-sm grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
-          <Kbd>⌘/Ctrl + K</Kbd><span>Open command palette</span>
+          <Kbd>⌘/Ctrl + K</Kbd><span>Open command palette (fuzzy search across every page)</span>
           <Kbd>↑ ↓</Kbd><span>Navigate the palette</span>
           <Kbd>↵</Kbd><span>Open the highlighted page</span>
           <Kbd>Esc</Kbd><span>Close palette / any dialog</span>
         </div>
+        <h3 className="text-sm font-semibold mt-3">Rich-text editor</h3>
+        <div className="text-sm grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+          <Kbd>⌘/Ctrl + B</Kbd><span>Bold</span>
+          <Kbd>⌘/Ctrl + I</Kbd><span>Italic</span>
+        </div>
+        <p className="text-xs text-muted-foreground mt-2">
+          The palette is the fastest way to jump anywhere — start typing a page name (e.g. "drafts" → /drafts, "admin webhooks" → /admin/webhooks) and hit Enter. Admin-only pages only appear in the list for admins.
+        </p>
       </Section>
     </div>
   )
