@@ -21,6 +21,8 @@ function Section({ id, title, children }: { id: string; title: string; children:
 
 const TOC = [
   ['first-time', '0. First time? Start here'],
+  // Last updated 2026-06-05: admin section now covers the 6-tab layout
+  // (Overview / Users / Queue / Webhooks / System / Broadcast).
   ['quick-start', '1. Quick start (5 minutes)'],
   ['concepts',    '2. How it all fits together'],
   ['contacts',    '3. Contacts & tags'],
@@ -315,22 +317,67 @@ Bob Smith,Globex,CTO,bob@globex.com,,,,
       </Section>
 
       <Section id="admin" title="11. Admin (multi-user)">
-        <p className="text-sm">Add comma-separated emails to <Code>ADMIN_EMAILS</Code> in <Code>.env</Code>. Admins:</p>
+        <p className="text-sm">Add comma-separated emails to <Code>ADMIN_EMAILS</Code> in <Code>.env</Code>. Admins land on <Link href="/admin" className="underline">/admin</Link>, which is split into <strong>6 tabs</strong>:</p>
+
+        <h3 className="text-sm font-semibold mt-3">/admin — Overview</h3>
         <ul className="list-disc pl-6 text-sm space-y-1">
-          <li>See the <strong>Admin</strong> sidebar entry with system-wide stats (users / contacts / templates / drafts pending / sent 30d / active campaigns) at the top.</li>
-          <li>Can list every user with per-user stats + search/filter (All / Active / Suspended / Admins) + per-page checkbox column for <strong>bulk Suspend / Resume</strong> on selected non-admin rows.</li>
-          <li>Can <strong>Suspend / Resume</strong> any non-admin user (single or bulk) — reuses the same <Code>SENDS_PAUSED</Code> setting the user's own kill-switch toggles. Data stays; the worker just stops sending for them.</li>
-          <li>Can delete non-admin users (cascades through every table).</li>
-          <li><strong>CSV</strong> button on the user table → <Code>/api/admin/users/export</Code> streams an instance-wide users dump (id, email, name, joined, contacts, drafts pending, events, suspended). Audit-logged.</li>
-          <li>See a <strong>Runtime configuration</strong> card with the env values that matter to operators (<Code>DAILY_SEND_LIMIT</Code>, <Code>TIMEZONE</Code>, SMTP host, OAuth, CRON_SECRET set/unset, etc.). <Code>ALLOW_DEV_SIGNIN=true</Code> renders red.</li>
-          <li>If <Code>ALLOW_DEV_SIGNIN=true</Code> on a deployed env (Vercel or NODE_ENV=production), a <strong>sticky red banner</strong> rides on top of every page so the operator can't forget to turn it off before sharing.</li>
-          <li>See a <strong>Bulk import contacts</strong> card — drop an .xlsx/.csv up to 25 MB; SSE-driven progress bar; auto-dedup against existing (name + email).</li>
-          <li>See a <strong>Retention</strong> card with <strong>Purge now</strong>. The scheduler already runs a daily per-user purge gated by <Code>LAST_PURGE_AT</Code>; the button bypasses the gate and runs across every user immediately. Defaults: events 180 d, audit 365 d (override per-user via <Code>EVENTS_RETENTION_DAYS</Code> / <Code>AUDIT_RETENTION_DAYS</Code> settings).</li>
-          <li>Can download the whole DB at <Code>/api/backup</Code> (admin-only, audit-logged).</li>
-          <li>Can hit <Link href="/diagnostic" className="underline">/diagnostic</Link> — gated to admins. Probes SMTP / AI / OAuth / MX / SPF / DMARC + CRON_SECRET set, libsql reachable, ADMIN_EMAILS populated.</li>
-          <li>Can see <strong>cross-user audit</strong> at <Link href="/audit?scope=all" className="underline">/audit?scope=all</Link>. Admin write actions (delete user / suspend / resume / bulk suspend / import / AI Improve draft / AI Improve scheduled / AI Improve campaign template / purge retention / backup download / users export) write rows automatically.</li>
-          <li>All admin write actions are rate-limited (60/min/admin) to cap accidental loops + Groq spend.</li>
-          <li>Get a per-draft <strong>AI Improve</strong> Sparkles button at <Link href="/drafts" className="underline">/drafts</Link> (rewrites body, 1-hour Undo via localStorage), per-row Sparkles on <Link href="/schedule" className="underline">/schedule</Link> (rewrites queued <Code>email_log.body</Code>), and per-step Sparkles on /campaigns (rewrites the underlying template).</li>
+          <li>Six KPI cards (Users / Contacts / Templates / Drafts pending / Sent 30d / Active campaigns).</li>
+          <li><strong>Queue snapshot</strong> — Scheduled / Sending / Retrying / Stuck (&gt;10m) / Sent 24h / Failed 24h / Cancelled 24h, color-coded.</li>
+          <li><strong>30-day cross-user send chart</strong> — sent/open/click/reply/bounce series across all users.</li>
+          <li><strong>Top senders leaderboard</strong> — top-10 users by sends in the last 30 days.</li>
+          <li><strong>Failure heatmap</strong> — 7×24 IST grid; darker cell = more failures. Surfaces SMTP throttling windows.</li>
+          <li><strong>Recent admin actions</strong> — last 10 <Code>admin.*</Code> audit rows inline, with a link to the full <Link href="/audit?scope=all" className="underline">/audit?scope=all</Link>.</li>
+        </ul>
+
+        <h3 className="text-sm font-semibold mt-3">/admin/users — User management</h3>
+        <ul className="list-disc pl-6 text-sm space-y-1">
+          <li>Search + status filter (All / Active / Suspended / Admins).</li>
+          <li>Per-row stats columns including a new <strong>Quota/day</strong> column showing the user's override or "default".</li>
+          <li><strong>Eye icon</strong> — slide-out drawer with 30-day activity (sent/opens/clicks/replies/bounces/queued), inventory, current settings (throttle, domain caps, last-sent), and last 10 sends with status badges.</li>
+          <li><strong>Key icon</strong> — prompt to set a per-user <Code>DAILY_SEND_LIMIT_OVERRIDE</Code>. Scheduler honors it instead of <Code>env.DAILY_SEND_LIMIT</Code>. Empty / 0 clears the override.</li>
+          <li><strong>UserCog icon</strong> — <strong>impersonate</strong>. Mints a 1-hour session as the target user, REVOKES your current admin session row (so a leaked old cookie can't be replayed), and replaces your cookie. Refuses to impersonate another admin. Audit-logged with actor + target. Sign out and back in to recover your admin session.</li>
+          <li>Single + bulk <strong>Suspend / Resume</strong> — reuses <Code>SENDS_PAUSED</Code>; data stays, worker stops sending.</li>
+          <li>Delete user (cascades through every table).</li>
+          <li><strong>CSV</strong> button → <Code>/api/admin/users/export</Code> streams a 1000-row-paged users dump.</li>
+        </ul>
+
+        <h3 className="text-sm font-semibold mt-3">/admin/queue — Queue health</h3>
+        <ul className="list-disc pl-6 text-sm space-y-1">
+          <li>Queue counts (Scheduled / Sending / Retrying / Stuck / Sent 24h / Failed 24h / Cancelled 24h).</li>
+          <li>Active queue (next 50): when, user, recipient, subject, status badge.</li>
+          <li>Recent failures (last 20): when, user, recipient, attempts, reason.</li>
+          <li><strong>Recover stuck</strong> button — flips any <Code>Sending</Code>-status row older than 10 min back to <Code>Scheduled</Code> so the next tick picks it up. Scoped to the exact ids seen at SELECT, so the reported count is accurate. Audit-logged.</li>
+        </ul>
+
+        <h3 className="text-sm font-semibold mt-3">/admin/webhooks — Delivery health</h3>
+        <ul className="list-disc pl-6 text-sm space-y-1">
+          <li>Counts: Total / Healthy (last &lt; 400) / Failing (last ≥ 400) / Untested.</li>
+          <li>All webhooks table: owner, URL, subscribed events, last HTTP status (color-coded), last delivery, last error.</li>
+        </ul>
+
+        <h3 className="text-sm font-semibold mt-3">/admin/system — Ops + config</h3>
+        <ul className="list-disc pl-6 text-sm space-y-1">
+          <li><strong>Database card</strong> — driver (SQLite vs Turso), file size, events 7d vs prev-7d growth comparison, row counts across 12 tables.</li>
+          <li><strong>Quota usage today</strong> (rolling 24h) — top 20 users with sent/limit progress bars, green/amber/red at 70%/90% of their effective limit.</li>
+          <li><strong>Global blocklist editor</strong> — add/remove <Code>userId=null</Code> blocklist entries that apply to every user. Dedupes on add; audit-logged.</li>
+          <li><strong>Active campaigns</strong> — campaign, owner, status, enrollment counts (active/replied/completed/stopped). Hides archived.</li>
+          <li>Admins, Runtime configuration, Bulk import contacts, Retention "Purge now" — all the original cards moved here.</li>
+        </ul>
+
+        <h3 className="text-sm font-semibold mt-3">/admin/broadcast — Site-wide announcement</h3>
+        <ul className="list-disc pl-6 text-sm space-y-1">
+          <li>Post a 280-char message that renders as an amber banner at the top of every signed-in page until cleared. Persisted as the latest <Code>admin.broadcast</Code> audit row.</li>
+          <li>Empty submission clears the broadcast. Layout reads it via an <Code>unstable_cache(['current-broadcast'], &hellip;)</Code> wrapper that <Code>broadcastAction</Code> invalidates by tag — no per-request DB hit on most page loads.</li>
+        </ul>
+
+        <p className="text-sm mt-4">Other admin powers from anywhere in the app:</p>
+        <ul className="list-disc pl-6 text-sm space-y-1">
+          <li>If <Code>ALLOW_DEV_SIGNIN=true</Code> on a deployed env, a sticky <strong>red banner</strong> rides on top of every page so it can't be forgotten.</li>
+          <li><Code>/api/backup</Code> downloads the whole DB (admin-only, audit-logged). Streams the file with <Code>createReadStream</Code> so large DBs don't OOM the Lambda; returns 501 on Turso/libSQL deployments since there's no local file.</li>
+          <li><Link href="/diagnostic" className="underline">/diagnostic</Link> — admin-gated. Probes SMTP / AI / OAuth / MX / SPF / DMARC + CRON_SECRET / libsql / ADMIN_EMAILS.</li>
+          <li><Link href="/audit?scope=all" className="underline">/audit?scope=all</Link> — cross-user audit log. Every admin write writes a row automatically.</li>
+          <li>All admin write actions are rate-limited 60/min/admin to cap accidental loops + Groq spend.</li>
+          <li>Per-draft / per-row / per-step <strong>AI Improve</strong> Sparkles buttons at <Link href="/drafts" className="underline">/drafts</Link>, <Link href="/schedule" className="underline">/schedule</Link>, and /campaigns — admin-only, audit-logged.</li>
         </ul>
       </Section>
 

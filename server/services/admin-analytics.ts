@@ -357,11 +357,20 @@ export async function recentAdminActions(limit = 20) {
 }
 
 // ─── A17: Broadcast message (stored as latest admin.broadcast audit row) ─
-export async function currentBroadcast(): Promise<{ message: string; at: string } | null> {
-  const [row] = await db.select().from(auditLog)
-    .where(eq(auditLog.action, 'admin.broadcast'))
-    .orderBy(desc(auditLog.id))
-    .limit(1)
-  if (!row || !row.detail) return null
-  return { message: row.detail, at: row.createdAt.toISOString() }
-}
+// Cached by tag — the layout reads this on every (app) page render for
+// every signed-in user. broadcastAction calls revalidateTag('broadcast')
+// to invalidate. Without the cache, every navigation does a DB hit.
+import { unstable_cache } from 'next/cache'
+
+export const currentBroadcast = unstable_cache(
+  async (): Promise<{ message: string; at: string } | null> => {
+    const [row] = await db.select().from(auditLog)
+      .where(eq(auditLog.action, 'admin.broadcast'))
+      .orderBy(desc(auditLog.id))
+      .limit(1)
+    if (!row || !row.detail) return null
+    return { message: row.detail, at: row.createdAt.toISOString() }
+  },
+  ['current-broadcast'],
+  { tags: ['broadcast'], revalidate: 300 },
+)

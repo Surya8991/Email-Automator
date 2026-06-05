@@ -1,6 +1,43 @@
 # Admin & Feature Roadmap
 
-> Last updated 2026-06-01. Pick items off as priorities shift. Items already shipped this session were removed.
+> Last updated 2026-06-05. Pick items off as priorities shift. Items already shipped this session were removed.
+
+## Shipped in the 2026-06-05 admin overhaul
+
+The single-page /admin grew past 500 lines and the cross-user observability gaps were real — both got addressed.
+
+**Sub-route split (was deferred)**
+- `/admin` is now 6 tabs: Overview / Users / Queue / Webhooks / System / Broadcast. `app/(app)/admin/layout.tsx` owns the requireAdmin gate; individual pages don't re-check.
+
+**Observability**
+- Overview: KPI cards + Queue snapshot + 30-day cross-user send chart + Top-10 senders + Failure heatmap (7×24 IST) + last 10 admin actions.
+- Queue tab: live queue stats, active queue (50), recent failures (20), **Recover stuck** button (scoped to ids seen at SELECT, accurate count).
+- Webhooks tab: per-webhook last status, last delivery, last error.
+
+**User management**
+- Per-row drill-down drawer (Eye) — 30-day activity + inventory + settings + last 10 sends with status badges.
+- Per-user **DAILY_SEND_LIMIT_OVERRIDE** (Key icon) — scheduler-tick reads it before falling back to env.
+- **Impersonation** (UserCog) — 1h session, REVOKES the admin's current session row so a leaked old cookie can't be replayed, refuses admin-to-admin (audit-trail laundering risk), audit-logged with actor + target.
+
+**System**
+- DB size + table row counts + events 7d-vs-prev-7d growth.
+- Quota usage today (rolling 24h) with green/amber/red progress bars at 70/90% of the user's effective limit.
+- Global blocklist editor (`userId=null` entries) with dedupe-on-add.
+- Active campaigns table (owner, status, enrollment counts).
+
+**Broadcast**
+- `/admin/broadcast` — 280-char banner that renders site-wide. Stored as latest `admin.broadcast` audit row; layout reads via `unstable_cache(['current-broadcast'], …)` and `broadcastAction` invalidates by tag (`revalidateTag('broadcast')`). Empty submission clears it.
+
+**Code-review refactors (R1-R3)**
+- `lib/csv-stream.ts` — shared `csvCell` + `streamCsv` + `csvResponse`; audit + users CSV routes refactored.
+- `components/ai-improve-picker.tsx` — reusable tone-picker for the next call site.
+- `lib/rate-limit.ts` — loud one-shot warning when running on Vercel without `REDIS_URL`.
+
+**Code-review bug fixes layered on top of the admin overhaul**
+- Impersonation: revoke admin's current session row before issuing the impersonation cookie (closes replay window) + refuse admin-to-admin.
+- Global blocklist: pre-check existing row before insert (dedupe).
+- Recover-stuck: scope UPDATE to ids seen at SELECT so reported count matches actual.
+- `currentBroadcast` wrapped in `unstable_cache` so the layout doesn't query DB per page render.
 
 ## Recently shipped (for reference — do not re-implement)
 
@@ -29,10 +66,11 @@
 
 ## Admin enhancements (still deferred)
 
-- **Admin impersonation** — sign in as user X for support debugging, audited via `auditLog`. Security-sensitive; needs a dedicated `/admin/impersonate` route + cookie scoping. Defer until a real support need exists.
-- **Per-user template / contact drill-down** — click a row in `/admin`'s user table → see their templates, recent drafts, last-sent timestamps. Helps debug "why isn't my campaign sending". Medium build.
-- **Send-rate quotas per user** — replace the global `DAILY_SEND_LIMIT` with a per-user override stored in a new `user_quotas` table. Needed once the instance has paying tiers.
-- **`/admin` sub-routes** — split into `/admin/users`, `/admin/system`, `/admin/audit-all`, `/admin/imports` once the page grows past ~500 lines. Currently still tolerable.
+- **Audit trail for impersonation activity** — currently `admin.impersonate` logs the START of the session, but every subsequent action while impersonating is recorded under the TARGET user's id with no impersonator marker. Add an `ea_impersonator` cookie set at impersonation start, and have `logAdmin` (and a parallel `logUser` helper) read it to attach the impersonator id to every audit row. Compliance + forensics.
+- **AI Improve picker — adopt the shared `<AiImprovePicker>` component** in drafts/schedule/campaigns. The component is shipped; the 3 call sites still inline their own tone-picker state + JSX. Low-risk dedupe.
+- **Per-user template / contact drill-down extension** — the drawer already shows last 10 sends + 30-day activity. Extend with: their templates list, active campaigns names, recent drafts. Helps debug "why isn't my campaign sending" without impersonating.
+- **Send-rate quotas in a dedicated `user_quotas` table** — the current `DAILY_SEND_LIMIT_OVERRIDE` setting works fine for now, but a real `user_quotas(userId, daily, weekly, monthly, plan_tier)` table is the right shape once the instance has paying tiers.
+- **Redis-backed rate limiter** — `lib/rate-limit.ts` now warns when running on Vercel with no `REDIS_URL` but doesn't enforce. Wire `@upstash/ratelimit` for the security-sensitive call sites (dev-signin brute-force, AI 20/min, v1 API 60/min) before relying on these limits at scale.
 
 ## Workbook Phase B features (from the Universal Job Tracker xlsx)
 

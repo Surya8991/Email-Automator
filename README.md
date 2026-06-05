@@ -2,7 +2,8 @@
 
 Self-hosted email outreach. Templates with variables, multi-step campaigns,
 open/click tracking, AI-assisted writing (Groq), per-user multi-tenant
-isolation, audit log, JSON API + webhooks.
+isolation, audit log, JSON API + webhooks, and a 6-tab admin dashboard
+(overview · users · queue · webhooks · system · broadcast) for operators.
 
 **Stack:** Next.js 16 · React 19 · TypeScript strict · Tailwind / shadcn ·
 Drizzle ORM on SQLite (better-sqlite3 local / Turso on Vercel) · Auth.js v5

@@ -1,10 +1,40 @@
 # TODO — Email-Automator
 
-> Captured 2026-06-01 from the full code review + feature backlog. Each
-> item names what to do, where it lives, and rough effort. Severity tags
-> match the code review: 🟥 Critical, 🟧 High, 🟨 Medium, 🟦 Low, 🟩
-> Architecture. Anything tagged ✅ at the top is already shipped this
-> session — left in for context.
+> Captured 2026-06-01, refreshed 2026-06-05. Each item names what to do,
+> where it lives, and rough effort. Severity tags match the code review:
+> 🟥 Critical, 🟧 High, 🟨 Medium, 🟦 Low, 🟩 Architecture. Anything
+> tagged ✅ is already shipped — left in for context.
+
+## ✅ Done 2026-06-05 admin overhaul + deep code review
+
+**Critical / High bug fixes from the deep review:**
+- Campaign `emailLog` row now inserted as 'Sending', updated to 'Sent' only after `sendMail` succeeds; catch updates to 'Failed' (no more phantom Sent records on SMTP failure).
+- Campaign sends respect daily limit, blocklist, per-recipient throttle, and per-domain cap (all four were missing from section 2).
+- Campaign enrollments query joins through `campaigns` on userId — `BATCH_PER_USER` now meaningful per user (was global, starving low-volume users).
+- `stopOnReply` enforced — scheduler checks `contacts.emailStatus.startsWith('Replied')`; `checkRepliesAction` marks active enrollments `'replied'` so the gate fires on the next tick.
+- Daily-limit window now rolling 24h (was `setHours(0,0,0,0)` = UTC midnight; broke for IST users by 5.5h).
+- SSE `cancel()` calls cleanup via closure (was no-op — leaked dead controllers in the SSE registry on every disconnect).
+- `backup/route.ts` streams via `createReadStream` and returns 501 on Turso/libSQL (was OOM-prone + silently 404 on remote DB).
+- `LEAK_PATTERNS` in `action-error.ts` catches POSIX syscall codes (`ENOENT`, `ECONNREFUSED`, `ETIMEDOUT`) and container paths (`/proc/`, `/app/`, …).
+- `cron/tick` logs loud `console.error` in production when `CRON_SECRET` is unset.
+
+**Admin dashboard overhaul:**
+- `/admin` split into 6 tabs (Overview / Users / Queue / Webhooks / System / Broadcast); `layout.tsx` owns the `requireAdmin()` gate.
+- Per-user `DAILY_SEND_LIMIT_OVERRIDE` setting honored by scheduler-tick.
+- User drill-down drawer (30-day activity + inventory + settings + last 10 sends).
+- Impersonation that REVOKES the admin's current session row before issuing the new cookie + refuses admin-to-admin.
+- Global blocklist editor with dedupe-on-add.
+- Broadcast banner cached via `unstable_cache(['current-broadcast'], …)` + tag-invalidated on update.
+- Queue health page with **Recover stuck** button (scoped to ids seen at SELECT).
+- Webhook delivery health page.
+- System tab with DB size, table row counts, quota usage progress bars, active-campaign overview.
+
+**Code-review refactors:**
+- `lib/csv-stream.ts` — shared `csvCell` + `streamCsv` + `csvResponse`.
+- `components/ai-improve-picker.tsx` — reusable tone-picker (3 call sites still inline; future cleanup).
+- `lib/rate-limit.ts` — loud one-shot warning when on Vercel without `REDIS_URL`.
+- `lib/crypto.ts` — memoised key derivation (no more SHA-256 per encrypt/decrypt).
+- `server/actions/admin.ts` — exported `adminLimit`; campaigns + schedule reuse instead of inlining.
 
 ## ✅ Already done this session (for reference)
 

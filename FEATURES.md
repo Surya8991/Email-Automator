@@ -1,7 +1,7 @@
 # Features
 
 Everything Email Automator currently does, grouped by section.
-Last refreshed: 2026-06-02.
+Last refreshed: 2026-06-05.
 
 > If you're new here, start with the [Getting Started](README.md#getting-started) section of the README, then come back to this file to discover what's available.
 
@@ -169,20 +169,56 @@ Last refreshed: 2026-06-02.
 
 ## Admin
 
-- **Admin badge** in the topbar whenever the signed-in email is in `ADMIN_EMAILS`.
-- **System-wide stats card** — instance-wide totals: Users, Contacts, Templates, Drafts pending, Sent (30d), Active campaigns. Fired in parallel; non-`admin` users never see the card.
-- **Runtime configuration card** — env values that matter to instance operators: `DAILY_SEND_LIMIT`, `TIMEZONE`, `SMTP_HOST`, `EMAIL_FROM`, `ALLOW_DEV_SIGNIN` (red when `true`), `CRON_SECRET` / `GROQ_API_KEY` / `GOOGLE_CLIENT_ID` shown as set/unset only (never the raw value), `DATABASE_URL` shape (libsql vs file).
-- **Bulk import contacts card** — admin-only XLSX/CSV upload with SSE progress bar. Same parser as the CLI; tags imported rows `crm-import,job-tracker`. Idempotent (skips on (name + email) match).
-- **Search + status filter** — search by email/name, filter All / Active / Suspended / Admins.
-- **User table** — email, name, contacts/drafts/events counts, joined-at. Counts use 3 grouped queries instead of the prior N+1 loop.
-- **Suspend / Resume** any non-admin user — soft-pause their worker tick (queue stays intact).
-- **Delete user** — cascades to all their data.
-- **Audit logging** — every admin write action (delete user, suspend/resume, bulk suspend/resume, contact import, AI Improve draft/scheduled/campaign template, retention purge, backup download, users export) writes a row to `auditLog` so the cross-user audit view captures the trail.
-- **Bulk suspend / resume** — per-page checkbox column with select-all/indeterminate state. Skips admins + the caller themselves with a clear "skipped" count. Audit-logged.
-- **Streamed users CSV** — `Download` button on the user table hits `/api/admin/users/export`. Pages 1000 rows at a time so the user table can grow past 100k without OOMing.
-- **Retention card** — manual "Purge now" runs `purgeOldEvents` + `purgeOldAudit` across every user immediately (bypassing the daily gate). Scheduler-tick runs the same purge once per 24 h per user by default (gated by `LAST_PURGE_AT` setting), so admins rarely need the button.
-- **Sticky red banner** — when `ALLOW_DEV_SIGNIN=true` on a deployed env (Vercel or NODE_ENV=production), every (app) page renders a top-of-page banner so the operator can't ship it accidentally.
-- **Rate-limited admin writes** — 60/min/admin per operation, capping accidental loops + Groq spend on AI Improve actions.
+The admin surface lives at `/admin`, split into **6 tabs** so the page doesn't become a scroll marathon. Every page is gated by `requireAdmin()`; every write is audit-logged + rate-limited (60/min/admin).
+
+### `/admin` — Overview
+- **Six KPI cards** — Users, Contacts, Templates, Drafts pending, Sent (30d), Active campaigns.
+- **Queue snapshot** — Scheduled / Sending / Retrying / **Stuck (>10m)** / Sent 24h / Failed 24h / Cancelled 24h.
+- **30-day send activity chart** — instance-wide sent/open/click/reply/bounce series across all users (Recharts, lazy-loaded).
+- **Top senders leaderboard** — top-10 users by sends in the last 30 days.
+- **Failure heatmap** — 7×24 grid of failed sends by IST hour, surfaces SMTP throttling windows.
+- **Recent admin actions** — last 10 `admin.*` audit rows inline with a link to the full `/audit?scope=all` view.
+
+### `/admin/users` — User management
+- **Search + status filter** — All / Active / Suspended / Admins.
+- **User table** — email, name, contacts/drafts/events counts, **Quota/day** column showing per-user override or "default", joined-at. Counts via 3 grouped queries instead of N+1.
+- **Per-row drill-down drawer** (Eye icon) — slide-out panel with 30-day activity (sent/opens/clicks/replies/bounces/queued), inventory, settings (quota, throttle, domain caps, last-sent), and the last 10 sends with status badges.
+- **Per-user quota override** (Key icon) — prompt sets `DAILY_SEND_LIMIT_OVERRIDE` in `settings`; scheduler-tick honors it instead of the env default. Empty/0 clears the override.
+- **Impersonate** (UserCog icon) — mints a fresh 1h session for the target user, **revokes the admin's current session row** (so a leaked old cookie can't be replayed), and replaces the cookie. Refuses to impersonate another admin so the audit trail can't be laundered. Audit-logged with actor + target. Admin signs out and back in to recover their admin session.
+- **Suspend / Resume** any non-admin user — soft-pauses their worker tick (queue stays intact).
+- **Bulk Suspend / Resume** — checkbox column with select-all/indeterminate state. Skips admins + caller. Audit-logged.
+- **Delete user** — cascades to all their data via FK.
+- **Streamed users CSV** — `Download` button hits `/api/admin/users/export`. Pages 1000 rows at a time; safe past 100k users.
+
+### `/admin/queue` — Queue health
+- **Queue stats** — counts across all users with color-coded tones (stuck/failed in red, retrying in amber).
+- **Active send queue** (next 50) — when, user, recipient, subject, status badge.
+- **Recent failures** (last 20) — when, user, recipient, attempts, reason. Green "✓ No failures" when clean.
+- **Recover stuck button** — flips any `Sending`-status row older than 10 min back to `Scheduled` so the next tick picks it up. Scoped to the exact ids seen at SELECT time so the reported count is accurate. Audit-logged.
+
+### `/admin/webhooks` — Webhook delivery health
+- **Health stats** — Total / Healthy (last < 400) / Failing (last ≥ 400) / Untested.
+- **All webhooks table** — owner, URL, subscribed events, last HTTP status (color-coded), last delivery, last error.
+
+### `/admin/system` — Operational config + tools
+- **Database card** — driver (SQLite vs Turso/libSQL), file size (or "remote"), events 7d/prev-7d growth comparison, row counts across 12 tables.
+- **Quota usage today** (rolling 24h) — top 20 users with sent/limit progress bars, color-coded green/amber/red at 70%/90% of their limit.
+- **Global blocklist editor** — add/remove `null`-userId blocklist entries (apply to every user). Dedupes on add. Audit-logged.
+- **Active campaigns table** — campaign, owner, status, enrollment counts (active/replied/completed/stopped). Hides archived.
+- **Admins card** — chips for every email in `ADMIN_EMAILS`.
+- **Runtime configuration card** — env values: `DAILY_SEND_LIMIT`, `TIMEZONE`, `SMTP_HOST`, `EMAIL_FROM`, `ALLOW_DEV_SIGNIN` (red when `true`), `CRON_SECRET` / `GROQ_API_KEY` / `GOOGLE_CLIENT_ID` / `ENCRYPTION_KEY` shown as set/unset (never raw), `DATABASE_URL` shape.
+- **Bulk import contacts card** — admin-only XLSX/CSV upload with SSE progress. Tags rows `crm-import,job-tracker`. Idempotent (name+email dedupe).
+- **Retention card** — manual "Purge now" runs `purgeOldEvents` + `purgeOldAudit` across every user immediately (bypasses the daily gate). Stamps `LAST_PURGE_AT` so the scheduler doesn't re-purge on its next tick.
+
+### `/admin/broadcast` — Site-wide announcement
+- 280-char message posts as an amber banner at the top of every signed-in page until cleared. Persisted as the latest `admin.broadcast` audit row; layout reads it via an `unstable_cache(['broadcast'], …)` wrapper that `broadcastAction` invalidates by tag. Empty submission clears it.
+
+### Audit logging
+- Every admin write action (delete user, suspend/resume, bulk suspend/resume, contact import, AI Improve draft/scheduled/campaign template, **set/clear quota**, **impersonate**, **global block add/remove**, **broadcast**, **recover stuck**, retention purge, backup download, users export) writes a row to `auditLog` so the cross-user audit view captures the trail.
+
+### Sticky banners
+- **Red** — when `ALLOW_DEV_SIGNIN=true` on a deployed env. Operator can't miss it.
+- **Amber** — when an admin has posted a broadcast.
 
 ### `npm run import:admin-contacts -- <file>`
 

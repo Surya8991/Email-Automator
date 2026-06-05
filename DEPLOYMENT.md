@@ -153,6 +153,36 @@ check the required scope on every call — keys without a scope return 403.
 Keys created before migration `0004_api_keys_scopes` keep working as
 full-access (empty scopes = legacy back-compat).
 
+### Admin dashboard
+
+The admin surface lives at `/admin` with 6 tabs: **Overview** (KPIs, queue
+snapshot, top-senders leaderboard, failure heatmap), **Users** (per-user
+quota override, impersonation, drill-down drawer), **Queue** (active queue
+view + recover-stuck button), **Webhooks** (per-webhook delivery health),
+**System** (DB size, table row counts, quota usage, global blocklist,
+active campaigns, runtime config, retention purge), and **Broadcast**
+(post a banner across every signed-in page).
+
+Every admin write action is rate-limited 60/min/admin and audit-logged.
+Impersonation revokes the admin's current session row when entering so a
+leaked old cookie can't be replayed; admin-to-admin impersonation is
+refused. Admin signs out and back in to recover their own session.
+
+### Per-user quota override
+
+The global `DAILY_SEND_LIMIT` env var is the default. Admins can override
+on a per-user basis from `/admin/users` → key icon → set a number;
+scheduler-tick honors `settings.DAILY_SEND_LIMIT_OVERRIDE` before falling
+back to env. Empty / 0 clears the override.
+
+### Rate limiter on multi-instance deploys
+
+`lib/rate-limit.ts` is an in-memory sliding-window limiter. On Vercel, each
+Lambda has its own bucket — the effective limit is `max × instance_count`.
+A one-shot warning logs to stderr on first use when `VERCEL=1` and no
+`REDIS_URL` is set. Swap to a Redis-backed implementation before relying
+on these for security at scale.
+
 ### Push
 
 ```bash

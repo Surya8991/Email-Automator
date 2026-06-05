@@ -100,6 +100,33 @@ The local dev cookie is set by `POST /api/dev-signin {email}` when
     `AUDIT_RETENTION_DAYS` (default 365) are per-user settings. Scheduler-tick
     calls `maybePurgeForUser` after every user-tick, gated to once per 24 h.
     Don't add a new unbounded growth table without a retention path.
+20. **Admin sub-routes** — `/admin` is split into 6 tab pages
+    (`/admin`, `/admin/users`, `/admin/queue`, `/admin/webhooks`,
+    `/admin/system`, `/admin/broadcast`). The `app/(app)/admin/layout.tsx`
+    wraps every tab with `requireAdmin()` so individual pages don't need
+    to repeat the gate. Cross-user data lives in
+    [server/services/admin-analytics.ts](server/services/admin-analytics.ts) —
+    every export there is admin-only by convention, never call it from a
+    per-user surface.
+21. **Per-user daily-limit override** — `settings.DAILY_SEND_LIMIT_OVERRIDE`
+    (set from /admin/users via `setUserQuotaAction`). Scheduler-tick reads it
+    BEFORE falling back to `env.DAILY_SEND_LIMIT`. Don't bypass — the
+    override is the single source of truth for that user's effective limit.
+22. **Impersonation invariants** —
+    [`impersonateUserAction`](server/actions/admin.ts) MUST (a) refuse if
+    the target is in `adminEmails` (admin-to-admin laundering risk), and
+    (b) DELETE the admin's current `sessions` row before issuing the
+    impersonation cookie so a captured old cookie value can't be replayed.
+    Audit-logged with both actor and target emails.
+23. **Global blocklist dedupe** — `addGlobalBlockAction` pre-checks for
+    an existing `(userId=NULL, pattern, type)` row and returns
+    `{ ok: true, duplicate: true }` instead of inserting. There is no
+    unique constraint on `blocklist`, so the application-level check is
+    load-bearing.
+24. **Broadcast cache** — the layout calls `currentBroadcast()` on every
+    (app) page render. It's wrapped in `unstable_cache(['current-broadcast'], …, { tags: ['broadcast'] })`;
+    `broadcastAction` calls `revalidateTag('broadcast')`. Don't add a new
+    layout-level admin read without the same treatment.
 
 ## Architecture
 
