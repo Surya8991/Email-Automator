@@ -3,6 +3,7 @@ import { listCampaigns } from '@/server/services/campaigns'
 import { Card, CardContent } from '@/components/ui/card'
 import { Workflow } from 'lucide-react'
 import { PageHeader } from '@/components/ui/page-header'
+import { SectionHelp } from '@/components/section-help'
 import { EmptyState } from '@/components/ui/empty-state'
 import { NewCampaignButton } from './new-campaign-button'
 import { CampaignsList } from './campaigns-list'
@@ -24,6 +25,21 @@ export default async function CampaignsPage() {
           { label: 'enrolled', value: enrolled, tone: enrolled > 0 ? 'info' : 'default' },
         ]}
         actions={<NewCampaignButton />}
+        help={
+          <SectionHelp
+            title="Campaigns"
+            what={<>Multi-step email sequences. Step 1 fires immediately on enrollment, each later step waits its <em>delay (hours)</em> from the prior send. The worker process advances enrollments every 30 seconds.</>}
+            actions={[
+              { label: 'Enroll', hint: 'Bulk-enroll contacts from /contacts or single-add from the campaign detail.' },
+              { label: 'A/B variants', hint: 'Per step: weighted template variants. Routing is hash-deterministic per contact.' },
+              { label: 'Stop on reply', hint: 'Default-on per step. A detected reply marks the enrollment Replied and the rest of the sequence is skipped.' },
+            ]}
+            pitfalls={[
+              { label: 'Status confusion', hint: 'Draft / running / paused. A paused campaign holds new enrollments but does not stop in-flight ones — pause + complete to drain.' },
+            ]}
+            guideAnchor="campaigns"
+          />
+        }
       />
 
       {list.length === 0 ? (

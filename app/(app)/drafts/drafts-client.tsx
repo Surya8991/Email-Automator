@@ -24,6 +24,7 @@ const PAGE_SIZE_OPTIONS = [50, 100, 500, 1000]
 
 interface DraftsClientProps {
   rows: Draft[]
+  /** Kept for prop-compat; AI Improve was originally admin-only. Lifted 2026-06-05. */
   isAdmin?: boolean
   page?: number
   pages?: number
@@ -33,7 +34,7 @@ interface DraftsClientProps {
 }
 
 export function DraftsClient({
-  rows, isAdmin = false,
+  rows,
   page = 1, pages = 1, pageSize = 50, total = 0,
   templates = [],
 }: DraftsClientProps) {
@@ -235,10 +236,10 @@ export function DraftsClient({
                 {/* Admin-only AI Improve trigger — opens an inline tone
                     picker. Hidden mid-edit because the rewrite would
                     overwrite unsaved changes. */}
-                {isAdmin && !isEditing ? (
+                {!isEditing ? (
                   <div className="relative">
                     <Button variant="ghost" size="icon" aria-label="AI Improve" disabled={pending || aiBusy === d.id}
-                      title="AI Improve (admin)"
+                      title="AI Improve — rewrite in chosen tone"
                       onClick={() => setAiRowId(aiRowId === d.id ? null : d.id)}>
                       <Sparkles className={`h-4 w-4 ${aiBusy === d.id ? 'animate-pulse text-primary' : ''}`} />
                     </Button>

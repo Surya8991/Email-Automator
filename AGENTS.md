@@ -3,6 +3,13 @@
 Guide for AI coding agents (Claude Code, Cursor, Aider, Codex, etc.) working on
 this repo. Humans should read [README.md](README.md) and [DEPLOYMENT.md](DEPLOYMENT.md).
 
+## AI accuracy & generation patterns (added 2026-06-05)
+
+- **`server/services/ai-generate.ts`** — entry point for `kind = jd | post | url | text`. URL inputs are fetched via `fetchForAi()` which enforces HTTPS in prod, blocks private IPs / loopback / link-local hostnames, caps body at 1 MB, times out at 5 s. The result text is `stripHtml`-cleaned before reaching the prompt.
+- **`buildMessages(brief, sourceText, brandVoice)`** is the single source of truth for the AI prompt. When you add new quality knobs (recipient field, output format, persona), extend that function — never inline new system text at the call site. Unit tests in `test/unit/ai-generate.test.ts` lock the system/user split.
+- **Brand voice** is `AI_VOICE_SAMPLES` (user setting, 2,400-char cap). Read once via `getSetting()` in any service that calls Groq.
+- **SectionHelp** is the per-page `?` button. Author content inline (it must be specific, not generic). Pattern: `help={<SectionHelp title="…" what={…} actions={…} pitfalls={…} guideAnchor="…" />}` passed to `PageHeader`.
+
 ## Page chrome conventions (added 2026-06-05)
 
 Every app page uses two shared components instead of bespoke `<h1>` blocks

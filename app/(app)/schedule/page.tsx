@@ -3,6 +3,7 @@ import { requireUser } from '@/auth'
 import { listScheduled } from '@/server/services/schedule'
 import { Card, CardContent } from '@/components/ui/card'
 import { PageHeader } from '@/components/ui/page-header'
+import { SectionHelp } from '@/components/section-help'
 import { ScheduleClient } from './schedule-client'
 
 export default async function SchedulePage() {
@@ -19,6 +20,21 @@ export default async function SchedulePage() {
           { label: 'queued', value: queue.length, tone: queue.length > 0 ? 'info' : 'default' },
           { label: 'retrying', value: retrying, tone: retrying > 0 ? 'warn' : 'default' },
         ]}
+        help={
+          <SectionHelp
+            title="Schedule"
+            what={<>One-shot bulk-send queue. Pick a start time + a 3–5 minute random stagger and the scheduler tick fires the rows out over the window. Atomic claim guarantees a single send per row even with concurrent workers.</>}
+            actions={[
+              { label: 'Preview', hint: 'Shows the first 20 rows + the projected first/last send time. No DB writes.' },
+              { label: 'Enqueue', hint: 'Commits the queue with your stagger settings. The tick takes it from there.' },
+              { label: 'Cancel', hint: 'Cancel one row, the visible selection, or all pending.' },
+            ]}
+            pitfalls={[
+              { label: 'Stuck Retrying', hint: 'A row stuck >2 h in Retrying is recovered to Failed automatically on the next tick.' },
+            ]}
+            guideAnchor="schedule"
+          />
+        }
       />
       <Card><CardContent className="p-0"><ScheduleClient
         queueCount={queue.length}

@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Plus, Building2, ExternalLink } from 'lucide-react'
 import { PageHeader } from '@/components/ui/page-header'
+import { SectionHelp } from '@/components/section-help'
 import { EmptyState } from '@/components/ui/empty-state'
 
 export default async function CompaniesPage() {
@@ -31,6 +32,19 @@ export default async function CompaniesPage() {
           <Button asChild>
             <Link href="/companies/new"><Plus className="mr-1 h-4 w-4" /> Add company</Link>
           </Button>
+        }
+        help={
+          <SectionHelp
+            title="Companies"
+            what={<>Per-company research records: industry, HQ, size, tech stack, salary range, notes. Linked to /contacts by name match — when you open a contact, the matched company shows in the sidebar.</>}
+            actions={[
+              { label: 'Add company', hint: 'AI fill button enriches from just the name (needs GROQ_API_KEY).' },
+            ]}
+            pitfalls={[
+              { label: 'Name match', hint: 'Linking is by exact (case-insensitive) company name. Spelling drift between contact CSV and the company record breaks the auto-surface.' },
+            ]}
+            guideAnchor="contacts"
+          />
         }
       />
 

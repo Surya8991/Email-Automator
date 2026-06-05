@@ -7,6 +7,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Download, ScrollText } from 'lucide-react'
 import { PageHeader } from '@/components/ui/page-header'
+import { SectionHelp } from '@/components/section-help'
 import { EmptyState } from '@/components/ui/empty-state'
 import { formatDate, APP_TZ } from '@/lib/utils'
 import { getSetting } from '@/server/services/settings'
@@ -61,6 +62,17 @@ export default async function AuditPage(props: { searchParams: Promise<{ scope?:
           ...(adminAll ? [{ label: 'scope' as const, value: 'all users', tone: 'warn' as const }] : []),
           ...(onlyImpersonations ? [{ label: 'filter' as const, value: 'impersonations', tone: 'info' as const }] : []),
         ]}
+        help={
+          <SectionHelp
+            title="Audit log"
+            what={<>Every server-side action that touches data appends a row here: saves, sends, schedules, deletes, AI calls, impersonations. Tamper-evident in the sense that the app never updates a row after insert — only appends.</>}
+            actions={[
+              { label: 'Export CSV', hint: 'Full dump for offline analysis. Admins get all-users; users get their own scope.' },
+              { label: 'Filter Impersonations', hint: 'Admins only — surface rows recorded while an admin was impersonating someone.' },
+            ]}
+            guideAnchor="settings"
+          />
+        }
         actions={<div className="flex flex-wrap items-center gap-2">
           {u.isAdmin ? (
             <>

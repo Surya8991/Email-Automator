@@ -10,6 +10,7 @@ import { parseCustomFieldKeys } from '@/lib/custom-fields'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PageHeader } from '@/components/ui/page-header'
+import { SectionHelp } from '@/components/section-help'
 import { ContactsTable } from './contacts-table'
 import { AddContactDialog } from './add-contact-dialog'
 import { ContactsToolbar } from './contacts-toolbar'
@@ -70,6 +71,22 @@ export default async function ContactsPage(props: { searchParams: Promise<{ page
           <ContactsToolbar />
           <AddContactDialog customFieldKeys={customFieldKeys} />
         </>}
+        help={
+          <SectionHelp
+            title="Contacts"
+            what={<>The directory of every person you might email. Each row carries a name, email, company, role, plus optional tags, platform, and custom fields. The contacts table feeds both the bulk-draft and campaign-enrollment flows.</>}
+            actions={[
+              { label: 'Search / filter', hint: 'By name / company / email / role · tag · status · company · location · platform. Filters compose; URL-persisted.' },
+              { label: 'Import CSV / Excel', hint: 'Bad rows surface a collapsible error report — not silently dropped.' },
+              { label: 'Bulk actions', hint: 'Create drafts · Schedule · Enroll in campaign · Add/Remove tag · Block · Delete. Select-all is per-page.' },
+              { label: 'Dedupe', hint: 'Removes rows where both name + email match an existing row (case-insensitive). Same email, different name is kept (shared inboxes).' },
+            ]}
+            pitfalls={[
+              { label: 'Blocked vs deleted', hint: 'Bulk-Block sets emailStatus=BLOCKED; the default list hides it. Removing from /blocklist restores it at the bottom.' },
+            ]}
+            guideAnchor="contacts"
+          />
+        }
       />
       {/* Follow-up reminders — buckets of active contacts by last-send recency. */}
       {(followUps.overdue + followUps.soon + followUps.onTrack + followUps.neverSent) > 0 ? (

@@ -109,3 +109,67 @@
   transform: translateY(-1px);
   box-shadow: 0 6px 14px -8px hsl(var(--foreground) / 0.18);
 }
+
+/* ── Design lift utilities (2026-06-05) ───────────────────────────── */
+
+/* Gradient halo behind PageHeader icons — gives the chrome depth
+   without changing layout. Sits on top of a soft border ring. */
+.ea-icon-halo {
+  position: relative;
+}
+.ea-icon-halo::before {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border-radius: 1rem;
+  background: radial-gradient(closest-side, hsl(var(--primary) / 0.18), transparent 70%);
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* Stat-card accent stripe on the left edge. Pair with bg-card. */
+.ea-stat-stripe {
+  position: relative;
+  overflow: hidden;
+}
+.ea-stat-stripe::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(180deg, hsl(var(--primary)), hsl(var(--primary) / 0.4));
+}
+
+/* Subtle gradient hairline divider — replaces flat borders between
+   page sections for a touch of polish. */
+.ea-hairline {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, hsl(var(--border)) 20%, hsl(var(--border)) 80%, transparent);
+}
+
+/* Animated count-up. The number is rendered server-side as a static
+   value; the class adds a brief slide-in to draw the eye. */
+@keyframes ea-count-up {
+  from { opacity: 0; transform: translateY(4px); filter: blur(2px); }
+  to   { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+.ea-count-up { animation: ea-count-up 360ms ease-out both; }
+
+/* Shimmer accent on hero / dashboard cards. Loops subtly so it doesn't
+   distract. Respects prefers-reduced-motion via the global @media block. */
+@keyframes ea-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.ea-shimmer {
+  background: linear-gradient(
+    100deg,
+    transparent 40%,
+    hsl(var(--primary) / 0.08) 50%,
+    transparent 60%
+  ) hsl(var(--card));
+  background-size: 200% 100%;
+  animation: ea-shimmer 6s linear infinite;
+}

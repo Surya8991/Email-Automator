@@ -8,6 +8,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/com
 import { Button } from '@/components/ui/button'
 import { Users, Send, MailCheck, MousePointerClick, Reply, AlertTriangle, Sparkles, Upload, FileText, Activity, Clock, LayoutDashboard } from 'lucide-react'
 import { PageHeader } from '@/components/ui/page-header'
+import { SectionHelp } from '@/components/section-help'
 import { formatDate, APP_TZ } from '@/lib/utils'
 import { getSetting } from '@/server/services/settings'
 
@@ -72,6 +73,13 @@ export default async function DashboardPage() {
           { label: 'opens', value: k.opens, tone: 'default' },
           { label: 'replies', value: k.replies, tone: k.replies > 0 ? 'success' : 'default' },
         ]}
+        help={
+          <SectionHelp
+            title="Dashboard"
+            what={<>The 30-day at-a-glance. Sent / opens / clicks / replies + a quick activity feed. Empty on a fresh account — the &quot;Get started in 3 steps&quot; card walks you through the first send.</>}
+            guideAnchor="quick-start"
+          />
+        }
       />
 
       {empty ? (

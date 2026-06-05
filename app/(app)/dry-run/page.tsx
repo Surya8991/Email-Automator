@@ -5,6 +5,7 @@ import { contacts } from '@/server/db/schema'
 import { eq, sql, and } from 'drizzle-orm'
 import { Card, CardContent } from '@/components/ui/card'
 import { PageHeader } from '@/components/ui/page-header'
+import { SectionHelp } from '@/components/section-help'
 import { getActive } from '@/server/services/templates'
 import { buildEmail } from '@/server/services/drafts'
 
@@ -28,6 +29,16 @@ export default async function DryRunPage() {
           { label: 'eligible', value: ready.length, tone: ready.length > 0 ? 'info' : 'warn' },
           { label: 'template', value: tpl ? (tpl.label || tpl.key) : '—', tone: tpl ? 'success' : 'warn' },
         ]}
+        help={
+          <SectionHelp
+            title="Dry run"
+            what={<>Read-only preview of what would happen if you bulk-created drafts right now. Shows the first 100 eligible contacts + the personalized subject they&apos;d get from the active template. No DB writes, no email.</>}
+            actions={[
+              { label: 'Catch missing variables', hint: 'A subject like "Hi {{name}}" with an empty name field surfaces here as "Hi ," — fix in /templates or /contacts before mass-send.' },
+            ]}
+            guideAnchor="drafts"
+          />
+        }
       />
       {!tpl ? (
         <Card><CardContent className="p-6 text-sm text-muted-foreground">

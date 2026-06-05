@@ -5,6 +5,7 @@ import { Heatmap } from './heatmap'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Chart } from './chart'
 import { PageHeader } from '@/components/ui/page-header'
+import { SectionHelp } from '@/components/section-help'
 
 export default async function AnalyticsPage() {
   const u = await requireUser()
@@ -39,6 +40,20 @@ export default async function AnalyticsPage() {
           { label: 'open rate', value: `${(k.openRate * 100).toFixed(1)}%`, tone: k.openRate > 0.2 ? 'success' : 'default' },
           { label: 'reply rate', value: `${(k.replyRate * 100).toFixed(1)}%`, tone: k.replyRate > 0.05 ? 'success' : 'default' },
         ]}
+        help={
+          <SectionHelp
+            title="Analytics"
+            what={<>Last-30-day funnel + breakdowns. Opens are pixel-tracked; clicks rewrite outbound links; replies + bounces come from the Gmail check. Heatmap shows which days × hours your sends land best.</>}
+            actions={[
+              { label: 'Breakdowns', hint: 'Per template / tag / campaign / platform. Tells you what to keep doing.' },
+              { label: 'Pipeline', hint: 'Applied → active → offers / rejections — for users tracking job-application outcomes.' },
+            ]}
+            pitfalls={[
+              { label: 'Open rate inflation', hint: 'Apple Mail Privacy Protection pre-fetches images. Reply rate is the more honest signal.' },
+            ]}
+            guideAnchor="analytics"
+          />
+        }
       />
       <div className="grid gap-4 md:grid-cols-4">
         <Card><CardHeader><CardTitle className="text-sm">Sent</CardTitle></CardHeader><CardContent className="text-2xl font-semibold">{k.sent}</CardContent></Card>

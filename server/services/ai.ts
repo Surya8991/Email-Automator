@@ -1,10 +1,14 @@
 import { getAiFor } from './credentials'
+import { getSetting } from './settings'
 
 // Groq's OpenAI-compatible /chat/completions endpoint via fetch — no extra
 // SDK dep. Credentials are per-user (Settings → AI) with env fallback.
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
 
 export type Tone = 'professional' | 'friendly' | 'concise' | 'enthusiastic' | 'formal'
+export type Length = 'short' | 'medium' | 'long'
+export type Cta = 'none' | 'soft' | 'direct'
+
 const TONE_HINTS: Record<Tone, string> = {
   professional: 'Tone: warm professional. Polished but human.',
   friendly:     'Tone: friendly, conversational. Use a first-name greeting.',
@@ -12,14 +16,31 @@ const TONE_HINTS: Record<Tone, string> = {
   enthusiastic: 'Tone: energetic and curious. Convey genuine interest.',
   formal:       'Tone: traditional business. Salutation "Dear …", sign-off "Best regards".',
 }
+const LENGTH_HINTS: Record<Length, string> = {
+  short:  'Length: under 80 words.',
+  medium: 'Length: 120–180 words.',
+  long:   'Length: 220–300 words.',
+}
+const CTA_HINTS: Record<Cta, string> = {
+  none:   'No explicit ask.',
+  soft:   'Soft CTA — invite a reply if open to a chat.',
+  direct: 'Direct CTA — propose a specific next step (15-min call, reply by Friday).',
+}
 
-function systemPrompt(tone: Tone): string {
-  return `You write short, ${tone} job-application outreach emails.
-${TONE_HINTS[tone]}
-Output ONLY the email body in HTML (no <html>/<head>/<body> wrapper).
-Use <p> for paragraphs. Personalize sparingly using ONLY the variables
-the caller provides. Never invent facts about the recipient.
-Keep it under 150 words unless the tone explicitly says otherwise.`
+function systemPrompt(tone: Tone, length?: Length, cta?: Cta): string {
+  const parts: string[] = [
+    `You write short, ${tone} job-application outreach emails.`,
+    TONE_HINTS[tone],
+  ]
+  if (length) parts.push(LENGTH_HINTS[length])
+  if (cta) parts.push(CTA_HINTS[cta])
+  parts.push(
+    'Output ONLY the email body in HTML (no <html>/<head>/<body> wrapper).',
+    'Use <p> for paragraphs. Personalize sparingly using ONLY the variables',
+    'the caller provides. Never invent facts about the recipient.',
+  )
+  if (!length) parts.push('Keep it under 150 words unless the tone explicitly says otherwise.')
+  return parts.join('\n')
 }
 
 async function groqJson(userId: string, body: Record<string, unknown>): Promise<unknown> {
@@ -40,25 +61,51 @@ async function groqJson(userId: string, body: Record<string, unknown>): Promise<
 export interface DraftOpts {
   goal: string
   tone?: Tone
+  length?: Length
+  cta?: Cta
   signature?: string
   vars?: Record<string, string>
   existing?: string
+  /**
+   * Recipient facts to feed the model — name / role / company / notes.
+   * If supplied, the model is told to personalize against these instead
+   * of writing generically.
+   */
+  recipient?: { name?: string; role?: string; company?: string; notes?: string }
 }
 
 export async function draftEmail(userId: string, opts: DraftOpts): Promise<string> {
   const tone = opts.tone ?? 'professional'
-  const userText =
-    (opts.existing ? `Improve this draft, keeping the same intent:\n\n${opts.existing}\n\n` : `Write a new outreach email.\n\n`) +
-    `Goal: ${opts.goal}\n` +
-    (opts.vars ? `Available variables: ${Object.keys(opts.vars).map((k) => `{{${k}}}`).join(', ')}\n` : '') +
-    (opts.signature ? `Append this signature verbatim: ${opts.signature}\n` : '')
+  // Pull brand voice once. Empty when unset; the prompt skips the
+  // section instead of injecting a blank "match this voice" header.
+  const brandVoice = await getSetting(userId, 'AI_VOICE_SAMPLES').catch(() => '')
+
+  const parts: string[] = []
+  parts.push(opts.existing
+    ? `Improve this draft, keeping the same intent:\n\n${opts.existing}\n`
+    : 'Write a new outreach email.\n')
+  parts.push(`Goal: ${opts.goal}`)
+  if (opts.vars) parts.push(`Available variables: ${Object.keys(opts.vars).map((k) => `{{${k}}}`).join(', ')}`)
+  if (opts.recipient && (opts.recipient.name || opts.recipient.role || opts.recipient.company)) {
+    parts.push(
+      'Recipient context (use ONLY these facts):',
+      `- Name: ${opts.recipient.name ?? '(unknown)'}`,
+      ...(opts.recipient.role ? [`- Role: ${opts.recipient.role}`] : []),
+      ...(opts.recipient.company ? [`- Company: ${opts.recipient.company}`] : []),
+      ...(opts.recipient.notes ? [`- Notes: ${opts.recipient.notes.slice(0, 300)}`] : []),
+    )
+  }
+  if (brandVoice && brandVoice.trim()) {
+    parts.push('\nMatch this user voice (samples below):\n' + brandVoice.trim().slice(0, 2_400))
+  }
+  if (opts.signature) parts.push(`Append this signature verbatim: ${opts.signature}`)
 
   const data = await groqJson(userId, {
     temperature: 0.7,
     max_tokens: 1024,
     messages: [
-      { role: 'system', content: systemPrompt(tone) },
-      { role: 'user', content: userText },
+      { role: 'system', content: systemPrompt(tone, opts.length, opts.cta) },
+      { role: 'user', content: parts.join('\n') },
     ],
   }) as { choices?: Array<{ message?: { content?: string } }> }
   const content = data.choices?.[0]?.message?.content?.trim()

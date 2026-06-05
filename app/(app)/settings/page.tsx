@@ -12,6 +12,7 @@ import { DangerZone } from './danger-zone'
 import { SmtpForm } from './smtp-form'
 import { IdentitiesForm } from './identities-form'
 import { AiForm } from './ai-form'
+import { VoiceForm } from './voice-form'
 import { ApiKeysForm } from './api-keys-form'
 import { WebhooksForm } from './webhooks-form'
 import { CheckCircle2, XCircle, Mail, Bot, Lock, Database, KeyRound, Webhook } from 'lucide-react'
@@ -39,6 +40,7 @@ export default async function SettingsPage() {
     'DAILY_SEND_LIMIT', 'TIMEZONE', 'DEFAULT_ROLE_NAME', 'USER_PORTFOLIO_LINK',
     'CACHED_SIGNATURE', 'UNSUBSCRIBE_TEXT', 'UNSUBSCRIBE_ENABLED', 'SENDS_PAUSED',
     'PER_RECIPIENT_THROTTLE_DAYS', 'PER_DOMAIN_DAILY_CAP', 'CUSTOM_FIELD_KEYS',
+    'AI_VOICE_SAMPLES',
     'SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'EMAIL_FROM',
     'GROQ_API_KEY', 'GROQ_MODEL',
   ]).catch((e) => {
@@ -132,6 +134,20 @@ export default async function SettingsPage() {
               <CardDescription>Powers the "AI Improve" button in the template editor.</CardDescription>
             </CardHeader>
             <CardContent><AiForm initial={safeCur} source={ai.source} keySaved={hadGroqKey} /></CardContent>
+          </Card>
+
+          {/* Brand voice samples — injected into every AI prompt so the
+              model matches the user's actual writing cadence + vocab.
+              Stored as one setting (AI_VOICE_SAMPLES) so we can clamp +
+              redact on /api/export/my-data without per-row gymnastics. */}
+          <Card className="mt-4">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><Bot className="h-4 w-4" /> Brand voice</CardTitle>
+              <CardDescription>
+                Paste 1–3 of your own emails (or any writing). Every AI generation step injects this so the output matches your cadence and vocabulary. Max ~2,400 chars total — anything longer gets truncated.
+              </CardDescription>
+            </CardHeader>
+            <CardContent><VoiceForm initial={safeCur.AI_VOICE_SAMPLES ?? ''} /></CardContent>
           </Card>
         </TabsContent>
 

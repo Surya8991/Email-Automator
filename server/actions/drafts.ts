@@ -246,16 +246,25 @@ export async function deleteAllDraftsAction() {
   return { ok: true, deleted }
 }
 
-// AI Improve — admin-only. Pulls the draft's current body, asks Groq to
-// rewrite it in the chosen tone keeping intent intact, and saves the new
-// body back. Returns the new HTML so the client can swap the row content
-// without a full reload. Non-admins never see the button; the
-// requireAdmin() guard catches anyone who hits the action directly.
-export async function improveDraftAction(id: number, tone: Tone = 'professional') {
-  const me = await requireAdmin()
-  // Admin AI Improve: 60/min/admin. Caps Groq spend on a stuck loop.
-  if (!rateLimit(`admin-write:${me.id}:improve_draft`, 60, 60_000)) {
-    return { error: 'Too many admin actions — slow down' }
+// AI Improve — available to every user. Pulls the draft's current body,
+// asks Groq to rewrite it in the chosen tone keeping intent intact, and
+// saves the new body back. Returns the new HTML so the client can swap
+// the row content without a full reload.
+//
+// Was admin-only until 2026-06-05; lifted because the gain is real for
+// every user and the abuse risk is bounded by the rate limiter +
+// per-user Groq quota.
+export async function improveDraftAction(
+  id: number,
+  tone: Tone = 'professional',
+  opts: { length?: 'short' | 'medium' | 'long'; cta?: 'none' | 'soft' | 'direct' } = {},
+) {
+  const me = await requireUser()
+  // 30 AI improves / min / user. Shared per-action bucket; pairs with
+  // the 20/min `ai:*` bucket so a stuck loop on both still caps Groq
+  // spend.
+  if (!rateLimit(`ai-improve-draft:${me.id}`, 30, 60_000)) {
+    return { error: 'Too many AI improves — please wait a minute' }
   }
   const [d] = await db.select().from(draftsTable)
     .where(and(eq(draftsTable.id, id), eq(draftsTable.userId, me.id)))
@@ -265,15 +274,22 @@ export async function improveDraftAction(id: number, tone: Tone = 'professional'
     improved = await draftEmail(me.id, {
       existing: d.htmlBody,
       tone,
+      length: opts.length,
+      cta: opts.cta,
       goal: 'Improve the email below — keep the intent and any {{variables}} intact, tighten language, fix awkward phrasing, match the requested tone.',
     })
   } catch (e) {
     return actionError(e, 'AI request failed')
   }
   await drafts.updateDraft(me.id, id, { htmlBody: improved })
-  // Admin AI use is logged so /audit?scope=all can show which admin
-  // called the AI and how often. Non-fatal if the insert blips.
-  try { await db.insert(auditLog).values({ userId: me.id, action: 'admin.ai_improve_draft', detail: `draft_id=${id} tone=${tone}`, ip: '' }) } catch { /* noop */ }
+  try {
+    await db.insert(auditLog).values({
+      userId: me.id,
+      action: 'ai_improve_draft',
+      detail: `draft_id=${id} tone=${tone}${opts.length ? ` length=${opts.length}` : ''}${opts.cta ? ` cta=${opts.cta}` : ''}`,
+      ip: '',
+    })
+  } catch { /* noop */ }
   revalidatePath('/drafts')
   return { ok: true, htmlBody: improved }
 }

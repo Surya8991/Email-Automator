@@ -2,10 +2,12 @@
 import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { CheckCircle2, Save, Sparkles, Eye, Wand2, Copy, Send, AlertTriangle } from 'lucide-react'
+import { CheckCircle2, Save, Sparkles, Eye, Wand2, Copy, Send, AlertTriangle, Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { GenerateFromContext } from './generate-from-context'
+import { cn } from '@/lib/utils'
 import { personalize } from '@/lib/escape'
 import { activateTemplateAction, saveTemplateAction, cloneTemplateAction, sendTemplateTestAction } from '@/server/actions/templates'
 import { aiDraftAction, aiSuggestSubjectsAction } from '@/server/actions/ai'
@@ -18,6 +20,10 @@ const BUILTIN_VARS = new Set(['name', 'email', 'company', 'role_name', 'location
 
 type Tone = 'professional' | 'friendly' | 'concise' | 'enthusiastic' | 'formal'
 const TONES: Tone[] = ['professional', 'friendly', 'concise', 'enthusiastic', 'formal']
+type Length = 'short' | 'medium' | 'long'
+const LENGTHS: Length[] = ['short', 'medium', 'long']
+type Cta = 'none' | 'soft' | 'direct'
+const CTAS: Cta[] = ['none', 'soft', 'direct']
 
 // Variables exposed in the editor's clickable palette. Anything mapped
 // in server/services/drafts.ts buildEmail() can be inserted — keep the
@@ -72,8 +78,15 @@ export function TemplateEditor({
   })
   // AI controls (kept local so each user can experiment without saving)
   const [tone, setTone] = useState<Tone>('professional')
+  const [aiLength, setAiLength] = useState<Length>('medium')
+  const [aiCta, setAiCta] = useState<Cta>('soft')
   const [aiGoal, setAiGoal] = useState('')
   const [subjectSuggestions, setSubjectSuggestions] = useState<string[] | null>(null)
+  // Tab strip across the editor: 'edit' shows the rich form; 'generate'
+  // swaps in the JD/URL/post → draft flow. Both share the same `draft`
+  // state so accepting a generated draft drops you back into 'edit'
+  // with the new subject + body in place.
+  const [mode, setMode] = useState<'edit' | 'generate'>('edit')
 
   // Insert a token at the cursor of whichever field was last focused.
   // Tokens are either {{var}} (variables — substituted per recipient by
@@ -139,7 +152,7 @@ export function TemplateEditor({
   })
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[240px,1fr,1fr]">
+    <div className="grid gap-4 lg:grid-cols-[240px,minmax(0,1fr)]">
       {/* On mobile + tablet: dropdown picker. On desktop: full list rail. */}
       <aside>
         <div className="mb-2 text-xs font-medium uppercase text-muted-foreground">Your templates</div>
@@ -199,7 +212,44 @@ export function TemplateEditor({
         </div>
       </aside>
 
-      <section className="space-y-3">
+      {/* Right region — tab strip + conditional pane. */}
+      <div className="min-w-0 space-y-4">
+        <div role="tablist" aria-label="Template view" className="inline-flex rounded-lg border bg-card p-1 text-sm">
+          <button
+            role="tab" type="button" aria-selected={mode === 'edit'}
+            onClick={() => setMode('edit')}
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 ea-transition',
+              mode === 'edit' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted',
+            )}
+          >
+            <Pencil className="h-3.5 w-3.5" /> Edit
+          </button>
+          <button
+            role="tab" type="button" aria-selected={mode === 'generate'}
+            onClick={() => setMode('generate')}
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 ea-transition',
+              mode === 'generate' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted',
+            )}
+          >
+            <Sparkles className="h-3.5 w-3.5" /> Generate (AI)
+          </button>
+        </div>
+
+        {mode === 'generate' ? (
+          <GenerateFromContext
+            onAccept={(subject, html) => {
+              // Hand off to the editor + switch back so the user can
+              // tweak right away. Subject keeps its placeholder vars
+              // intact since the prompt asks the model to prefer {{name}}.
+              setDraft({ ...draft, subject, initialMsg: html })
+              setMode('edit')
+            }}
+          />
+        ) : (
+        <div className="grid gap-4 lg:grid-cols-2 min-w-0">
+        <section className="space-y-3">
         <div className="grid gap-1.5">
           <Label htmlFor="key">Key</Label>
           <Input id="key" value={draft.key ?? ''} onChange={(e) => setDraft({ ...draft, key: e.target.value })} />
@@ -348,6 +398,20 @@ export function TemplateEditor({
                 {TONES.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
+            <div className="grid gap-1">
+              <Label htmlFor="ai-length" className="text-xs">Length</Label>
+              <select id="ai-length" value={aiLength} onChange={(e) => setAiLength(e.target.value as Length)}
+                className="h-8 rounded-md border bg-background px-2 text-sm capitalize">
+                {LENGTHS.map((l) => <option key={l} value={l}>{l}</option>)}
+              </select>
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="ai-cta" className="text-xs">CTA</Label>
+              <select id="ai-cta" value={aiCta} onChange={(e) => setAiCta(e.target.value as Cta)}
+                className="h-8 rounded-md border bg-background px-2 text-sm capitalize">
+                {CTAS.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
             <div className="grid gap-1 flex-1 min-w-[200px]">
               <Label htmlFor="ai-goal" className="text-xs">Goal (optional — for Draft only)</Label>
               <Input id="ai-goal" value={aiGoal} onChange={(e) => setAiGoal(e.target.value)}
@@ -356,7 +420,7 @@ export function TemplateEditor({
             <Button variant="outline" size="sm" disabled={pending} onClick={() => start(async () => {
               const r = await aiDraftAction({
                 goal: `Improve this outreach email for ${draft.label || 'a recruiter'}.`,
-                existing: draft.initialMsg ?? '', tone,
+                existing: draft.initialMsg ?? '', tone, length: aiLength, cta: aiCta,
               })
               if ('error' in r && r.error) { toast.error(r.error); return }
               if ('html' in r && r.html) { setDraft({ ...draft, initialMsg: r.html }); toast.success(`Rewrote in ${tone} tone`) }
@@ -364,7 +428,7 @@ export function TemplateEditor({
               <Sparkles className="mr-1.5 h-4 w-4" /> Improve
             </Button>
             <Button variant="outline" size="sm" disabled={pending || !aiGoal} onClick={() => start(async () => {
-              const r = await aiDraftAction({ goal: aiGoal, tone })
+              const r = await aiDraftAction({ goal: aiGoal, tone, length: aiLength, cta: aiCta })
               if ('error' in r && r.error) { toast.error(r.error); return }
               if ('html' in r && r.html) { setDraft({ ...draft, initialMsg: r.html }); toast.success(`Drafted in ${tone} tone`) }
             })}>
@@ -387,6 +451,9 @@ export function TemplateEditor({
             dangerouslySetInnerHTML={{ __html: personalize(draft.initialMsg ?? '', SAMPLE, 'html') }} />
         </div>
       </section>
+        </div>
+        )}
+      </div>
     </div>
   )
 }

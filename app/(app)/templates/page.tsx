@@ -6,6 +6,7 @@ import { breakdownByTemplate } from '@/server/services/analytics'
 import { parseCustomFieldKeys } from '@/lib/custom-fields'
 import { Card, CardContent } from '@/components/ui/card'
 import { PageHeader } from '@/components/ui/page-header'
+import { SectionHelp } from '@/components/section-help'
 import { TemplateEditor } from './template-editor'
 
 export default async function TemplatesPage() {
@@ -42,6 +43,23 @@ export default async function TemplatesPage() {
           { label: 'categories', value: categories.size },
           { label: 'custom fields', value: customKeys.length, tone: customKeys.length > 0 ? 'info' : 'default' },
         ]}
+        help={
+          <SectionHelp
+            title="Templates"
+            what={<>Templates hold the subject + body skeleton. Variables in <code className="rounded bg-muted px-1">{'{{double_braces}}'}</code> are substituted per recipient at send time. Exactly one template is &quot;active&quot; — that&apos;s the one Drafts and one-shot Campaigns use.</>}
+            actions={[
+              { label: 'Edit tab', hint: 'Inline AI Improve next to the body with tone / length / CTA controls. Variable validator flags unknown {{tokens}}.' },
+              { label: 'Generate tab', hint: 'Paste a job description, LinkedIn post, URL, or free text — AI returns a drafted subject + body you can Accept or Refine.' },
+              { label: 'Stats tab', hint: 'Last-30-day funnel: sent → opened → clicked → replied for this template.' },
+              { label: 'Test send', hint: 'Fires the current editor state to your own address with sample variables. Catches broken HTML before mass-send.' },
+            ]}
+            pitfalls={[
+              { label: 'Inactive template', hint: 'Drafts use the active template, not the one currently open in the editor. Click Activate to make a switch real.' },
+              { label: 'AI prompts', hint: 'Save Brand Voice samples in Settings → AI for the AI to match your actual writing style.' },
+            ]}
+            guideAnchor="templates"
+          />
+        }
       />
       <Card><CardContent className="p-4">
         <TemplateEditor

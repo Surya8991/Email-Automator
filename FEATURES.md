@@ -3,6 +3,15 @@
 Everything Email Automator currently does, grouped by section.
 Last refreshed: 2026-06-05.
 
+## 🆕 What's new (2026-06-05, second batch)
+
+- **AI Generate from JD / Post / URL / Text** — new tab in `/templates`. Paste a job description, social-media post body, free text, or any URL → AI returns subject + body + framing assumption. URL fetcher is SSRF-defended (HTTPS only in prod, private IPs / loopback / link-local blocked, 5 s timeout, 1 MB body cap, content-type whitelist).
+- **AI quality controls** — every AI panel now has Length (short / medium / long) and CTA emphasis (none / soft / direct). Recipient context fields let you pass real name / role / company so personalization is concrete, not generic.
+- **Brand voice samples** — `Settings → AI` accepts up to 2,400 chars of your own writing. Injected into every AI generation so output matches your cadence and vocabulary.
+- **AI Improve in Drafts — for everyone** — was admin-only; lifted with a 30/min/user rate limit. Same tone / length / CTA controls. Undo for 1 h.
+- **? Section help on every page** — small `?` next to each PageHeader title opens a popover with what / actions / pitfalls / link to the matching guide section. Authored per page, no generic fluff.
+- **Design lift** — gradient icon halo on PageHeader, hairline section dividers, animated count-up on stat pills, hover-lift on cards, accent-stripe utility for stat cards.
+
 ## 🆕 What's new (2026-06-05)
 
 - **Smart draft creation** — new `CreateDraftsDialog` with template picker (one-off override), count presets, platform / job-title / location filters, skip-recently-contacted toggle, live "X eligible of Y total" counter + first-5 contact sample.
