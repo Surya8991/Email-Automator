@@ -6,6 +6,19 @@ import './globals.css'
 export const metadata: Metadata = {
   title: 'Email Automator',
   description: 'Send personalized outreach at scale — safely.',
+  // PWA: the manifest lets Chrome/Edge/Safari treat the app as an
+  // installable web-app (Add to Home Screen / install prompt).
+  manifest: '/manifest.webmanifest',
+  applicationName: 'Email Automator',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'Email Automator',
+  },
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
+    { media: '(prefers-color-scheme: dark)',  color: '#0b0f17' },
+  ],
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

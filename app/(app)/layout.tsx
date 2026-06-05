@@ -3,6 +3,9 @@ import { auth } from '@/auth'
 import { Sidebar } from '@/components/sidebar'
 import { Topbar } from '@/components/topbar'
 import { CommandPalette } from '@/components/command-palette'
+import { ShortcutsHelp } from '@/components/shortcuts-help'
+import { AccentProvider } from '@/components/accent-provider'
+import { InstallPrompt } from '@/components/install-prompt'
 import { TimezoneProvider } from '@/components/timezone-provider'
 import { ensureSeededTemplatesFor } from '@/server/services/onboarding'
 import { getSetting } from '@/server/services/settings'
@@ -24,6 +27,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // Pick up the user's chosen TZ; falls back to IST. Provided via context
   // so every client formatter (useFormatDate) in the tree is consistent.
   const userTz = userId ? (await getSetting(userId, 'TIMEZONE').catch(() => '')) || APP_TZ : APP_TZ
+  // Per-user accent — picked in /profile. Empty = the default indigo theme.
+  // Injected via a <style> tag overriding --primary; AccentProvider handles
+  // the actual injection so SSR + CSR stay in sync.
+  const userAccent = userId ? ((await getSetting(userId, 'ACCENT').catch(() => '')) || '') : ''
   // Onboarding gate. Show the modal until the user dismisses it at the
   // current version. Bump ONBOARDING_CURRENT_VERSION to re-show for
   // everyone after a major UX change.
@@ -67,9 +74,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <main className="flex-1 overflow-auto p-4 sm:p-6">{children}</main>
           </div>
           <CommandPalette isAdmin={isAdmin} />
+          <ShortcutsHelp />
         </div>
       </div>
       {showOnboarding ? <OnboardingModal initialOpen={true} /> : null}
+      <InstallPrompt />
+      <AccentProvider accent={userAccent} />
     </TimezoneProvider>
   )
 }

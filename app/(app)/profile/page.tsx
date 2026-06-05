@@ -7,13 +7,17 @@ import { env } from '@/lib/env'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { ProfileForm } from './profile-form'
 import { GmailCard } from './gmail-card'
+import { AccentPicker } from './accent-picker'
+import { ExportDataCard } from './export-data-card'
+import { NotificationsCard } from './notifications-card'
 import { Mail, BriefcaseBusiness, CalendarDays, BadgeCheck, ShieldCheck } from 'lucide-react'
 
 const KEYS = [
   'PROFILE_NAME', 'PROFILE_PHONE', 'PROFILE_COMPANY', 'PROFILE_ROLE',
   'PROFILE_LINKEDIN', 'USER_PORTFOLIO_LINK', 'DEFAULT_ROLE_NAME',
   'CACHED_SIGNATURE', 'UNSUBSCRIBE_TEXT', 'UNSUBSCRIBE_ENABLED',
-  'TIMEZONE',
+  'TIMEZONE', 'ACCENT',
+  'NOTIFY_WEBHOOK_URL', 'NOTIFY_EVENTS',
 ]
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -173,7 +177,18 @@ export default async function ProfilePage() {
             <GmailCard />
           </CardContent>
         </Card>
-      ) : googleConfigured ? (
+      ) : null}
+
+      <AccentPicker current={settings.ACCENT ?? ''} />
+
+      <NotificationsCard
+        currentUrl={settings.NOTIFY_WEBHOOK_URL ?? ''}
+        currentEvents={settings.NOTIFY_EVENTS ?? ''}
+      />
+
+      <ExportDataCard />
+
+      {!hasGoogleAccount && googleConfigured ? (
         <Card>
           <CardHeader>
             <CardTitle>Connect Gmail</CardTitle>

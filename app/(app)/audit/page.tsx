@@ -5,7 +5,9 @@ import { auditLog, users } from '@/server/db/schema'
 import { and, eq, desc, sql } from 'drizzle-orm'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Download } from 'lucide-react'
+import { Download, ScrollText } from 'lucide-react'
+import { PageHeader } from '@/components/ui/page-header'
+import { EmptyState } from '@/components/ui/empty-state'
 import { formatDate, APP_TZ } from '@/lib/utils'
 import { getSetting } from '@/server/services/settings'
 import { AuditTable } from './audit-table'
@@ -50,14 +52,16 @@ export default async function AuditPage(props: { searchParams: Promise<{ scope?:
   const exportHref = adminAll ? '/api/audit/export?scope=all' : '/api/audit/export'
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Audit log</h1>
-          <p className="text-sm text-muted-foreground">
-            {adminAll ? 'Last 500 events across all users.' : 'Last 500 events.'}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+      <PageHeader
+        icon={ScrollText}
+        title="Audit log"
+        description={adminAll ? 'Last 500 events across all users.' : 'Last 500 of your events. Every server-side action that touches data lands here.'}
+        pills={[
+          { label: 'events', value: rows.length, tone: 'info' },
+          ...(adminAll ? [{ label: 'scope' as const, value: 'all users', tone: 'warn' as const }] : []),
+          ...(onlyImpersonations ? [{ label: 'filter' as const, value: 'impersonations', tone: 'info' as const }] : []),
+        ]}
+        actions={<div className="flex flex-wrap items-center gap-2">
           {u.isAdmin ? (
             <>
               <div className="inline-flex overflow-hidden rounded-md border text-xs">
@@ -89,11 +93,16 @@ export default async function AuditPage(props: { searchParams: Promise<{ scope?:
               <a href="/api/backup" download><Download className="mr-1.5 h-4 w-4" /> Download DB backup</a>
             </Button>
           ) : null}
-        </div>
-      </div>
+        </div>}
+      />
       <Card><CardContent className="p-0">
         {rows.length === 0 ? (
-          <div className="px-6 py-12 text-center text-sm text-muted-foreground">No audit entries yet.</div>
+          <EmptyState
+            icon={ScrollText}
+            title="No audit entries yet"
+            description="Every server-side action that writes data (saves, sends, schedules, deletes) lands here automatically."
+            compact
+          />
         ) : (
           // Pre-format timestamps server-side so the client component stays
           // pure presentational (no TZ context dependency, no hydration risk).

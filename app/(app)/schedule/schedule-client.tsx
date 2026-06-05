@@ -6,6 +6,7 @@ import { CalendarClock, Eye, EyeOff, Play, Sparkles, X, Search } from 'lucide-re
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { EmptyState } from '@/components/ui/empty-state'
 import { cancelScheduleAction, enqueueScheduleAction, previewScheduleAction, cancelSelectedAction, improveScheduledEmailAction } from '@/server/actions/schedule'
 import { useFormatDate, useTimezone } from '@/components/timezone-provider'
 import { AiImprovePicker } from '@/components/ai-improve-picker'
@@ -226,7 +227,12 @@ export function ScheduleClient({ queue, queueCount, isAdmin = false }: { queue: 
           ) : null}
         </div>
         {queue.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">Nothing scheduled.</p>
+          <EmptyState
+            icon={CalendarClock}
+            title="Nothing scheduled"
+            description="Pick a start time + stagger window in the form above, or schedule directly from Drafts."
+            compact
+          />
         ) : filtered.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">No rows match the filter.</p>
         ) : (

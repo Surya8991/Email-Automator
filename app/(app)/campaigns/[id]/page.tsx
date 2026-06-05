@@ -6,6 +6,7 @@ import { listTemplates } from '@/server/services/templates'
 import { listTags } from '@/server/services/contacts'
 import { listVariants } from '@/server/services/variants'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { PresencePill } from '@/components/presence-pill'
 import { CampaignDetail } from './campaign-detail'
 
 export default async function CampaignDetailPage(props: { params: Promise<{ id: string }> }) {
@@ -38,7 +39,12 @@ export default async function CampaignDetailPage(props: { params: Promise<{ id: 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <Link href="/campaigns" className="text-xs text-muted-foreground hover:underline">← All campaigns</Link>
-          <h1 className="text-2xl font-semibold tracking-tight">{data.campaign.name}</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-semibold tracking-tight">{data.campaign.name}</h1>
+            {/* Presence pill — best-effort, per-Lambda-instance.
+                See server/presence.ts for the Redis upgrade path. */}
+            <PresencePill resource={`campaign-${cid}`} />
+          </div>
         </div>
       </div>
 

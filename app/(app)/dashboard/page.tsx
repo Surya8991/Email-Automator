@@ -6,7 +6,8 @@ import { events, emailLog, contacts } from '@/server/db/schema'
 import { and, asc, desc, eq, inArray, or } from 'drizzle-orm'
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Users, Send, MailCheck, MousePointerClick, Reply, AlertTriangle, Sparkles, Upload, FileText, Activity, Clock } from 'lucide-react'
+import { Users, Send, MailCheck, MousePointerClick, Reply, AlertTriangle, Sparkles, Upload, FileText, Activity, Clock, LayoutDashboard } from 'lucide-react'
+import { PageHeader } from '@/components/ui/page-header'
 import { formatDate, APP_TZ } from '@/lib/utils'
 import { getSetting } from '@/server/services/settings'
 
@@ -62,10 +63,16 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-        <p className="text-sm text-muted-foreground">Last 30 days</p>
-      </div>
+      <PageHeader
+        icon={LayoutDashboard}
+        title="Dashboard"
+        description="Your last 30 days at a glance — sent, opens, clicks, replies, plus recent activity."
+        pills={[
+          { label: 'sent', value: k.sent, tone: 'info' },
+          { label: 'opens', value: k.opens, tone: 'default' },
+          { label: 'replies', value: k.replies, tone: k.replies > 0 ? 'success' : 'default' },
+        ]}
+      />
 
       {empty ? (
         <Card>

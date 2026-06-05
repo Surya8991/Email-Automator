@@ -3,7 +3,8 @@
 Self-hosted email outreach. Templates with variables, multi-step campaigns
 with A/B testing, open/click tracking, AI-assisted writing (Groq), per-user
 multi-tenant isolation, company research, multiple from-identities, audit
-log, JSON API + webhooks, and a 6-tab admin dashboard for operators.
+log, JSON API + Slack/Discord webhooks, GDPR data export, PWA install, and
+a 6-tab admin dashboard for operators.
 
 **Sign in with** Google · GitHub · email magic link.
 
@@ -11,7 +12,19 @@ log, JSON API + webhooks, and a 6-tab admin dashboard for operators.
 Drizzle ORM on SQLite (better-sqlite3 local / Turso on Vercel) · Auth.js v5
 · Groq (Llama 3.3) · Pino.
 
-📖 [FEATURES.md](FEATURES.md) · 🚀 [DEPLOYMENT.md](DEPLOYMENT.md) · 🤖 [AGENTS.md](AGENTS.md)
+📖 [FEATURES.md](FEATURES.md) · 🚀 [DEPLOYMENT.md](DEPLOYMENT.md) · 🤖 [AGENTS.md](AGENTS.md) · ⚙️ [OPERATOR_TODO.html](OPERATOR_TODO.html)
+
+## Highlights
+
+- 🎨 **Polished UI** — consistent `PageHeader` + `EmptyState` everywhere, 5-color accent picker, dark/light themes, PWA-installable.
+- ⚡ **Smart draft creation** — pick template + filters (platform, job title, location, skip-recently-contacted), live eligible counter + sample preview.
+- 📅 **Schedule from drafts** — convert selected drafts straight into staggered scheduled sends.
+- 🔍 **⌘K palette searches your data** — contacts, templates, drafts, campaigns. Plus `?` for shortcut help.
+- 🧪 **Diagnostic Quick + Full runs** — grouped by Connectivity / Background / Deliverability / Admin with inline "how to fix" per warn.
+- 📚 **Sticky guide TOC** with scroll-spy and client-side search.
+- 🪝 **Slack / Discord notifications** for send-completed / bounce / reply.
+- 📦 **GDPR data export** — one-click JSON dump of every row you own.
+- 👀 **Presence pill** on campaign detail (lightweight, per-instance).
 
 ---
 
@@ -58,4 +71,4 @@ DB driver auto-detects from `DATABASE_URL`. Walk through it with
 
 ## License
 
-Private project.
+MIT — see [LICENSE](LICENSE).

@@ -3,6 +3,24 @@
 Everything Email Automator currently does, grouped by section.
 Last refreshed: 2026-06-05.
 
+## 🆕 What's new (2026-06-05)
+
+- **Smart draft creation** — new `CreateDraftsDialog` with template picker (one-off override), count presets, platform / job-title / location filters, skip-recently-contacted toggle, live "X eligible of Y total" counter + first-5 contact sample.
+- **Schedule selected drafts** — new `ScheduleSendDialog` converts pending drafts straight into scheduled emails with datetime + 3-5 min stagger.
+- **Send confirmation dialog** — replaces the browser `confirm()` for *Send all* / *Send selected* with a recipient preview (subject, to-email, count, large-batch warning).
+- **Templates polish** — Test-send to your own address with sample data (rate-limited 6/min), live unknown-variable validator that flags `{{typos}}` before they ship literally, per-template 30-day stats (sent / open-rate / reply-rate) inline next to each label.
+- **Diagnostic** — grouped results (Connectivity / Background / Deliverability / Admin), Quick run (skips DNS) + Full run, per-row "How to fix" expandable, summary pill, copy-as-markdown for postmortems.
+- **User guide** — sticky TOC sidebar (desktop) with IntersectionObserver scroll-spy + client-side substring search, collapsible "What's new" pinned at top.
+- **⌘K palette upgraded** — also searches your contacts, templates, drafts, and campaigns (not just navigation).
+- **Shortcuts cheatsheet** — `?` opens a dialog listing every keyboard shortcut.
+- **PageHeader / EmptyState rolled out everywhere** — `/dashboard`, `/contacts`, `/companies`, `/templates`, `/drafts`, `/dry-run`, `/schedule`, `/campaigns`, `/analytics`, `/blocklist`, `/audit`, `/diagnostic`, `/guide`.
+- **Sidebar Admin section** — `/diagnostic` and `/admin` moved into their own group under a divider; non-admins no longer see the dead `/diagnostic` link.
+- **Per-user accent color** — 5-swatch picker in `/profile` (Indigo / Emerald / Rose / Amber / Violet), CSS-var-injected, survives theme.
+- **PWA install** — `manifest.webmanifest` + dismissible install banner (30-day suppression). iOS fallback hint for Add-to-Home-Screen.
+- **Slack / Discord notifications** — per-user webhook URL in `/profile` (`hooks.slack.com` / `discord.com` whitelist-checked to avoid SSRF), fires on `send.completed` / `send.failed` / `bounce` / `reply`. Per-event filter.
+- **GDPR data export** — `/api/export/my-data` returns a JSON dump of every row you own across all tables, 1/day/user rate-limited, audit-logged. Secrets redacted.
+- **Lightweight presence pill** — campaign-detail shows "X others editing (approx)" via 30s heartbeat. Per-Lambda-instance — accurate on single-region deploys, approximate cross-region. Redis upgrade path documented in `server/presence.ts`.
+
 > If you're new here, start with the [Getting Started](README.md#getting-started) section of the README, then come back to this file to discover what's available.
 
 ---

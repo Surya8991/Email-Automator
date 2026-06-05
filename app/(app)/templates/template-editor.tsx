@@ -50,7 +50,15 @@ const VAR_GROUPS = [
 
 const SAMPLE = { name: 'Jane Doe', company: 'Acme Corp', role_name: 'Senior Marketer', email: 'jane@acme.com', location: 'Remote', platform: 'LinkedIn' }
 
-export function TemplateEditor({ templates, customFieldKeys = [] }: { templates: Template[]; customFieldKeys?: string[] }) {
+interface TemplateStat { sent: number; openRate: number; replyRate: number }
+
+export function TemplateEditor({
+  templates, customFieldKeys = [], stats = {},
+}: {
+  templates: Template[]
+  customFieldKeys?: string[]
+  stats?: Record<number, TemplateStat>
+}) {
   const router = useRouter()
   const [pending, start] = useTransition()
   const subjectRef = useRef<HTMLInputElement>(null)
@@ -163,13 +171,31 @@ export function TemplateEditor({ templates, customFieldKeys = [] }: { templates:
           {templates.length > 0 && visibleTemplates.length === 0 ? (
             <p className="text-xs text-muted-foreground">No templates match the filter.</p>
           ) : null}
-          {visibleTemplates.map((t) => (
-            <button key={t.id} onClick={() => load(t)}
-              className={`flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm hover:bg-accent ${pickedId === t.id ? 'border-primary' : ''}`}>
-              <span className="truncate">{t.label || t.key}</span>
-              {t.active ? <CheckCircle2 className="h-4 w-4 text-primary" /> : null}
-            </button>
-          ))}
+          {visibleTemplates.map((t) => {
+            const s = stats[t.id]
+            return (
+              <button key={t.id} onClick={() => load(t)}
+                className={`flex w-full flex-col gap-1 rounded-md border px-3 py-2 text-left text-sm hover:bg-accent ${pickedId === t.id ? 'border-primary' : ''}`}>
+                <div className="flex w-full items-center justify-between gap-2">
+                  <span className="truncate font-medium">{t.label || t.key}</span>
+                  {t.active ? <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" /> : null}
+                </div>
+                {/* 30-day stats. Suppressed when no sends yet — empty pill
+                    row reads as "broken analytics" rather than "no data". */}
+                {s && s.sent > 0 ? (
+                  <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                    <span className="tabular-nums">{s.sent} sent</span>
+                    <span>·</span>
+                    <span className="tabular-nums">{(s.openRate * 100).toFixed(0)}% open</span>
+                    <span>·</span>
+                    <span className="tabular-nums">{(s.replyRate * 100).toFixed(0)}% reply</span>
+                  </div>
+                ) : t.category ? (
+                  <span className="text-[10px] text-muted-foreground">{t.category}</span>
+                ) : null}
+              </button>
+            )
+          })}
         </div>
       </aside>
 

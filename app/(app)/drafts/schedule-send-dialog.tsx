@@ -52,9 +52,10 @@ export function ScheduleSendDialog({
       })
       if ('error' in r && r.error) { toast.error(r.error); return }
       if ('scheduled' in r) {
+        const skipped = r.skipped ?? 0
         toast.success(
-          r.skipped > 0
-            ? `Scheduled ${r.scheduled} · ${r.skipped} skipped`
+          skipped > 0
+            ? `Scheduled ${r.scheduled} · ${skipped} skipped`
             : `Scheduled ${r.scheduled} draft${r.scheduled === 1 ? '' : 's'}`,
         )
       }

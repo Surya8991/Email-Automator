@@ -3,6 +3,7 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { requireUser } from '@/auth'
 import { setSetting } from '@/server/services/settings'
+import { isValidAccent } from '@/components/accent-provider'
 
 const KEYS = [
   'PROFILE_NAME', 'PROFILE_PHONE', 'PROFILE_COMPANY', 'PROFILE_ROLE',
@@ -24,4 +25,21 @@ export async function saveProfileAction(input: Record<string, string | undefined
   revalidatePath('/settings')
   revalidatePath('/profile')
   return { ok: true }
+}
+
+/**
+ * Persist the per-user accent color. Whitelist-checked against the
+ * ACCENTS map — anything else (empty included) resets to the default
+ * indigo. Tiny attack surface because the value is funneled into a
+ * CSS custom property, but a malicious value could still inject extra
+ * declarations if we trusted user input; isValidAccent() blocks that.
+ */
+export async function saveAccentAction(accent: string) {
+  const u = await requireUser()
+  if (accent && !isValidAccent(accent)) return { error: 'Invalid accent' }
+  await setSetting(u.id, 'ACCENT', accent)
+  revalidatePath('/profile')
+  // Refresh every app page so the layout-level <style> tag updates.
+  revalidatePath('/', 'layout')
+  return { ok: true as const }
 }

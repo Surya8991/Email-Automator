@@ -238,11 +238,24 @@ DATABASE_URL='libsql://YOUR-DB.turso.io' TURSO_AUTH_TOKEN='eyJ...' npm run db:mi
 <div class="card">
   <h3>New tool features</h3>
   <ul>
+    <li><strong>Smart draft creation</strong> — new dialog with template picker, count presets, platform / job-title / location filters, skip-recently-contacted toggle, live eligible counter + first-5 sample.</li>
+    <li><strong>Schedule selected drafts</strong> — convert drafts straight into scheduled sends with datetime + 3–5 min stagger.</li>
+    <li><strong>Send confirmation dialog</strong> — replaces the browser <code>confirm()</code> for Send all / Send selected with a recipient preview.</li>
+    <li><strong>Templates polish</strong> — Test-send to your own address with sample data, live variable validator that flags unknown <code>{{tokens}}</code>, per-template 30-day stats inline (sent / open / reply rate).</li>
+    <li><strong>Diagnostic Quick / Full runs</strong> — grouped Connectivity / Background / Deliverability / Admin, summary pill, per-row "How to fix" expandable, copy-as-markdown for postmortems.</li>
+    <li><strong>User guide sticky TOC</strong> — desktop sidebar with scroll-spy and substring search, collapsible "What's new" pinned at top.</li>
+    <li><strong>⌘K palette searches your data</strong> — contacts / templates / drafts / campaigns, not just navigation. <kbd>?</kbd> opens shortcut help.</li>
+    <li><strong>Per-user accent color</strong> — 5-swatch picker in /profile (Indigo / Emerald / Rose / Amber / Violet).</li>
+    <li><strong>PWA install</strong> — <code>manifest.webmanifest</code> + dismissible install banner (Chrome/Edge native install, iOS Add-to-Home hint).</li>
+    <li><strong>Slack / Discord notifications</strong> — per-user webhook URL in /profile (<code>hooks.slack.com</code> / <code>discord.com</code> whitelist-validated), fires on <code>send.completed</code> / <code>send.failed</code> / <code>bounce</code> / <code>reply</code>.</li>
+    <li><strong>GDPR data export</strong> — <code>/api/export/my-data</code> returns a JSON dump of every row you own (1/day/user, audit-logged, secrets redacted).</li>
+    <li><strong>Presence pill</strong> — campaign-detail shows "X others editing (approx)" via 30s heartbeat. Per-Lambda — see <code>server/presence.ts</code> for the Redis upgrade path.</li>
     <li><strong>Identities UI</strong> — Settings → Email tab now has an <em>Email identities</em> card. Add Personal / Work / role personas with their own from-address + encrypted SMTP.</li>
     <li><strong>A/B variants</strong> — every campaign step shows a variants strip. Add weighted template variants; scheduler hash-routes deterministically.</li>
     <li><strong>Contact-detail page</strong> — <code>/contacts/[id]</code> with Company sidebar (matched by name), recent sends, event timeline.</li>
     <li><strong>Companies CRUD</strong> — <code>/companies</code> with AI fill (Groq enriches industry / HQ / size / tech stack / salary range from just the name).</li>
     <li><strong>AI features</strong> — subject suggester in templates, company auto-fill, opener generator (server action ready).</li>
+    <li><strong>Sidebar Admin section</strong> — <code>/diagnostic</code> and <code>/admin</code> now grouped under a divider; non-admins no longer see the dead /diagnostic link.</li>
   </ul>
 </div>
 

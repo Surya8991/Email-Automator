@@ -68,9 +68,12 @@ export function CreateDraftsDialog({
 
   useEffect(() => {
     if (!open) return
-    setPreviewLoading(true)
     if (debounce.current) clearTimeout(debounce.current)
+    // Defer the setPreviewLoading inside the timeout so we don't call
+    // setState synchronously during effect — would otherwise cascade
+    // a re-render before the debounce window even starts.
     debounce.current = setTimeout(async () => {
+      setPreviewLoading(true)
       const r = await previewEligibleDraftsAction(filters)
       if ('error' in r && r.error) {
         // Don't toast — rate-limit error during fast typing is OK.

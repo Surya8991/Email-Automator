@@ -2,6 +2,7 @@ import { FileText } from 'lucide-react'
 import { requireUser } from '@/auth'
 import { listTemplates } from '@/server/services/templates'
 import { getSetting } from '@/server/services/settings'
+import { breakdownByTemplate } from '@/server/services/analytics'
 import { parseCustomFieldKeys } from '@/lib/custom-fields'
 import { Card, CardContent } from '@/components/ui/card'
 import { PageHeader } from '@/components/ui/page-header'
@@ -9,11 +10,24 @@ import { TemplateEditor } from './template-editor'
 
 export default async function TemplatesPage() {
   const u = await requireUser()
-  const [all, rawKeys] = await Promise.all([
+  const [all, rawKeys, breakdown] = await Promise.all([
     listTemplates(u.id),
     getSetting(u.id, 'CUSTOM_FIELD_KEYS'),
+    // Last-30-day rollup so each template label can show "12 sent · 35% open
+    // · 8% reply" without an extra round-trip. Defensive .catch in case the
+    // analytics service errors — templates page must always render.
+    breakdownByTemplate(u.id, 30).catch((e) => {
+      console.error('[templates] breakdownByTemplate failed:', e)
+      return [] as Awaited<ReturnType<typeof breakdownByTemplate>>
+    }),
   ])
   const customKeys = parseCustomFieldKeys(rawKeys)
+  // Map templateId → { sent, openRate, replyRate } for inline display.
+  const stats = new Map(breakdown.map((r) => [Number(r.key), {
+    sent: r.sent,
+    openRate: r.sent > 0 ? r.opens / r.sent : 0,
+    replyRate: r.sent > 0 ? r.replies / r.sent : 0,
+  }]))
   const active = all.find((t) => t.active)
   const categories = new Set(all.map((t) => t.category).filter(Boolean))
   return (
@@ -29,7 +43,13 @@ export default async function TemplatesPage() {
           { label: 'custom fields', value: customKeys.length, tone: customKeys.length > 0 ? 'info' : 'default' },
         ]}
       />
-      <Card><CardContent className="p-4"><TemplateEditor templates={all} customFieldKeys={customKeys} /></CardContent></Card>
+      <Card><CardContent className="p-4">
+        <TemplateEditor
+          templates={all}
+          customFieldKeys={customKeys}
+          stats={Object.fromEntries(stats)}
+        />
+      </CardContent></Card>
     </div>
   )
 }

@@ -8,6 +8,7 @@ import { getActive } from '@/server/services/templates'
 import * as drafts from '@/server/services/drafts'
 import * as schedule from '@/server/services/schedule'
 import { draftEmail, type Tone } from '@/server/services/ai'
+import { notify } from '@/server/services/notify'
 import { actionError } from '@/lib/action-error'
 import { rateLimit } from '@/lib/rate-limit'
 
@@ -203,6 +204,13 @@ export async function sendSelectedDraftsAction(ids: number[]) {
   }
   revalidatePath('/drafts')
   revalidatePath('/dashboard')
+  // Fire-and-forget Slack/Discord notification. notify() silently no-ops
+  // when no webhook is configured; this never blocks the response.
+  notify(u.id, 'send.completed', {
+    title: `Sent ${sent} draft${sent === 1 ? '' : 's'}`,
+    detail: failed > 0 ? `${failed} failed — check /audit for details.` : 'All clear.',
+    meta: { sent, failed, scope: 'selected' },
+  }).catch(() => { /* notify is best-effort */ })
   return { ok: true, sent, failed }
 }
 
@@ -211,6 +219,11 @@ export async function sendAllAction() {
   const r = await drafts.sendAllDrafts(u.id, 50)
   revalidatePath('/drafts')
   revalidatePath('/dashboard')
+  notify(u.id, 'send.completed', {
+    title: `Sent ${r.sent} draft${r.sent === 1 ? '' : 's'}`,
+    detail: r.failed > 0 ? `${r.failed} failed — check /audit for details.` : 'All clear.',
+    meta: { sent: r.sent, failed: r.failed, scope: 'all' },
+  }).catch(() => { /* notify is best-effort */ })
   return { ok: true, ...r }
 }
 

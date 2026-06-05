@@ -18,6 +18,7 @@ import { useProgress } from '@/components/use-progress'
 import { AiImprovePicker } from '@/components/ai-improve-picker'
 import { CreateDraftsDialog, type TemplateOption } from './create-drafts-dialog'
 import { ScheduleSendDialog } from './schedule-send-dialog'
+import { SendConfirmDialog } from './send-confirm-dialog'
 
 const PAGE_SIZE_OPTIONS = [50, 100, 500, 1000]
 
@@ -51,6 +52,10 @@ export function DraftsClient({
   // Schedule-selected dialog state. Lifted to the client root so the
   // dialog renders outside the per-row scrolling list.
   const [scheduleOpen, setScheduleOpen] = useState(false)
+  // Send-confirmation dialog — replaces the browser confirm() so the
+  // user sees a preview of who they're about to mail. `kind` controls
+  // wording + which action fires on confirm.
+  const [sendConfirm, setSendConfirm] = useState<null | { kind: 'all' | 'selected' }>(null)
   // Per-row edit state. Open one draft at a time; editing a second closes
   // the first. Tracks the local subject/body so the textarea is unaffected
   // by parent re-renders until save.
@@ -78,26 +83,13 @@ export function DraftsClient({
       <div className="flex flex-wrap items-center gap-2 border-b p-3">
         <CreateDraftsDialog templates={templates} />
         {rows.length > 0 ? (
-          <Button variant="outline" disabled={pending} onClick={() => start(async () => {
-            if (!confirm(`Send all ${rows.length} drafts now? This will hit your SMTP server.`)) return
-            const r = await sendAllAction()
-            toast[r.failed ? 'warning' : 'success'](`Sent ${r.sent}${r.failed ? ` · ${r.failed} failed` : ''}`)
-            router.refresh()
-          })}>
+          <Button variant="outline" disabled={pending} onClick={() => setSendConfirm({ kind: 'all' })}>
             <SendHorizontal className="mr-1.5 h-4 w-4" /> Send all
           </Button>
         ) : null}
         {selected.size > 0 ? (
           <>
-            <Button variant="default" disabled={pending} onClick={() => start(async () => {
-              const ids = Array.from(selected)
-              if (!confirm(`Send ${ids.length} selected draft(s) now?`)) return
-              const r = await sendSelectedDraftsAction(ids)
-              if ('error' in r && r.error) { toast.error(r.error); return }
-              toast[r.failed ? 'warning' : 'success'](`Sent ${r.sent}${r.failed ? ` · ${r.failed} failed` : ''}`)
-              setSelected(new Set())
-              router.refresh()
-            })}>
+            <Button variant="default" disabled={pending} onClick={() => setSendConfirm({ kind: 'selected' })}>
               <SendHorizontal className="mr-1.5 h-4 w-4" /> Send selected ({selected.size})
             </Button>
             <Button variant="outline" disabled={pending} onClick={() => setScheduleOpen(true)}
@@ -407,6 +399,39 @@ export function DraftsClient({
         open={scheduleOpen}
         onOpenChange={setScheduleOpen}
         onScheduled={() => setSelected(new Set())}
+      />
+
+      {/* Send-confirmation dialog — gates both Send all and Send
+          selected behind a preview so the user can catch wrong-template
+          / wrong-audience mistakes before SMTP fires. */}
+      <SendConfirmDialog
+        open={Boolean(sendConfirm)}
+        onOpenChange={(v) => { if (!v) setSendConfirm(null) }}
+        scope={sendConfirm?.kind ?? 'all'}
+        drafts={(sendConfirm?.kind === 'selected'
+          ? rows.filter((r) => selected.has(r.id))
+          : rows
+        ).map((d) => ({ id: d.id, subject: d.subject, toEmail: d.toEmail }))}
+        totalCount={sendConfirm?.kind === 'selected' ? selected.size : rows.length}
+        pending={pending}
+        onConfirm={() => {
+          const kind = sendConfirm?.kind
+          setSendConfirm(null)
+          if (!kind) return
+          start(async () => {
+            if (kind === 'all') {
+              const r = await sendAllAction()
+              toast[r.failed ? 'warning' : 'success'](`Sent ${r.sent}${r.failed ? ` · ${r.failed} failed` : ''}`)
+            } else {
+              const ids = Array.from(selected)
+              const r = await sendSelectedDraftsAction(ids)
+              if ('error' in r && r.error) { toast.error(r.error); return }
+              toast[r.failed ? 'warning' : 'success'](`Sent ${r.sent}${r.failed ? ` · ${r.failed} failed` : ''}`)
+              setSelected(new Set())
+            }
+            router.refresh()
+          })
+        }}
       />
     </div>
   )

@@ -3,6 +3,42 @@
 Guide for AI coding agents (Claude Code, Cursor, Aider, Codex, etc.) working on
 this repo. Humans should read [README.md](README.md) and [DEPLOYMENT.md](DEPLOYMENT.md).
 
+## Page chrome conventions (added 2026-06-05)
+
+Every app page uses two shared components instead of bespoke `<h1>` blocks
+or inline empty-message text:
+
+- **`components/ui/page-header.tsx`** — `<PageHeader icon title description pills actions />`. Pills are `{ label, value, tone }` where tone ∈ `default | success | warn | danger | info`. Right-side `actions` slot for buttons.
+- **`components/ui/empty-state.tsx`** — `<EmptyState icon title description action hint />`. Use inside `<Card><CardContent className="p-0">…</CardContent></Card>` for table-style pages; pass `compact` to halve vertical padding for in-card empties.
+
+When you add a new page, copy the pattern from `app/(app)/drafts/page.tsx` (stat-pill heavy header) or `app/(app)/companies/page.tsx` (empty-state primary CTA).
+
+## Draft-creation filter helpers
+
+The CreateDraftsDialog flow goes through `server/services/drafts.ts`:
+
+- **`DraftFilters`** — `{ platforms?, jobTitleContains?, locationContains?, skipRecentDays? }`. All optional, ANDed.
+- **`eligibleWhere(userId, filters)`** — single source of truth for the WHERE clause. Both `countEligible()` (live preview) and `createDraftsBulk()` (commit) use it, so the preview can never disagree with what create actually does. If you add a new filter, extend this helper, not the call sites.
+- **`countEligible()`** — returns `{ eligible, total, sample }` where `sample` is the first 5 matches for the dialog preview.
+
+## Notifications (Slack/Discord)
+
+- **`server/services/notify.ts`** — `notify(userId, event, payload)`. Best-effort fire-and-forget. Rate-limited 30/min per (user, event). Always wrap calls in `.catch(() => {})` at the call site so a webhook outage can't break the underlying send loop.
+- **Allowed events:** `send.completed` / `send.failed` / `bounce` / `reply`.
+- **URL whitelist:** `hooks.slack.com` + `discord.com` only — `parseWebhookUrl()` enforces. Do NOT widen this without security review (SSRF risk).
+
+## Presence
+
+`server/presence.ts` — in-memory per-Lambda. The Redis upgrade path is documented in the file header; if you need globally-consistent presence, swap `heartbeat()` for `XADD + EXPIRE` and `listPeers()` for `SMEMBERS`. The pill at `components/presence-pill.tsx` shows `(approx)` so users know the current behavior.
+
+## GDPR export
+
+`server/services/export.ts` builds the dump. Child tables (`campaign_steps`, `campaign_enrollments`, `campaign_step_variants`) chain through `campaign_id` (they don't have `userId`) — see how the export filters by `inArray` on the user's campaign ids. If you add a new child table, mirror that pattern.
+
+## Accent colors
+
+`components/accent-provider.tsx` exports the `ACCENTS` map (single source) and `isValidAccent()`. Server actions that accept an accent value MUST whitelist via `isValidAccent()` before writing — the value flows into a CSS custom property and untrusted input could inject extra declarations.
+
 ## What this is
 
 Self-hosted job-application email outreach app. Next.js 16 App Router +

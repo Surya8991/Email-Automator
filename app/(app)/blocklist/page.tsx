@@ -1,19 +1,25 @@
+import { Ban } from 'lucide-react'
 import { requireUser } from '@/auth'
 import { listBlocklist } from '@/server/services/blocklist'
 import { Card, CardContent } from '@/components/ui/card'
+import { PageHeader } from '@/components/ui/page-header'
 import { BlocklistClient } from './blocklist-client'
 
 export default async function BlocklistPage() {
   const u = await requireUser()
   const rows = await listBlocklist(u.id)
+  const domains = rows.filter((r) => r.pattern?.startsWith('@') || r.type === 'domain').length
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Blocklist</h1>
-        <p className="text-sm text-muted-foreground">
-          Suppress specific emails or whole domains. Unsubscribe clicks add to the global list automatically.
-        </p>
-      </div>
+      <PageHeader
+        icon={Ban}
+        title="Blocklist"
+        description="Suppress specific emails or whole domains. Unsubscribe clicks add to the global list automatically."
+        pills={[
+          { label: 'entries', value: rows.length, tone: rows.length > 0 ? 'info' : 'default' },
+          { label: 'domains', value: domains },
+        ]}
+      />
       <Card><CardContent className="p-0"><BlocklistClient rows={rows} /></CardContent></Card>
     </div>
   )

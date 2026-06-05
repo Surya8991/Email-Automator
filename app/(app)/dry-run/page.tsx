@@ -1,8 +1,10 @@
+import { Eye } from 'lucide-react'
 import { requireUser } from '@/auth'
 import { db } from '@/server/db/client'
 import { contacts } from '@/server/db/schema'
 import { eq, sql, and } from 'drizzle-orm'
 import { Card, CardContent } from '@/components/ui/card'
+import { PageHeader } from '@/components/ui/page-header'
 import { getActive } from '@/server/services/templates'
 import { buildEmail } from '@/server/services/drafts'
 
@@ -18,12 +20,15 @@ export default async function DryRunPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Dry run</h1>
-        <p className="text-sm text-muted-foreground">
-          Preview the first 100 contacts and the subject they'd get from your active template — no email goes out.
-        </p>
-      </div>
+      <PageHeader
+        icon={Eye}
+        title="Dry run"
+        description="Preview the first 100 eligible contacts and the personalized subject they'd get from your active template. Nothing is sent."
+        pills={[
+          { label: 'eligible', value: ready.length, tone: ready.length > 0 ? 'info' : 'warn' },
+          { label: 'template', value: tpl ? (tpl.label || tpl.key) : '—', tone: tpl ? 'success' : 'warn' },
+        ]}
+      />
       {!tpl ? (
         <Card><CardContent className="p-6 text-sm text-muted-foreground">
           No active template. Pick one in <a href="/templates" className="underline">Templates</a> and click Activate.
