@@ -104,6 +104,29 @@ export async function runDiagnosticsAction(opts: { mode?: 'quick' | 'full' } = {
       else warn('SPF', `No TXT records on ${domain}`, 'deliverability')
     }
 
+    // DKIM probe — try the most common selectors. Most senders use
+    // 'default' / 'google' / 's1' / 's2' / 'k1' / 'selector1'. We
+    // skip-and-warn rather than try every selector because a real
+    // negative needs DNS lookups against each one.
+    const DKIM_SELECTORS = ['default', 'google', 's1', 's2', 'k1', 'selector1']
+    let foundSelector: string | null = null
+    let foundRecord = ''
+    for (const sel of DKIM_SELECTORS) {
+      try {
+        const txts = await dns.resolveTxt(`${sel}._domainkey.${domain}`)
+        const flat = txts.map((t) => t.join('')).join(' | ')
+        if (/v=DKIM1/i.test(flat) || /k=rsa/i.test(flat)) {
+          foundSelector = sel
+          foundRecord = flat.slice(0, 200)
+          break
+        }
+      } catch { /* selector miss — try next */ }
+    }
+    if (foundSelector) pass('DKIM', `Selector ${foundSelector}._domainkey.${domain} (${foundRecord.slice(0, 80)}…)`, 'deliverability')
+    else if (isProvider) pass('DKIM', `${domain} is a mailbox provider — DKIM managed by them`, 'deliverability')
+    else warn('DKIM', `No DKIM TXT record found on common selectors (${DKIM_SELECTORS.join(', ')}) for ${domain}`, 'deliverability',
+      `Add a DKIM TXT record at <selector>._domainkey.${domain}. Recommended starter: "v=DKIM1; k=rsa; p=<base64 public key>". Your SMTP provider (Gmail Workspace, Postmark, Mailgun, etc.) generates the keypair — copy the TXT from their docs. Without DKIM, Gmail and Outlook downgrade your sender reputation.`)
+
     try {
       const txts = await dns.resolveTxt('_dmarc.' + domain)
       const flat = txts.map((t) => t.join('')).join(' | ')

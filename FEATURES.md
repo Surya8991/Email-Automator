@@ -3,6 +3,29 @@
 Everything Email Automator currently does, grouped by section.
 Last refreshed: 2026-06-05.
 
+## 🆕 What's new (2026-06-06, third batch — overnight build)
+
+**Templates UI/UX overhaul (user explicit ask)**
+- **Inline-edit template label** — double-click any sidebar list label → input → Enter/blur to save, Escape to cancel. `saveTemplateAction` preserves the other fields.
+- **Spam-trigger deliverability chip** — new `lib/spam-check.ts` with 9 rules (ALL_CAPS_SUBJECT, EXCESSIVE_EXCLAMATION, CLASSIC_SPAM_WORDS, URL_HEAVY, MISSING_BODY, MISSING_PERSONALIZATION, SUSPICIOUS_TLD, CURRENCY_SHOUT, NO_UNSUB_LINK). `components/spam-check-chip.tsx` renders a banded (clean / mild / loud) expandable chip. Wired into both the Templates editor AND the Drafts editor inline mode.
+- 11 unit tests for the spam-check (every rule + band transitions).
+
+**Dashboard activation checklist (FUTURE_FEATURES item)**
+- Replaces the old "no contacts" empty state with a 3-step progressive disclosure: Configure SMTP → Activate template → Send first email. Each row shows done/numbered indicator + Open CTA. Fades when all three are done.
+
+**Onboarding replay (FUTURE_FEATURES item)**
+- New `/profile` card with a button that resets `ONBOARDING_SEEN_VERSION` so the modal replays on the next page load. `server/actions/onboarding-replay.ts`.
+
+**Saved views on `/contacts` (FUTURE_FEATURES Q item)**
+- New `saved_views` table + migration `0007_saved_views.sql` (with correct `--> statement-breakpoint` separators for the libsql migrator).
+- `server/services/saved-views.ts` + `server/actions/saved-views.ts` with key-whitelist + length clamp.
+- New `SavedViewsBar` component renders chips for the user's saved combos + an inline "Save current view" capture. Snapshots `search / tag / status / company / location / platform` URLSearchParams.
+
+**Diagnostic: DKIM helper (FUTURE_FEATURES item)**
+- DKIM probe added that tries 6 common selectors (`default`, `google`, `s1`, `s2`, `k1`, `selector1`). Per-row remediation explains the recommended TXT record template + which provider docs to copy from.
+
+**`OPERATOR_TODO.html` refreshed** — now lists `saved_views` alongside the other tables that need migration 0007 on Turso.
+
 ## 🆕 What's new (2026-06-06, second batch)
 
 - **URGENT prod fix** — `/profile` (and other pages using the sign-out form) returned Vercel ERROR 259737202. Root cause: the Topbar inlined sign-out as an arrow function with embedded `'use server'`, which gave the action a new id on every server render in production. Extracted to `server/actions/auth.ts` with a module-level `'use server'` directive.
