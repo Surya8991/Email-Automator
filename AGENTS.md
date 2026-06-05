@@ -3,6 +3,17 @@
 Guide for AI coding agents (Claude Code, Cursor, Aider, Codex, etc.) working on
 this repo. Humans should read [README.md](README.md) and [DEPLOYMENT.md](DEPLOYMENT.md).
 
+## Design system (refreshed 2026-06-06)
+
+- **Fonts** — Inter via `next/font/google` exported as the `--font-sans` CSS variable and bound to Tailwind's `font-sans` (see `tailwind.config.ts`). JetBrains Mono is `--font-mono` for `code` / `kbd` / `pre`. Adding a new font: register in `app/layout.tsx`, expose a CSS variable, extend the Tailwind `fontFamily`.
+- **Depth tiers** — `.ea-surface`, `.ea-raised`, `.ea-floating` in `app/globals.css`. Use `ea-floating` for one hero card per page (auth card, primary detail surface). `ea-raised` is the default. `ea-surface` is for sub-cards inside a Section.
+- **Section primitive** — `components/ui/section.tsx`. When a page has 4+ stacked cards, wrap each cluster in `<Section eyebrow="…" title? description? actions?>`. Pattern: one PageHeader, then 1-N Sections.
+- **Segmented control** — `<Segmented value onChange options ariaLabel />` from `components/ui/segmented.tsx`. Reserve for ≤4-option toggles. Don't use for big tab sets — keep shadcn Tabs there.
+- **Sidebar groups** — `GROUPS` const in `components/sidebar.tsx`. Adding a nav item: pick the right eyebrow (Workspace / Compose / Send / Insights / You) or create a new group with a noun eyebrow label.
+- **Data tables** — `<table className="ea-table ea-table-sticky">` inside an `overflow-auto` scroll container gives you sticky head + zebra + hover row actions. Hide row buttons inside `<div className="ea-row-actions">` to reveal only on row hover.
+- **Editor pattern** — pair `useUnsavedGuard(dirty)` with `useSaveShortcut(handleSave, !pending)` (and optionally `useSendShortcut` for draft surfaces). All three live in `components/`.
+- **Pluralize** — `pluralize(n, sing, plur?)` / `pluralWord(n, sing, plur?)` / `formatCount(n, sing, plur?)` from `lib/pluralize.ts`. Always use in PageHeader pill labels — "23 contacts" not "23 contact".
+
 ## AI accuracy & generation patterns (added 2026-06-05)
 
 - **`server/services/ai-generate.ts`** — entry point for `kind = jd | post | url | text`. URL inputs are fetched via `fetchForAi()` which enforces HTTPS in prod, blocks private IPs / loopback / link-local hostnames, caps body at 1 MB, times out at 5 s. The result text is `stripHtml`-cleaned before reaching the prompt.

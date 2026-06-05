@@ -1,5 +1,22 @@
 # TODO — Email-Automator
 
+> Captured 2026-06-01, refreshed 2026-06-06.
+
+## 🟧 Deferred from the 2026-06-06 design pass (next session)
+
+These were called out in the plan but didn't ship in the design overhaul
+batch — each deserves a focused session. Tier roughly matches user impact.
+
+- **J. Mobile shell** — bottom nav bar on `< md` (Dashboard / Contacts / Drafts / Campaigns / More), swipe actions on draft rows (left = delete, right = send). Needs its own design pass for the tap targets + gesture conflict handling.
+- **M. Onboarding** — re-trigger button on `/profile` (currently version-bumped only), activation checklist on `/dashboard` (SMTP set / first contact / first send) that fades when complete.
+- **O. Performance** — Suspense streaming for `/analytics` heatmap + dashboard activity feed, lazy-mount `SectionHelp` dialog body, `React.memo` on the template editor body and per-draft row. Worth measuring with Lighthouse first; size the wins before doing the work.
+- **P. Deliverability** — SMTP warmup mode (gradual daily-send ramp for new creds), send-window enforcement (only fire 09:00-18:00 in recipient TZ), subject A/B winner auto-picker (promote the higher-reply-rate variant after N sends).
+- **Q. Data tools** — saved views on `/contacts` (named filter combos), bulk-edit a field across a filtered set, restore-from-backup admin tool that takes the GDPR JSON dump.
+- **Notifications bell** in topbar — events backend exists; UI surface is fresh.
+- **Inline-edit template label** — double-click to edit without leaving the page.
+- **`⌘↵` to send a draft** — covered by `useSendShortcut` hook but not yet wired anywhere.
+- **AI Improve diff view** in templates — old/new side-by-side with Keep/Revert instead of silent overwrite.
+
 > Captured 2026-06-01, refreshed 2026-06-05. Each item names what to do,
 > where it lives, and rough effort. Severity tags match the code review:
 > 🟥 Critical, 🟧 High, 🟨 Medium, 🟦 Low, 🟩 Architecture. Anything

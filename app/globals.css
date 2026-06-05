@@ -318,3 +318,43 @@
   background: hsl(var(--background));
   box-shadow: 0 1px 0 0 hsl(0 0% 100% / 0.04);
 }
+
+/* ── Data tables (contacts / schedule / audit / queue) ──────────────
+   Compositions:
+     .ea-table       — base styling: zebra stripe, hover row tint, tight row,
+                       hairline borders. Apply on <table>.
+     .ea-table-sticky — sticky <thead>. Apply alongside .ea-table on tables
+                       inside a scroll container.
+   Row actions surface on hover via the .ea-row-actions opacity flip.
+*/
+.ea-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+.ea-table thead th {
+  position: relative;
+  text-align: left;
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+  background: hsl(var(--muted) / 0.4);
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid hsl(var(--border));
+}
+.ea-table-sticky thead th {
+  position: sticky; top: 0; z-index: 1;
+  background: hsl(var(--card)); /* solid so the body doesn't bleed through */
+  backdrop-filter: blur(6px);
+}
+.ea-table tbody td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid hsl(var(--border) / 0.5);
+  vertical-align: middle;
+}
+.ea-table tbody tr { transition: background-color 120ms ease; }
+.ea-table tbody tr:nth-child(odd)  { background: hsl(var(--muted) / 0.12); }
+.ea-table tbody tr:hover           { background: hsl(var(--accent) / 0.45); }
+.ea-table tbody tr:last-child td   { border-bottom: 0; }
+/* Row actions — hidden until hover/focus-within for a cleaner default. */
+.ea-row-actions { opacity: 0; transition: opacity 160ms ease; }
+.ea-table tbody tr:hover .ea-row-actions,
+.ea-table tbody tr:focus-within .ea-row-actions { opacity: 1; }

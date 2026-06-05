@@ -3,6 +3,22 @@
 Everything Email Automator currently does, grouped by section.
 Last refreshed: 2026-06-05.
 
+## 🆕 What's new (2026-06-06)
+
+- **Typography upgrade** — Inter via `next/font/google` self-hosted, Inter feature-settings (cv11, ss01, ss03, tabular nums), JetBrains Mono for code, tightened heading letter-spacing, refined 2px+2px focus ring.
+- **Login page redesign** — two-pane layout: clean auth card (Google primary / GitHub secondary / magic link tertiary) inside an `.ea-floating` depth tier, brand panel on `lg+` with a 3-point self-hosted pitch and a gradient headline.
+- **Sidebar redesign** — nav grouped under eyebrow labels (Workspace / Compose / Send / Insights / You / Admin), tighter type, active-row indicator bar, gradient brand mark on top.
+- **Topbar refresh** — persistent "Search — jump anywhere" pill that opens `⌘K`, auto-built breadcrumbs from route segments, profile dropdown with email + theme + sign-out.
+- **App-shell orbs** — two soft gradient orbs (primary + violet) behind the whole app for depth.
+- **Card depth tiers** — `.ea-surface` / `.ea-raised` / `.ea-floating` utilities so the eye can rank importance.
+- **Section primitive** — `components/ui/section.tsx`: eyebrow + title + description + actions slot + hairline divider for visual grouping.
+- **Segmented control** — `components/ui/segmented.tsx` with `.ea-segmented` styling; replaces shadcn Tabs at the Edit/Generate toggle in `/templates`.
+- **Sticky header + zebra rows in `/contacts`** — `.ea-table` + `.ea-table-sticky` utilities, hover-revealed row actions.
+- **Marketing visual refresh** — feature cards use `.ea-icon-halo` halo + `.ea-raised`, eyebrow label above the section heading, gradient + tightened hero.
+- **PWA install — once per session** — `sessionStorage` instead of 30-day `localStorage` so the prompt surfaces again on the next sign-in.
+- **`⌘S` to save in template editor** + unsaved-changes guard via `useSaveShortcut` / `useUnsavedGuard` hooks.
+- **Pluralization sweep** — `lib/pluralize.ts` wired into `/drafts`, `/companies`, `/contacts` PageHeader pills.
+
 ## 🆕 What's new (2026-06-05, second batch)
 
 - **AI Generate from JD / Post / URL / Text** — new tab in `/templates`. Paste a job description, social-media post body, free text, or any URL → AI returns subject + body + framing assumption. URL fetcher is SSRF-defended (HTTPS only in prod, private IPs / loopback / link-local blocked, 5 s timeout, 1 MB body cap, content-type whitelist).

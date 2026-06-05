@@ -306,9 +306,9 @@ export function ContactsTable({
           ))}
         </ul>
 
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+        <div className="hidden md:block max-h-[calc(100dvh-22rem)] overflow-auto rounded-md border">
+          <table className="ea-table ea-table-sticky">
+            <thead>
               <tr>
                 <th className="w-10 px-3 py-2">
                   {/* Select-all toggle. Selects the visible page only — not

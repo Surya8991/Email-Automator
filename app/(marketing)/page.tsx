@@ -85,17 +85,20 @@ export default async function MarketingHomePage() {
       {/* ── Feature grid ──────────────────────────────────────────── */}
       <section className="mx-auto max-w-6xl px-6 py-16" aria-labelledby="features-heading">
         <div className="mb-10 text-center">
-          <h2 id="features-heading" className="text-3xl font-bold tracking-tight">Everything you need to run outreach</h2>
-          <p className="mt-2 text-sm text-muted-foreground">12 modules. One self-hosted workspace.</p>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Features</div>
+          <h2 id="features-heading" className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Everything you need to run outreach</h2>
+          <p className="mx-auto mt-3 max-w-xl text-sm text-muted-foreground">12 modules. One self-hosted workspace. No subscription, no data lock-in.</p>
         </div>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {FEATURES.map(({ icon: Icon, title, blurb }, i) => (
             <article key={title}
-              className="ea-fade-in ea-hover-lift rounded-xl border bg-card/40 p-5 backdrop-blur"
+              className="ea-fade-in ea-hover-lift ea-raised rounded-xl p-5 backdrop-blur"
               style={{ animationDelay: `${(i % 6) * 50}ms` }}>
-              <Icon className="h-7 w-7 text-primary" aria-hidden />
-              <h3 className="mt-3 text-base font-semibold">{title}</h3>
-              <p className="mt-1 text-sm text-muted-foreground">{blurb}</p>
+              <span className="ea-icon-halo inline-flex h-10 w-10 items-center justify-center rounded-xl border bg-gradient-to-br from-primary/15 to-primary/5 text-primary">
+                <Icon className="h-5 w-5" aria-hidden />
+              </span>
+              <h3 className="mt-3 text-base font-semibold tracking-tight">{title}</h3>
+              <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{blurb}</p>
             </article>
           ))}
         </div>

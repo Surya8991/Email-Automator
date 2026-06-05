@@ -7,7 +7,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { GenerateFromContext } from './generate-from-context'
+import { Segmented } from '@/components/ui/segmented'
 import { cn } from '@/lib/utils'
+import { useSaveShortcut } from '@/components/use-save-shortcut'
+import { useUnsavedGuard } from '@/components/use-unsaved-guard'
 import { personalize } from '@/lib/escape'
 import { activateTemplateAction, saveTemplateAction, cloneTemplateAction, sendTemplateTestAction } from '@/server/actions/templates'
 import { aiDraftAction, aiSuggestSubjectsAction } from '@/server/actions/ai'
@@ -87,6 +90,30 @@ export function TemplateEditor({
   // state so accepting a generated draft drops you back into 'edit'
   // with the new subject + body in place.
   const [mode, setMode] = useState<'edit' | 'generate'>('edit')
+
+  // ── Editor lifecycle hooks ─────────────────────────────────────
+  // Dirty when the in-memory draft diverges from the currently-loaded
+  // template. Compared on the 4 round-tripped fields (key/label/subject/
+  // initialMsg) — version/active aren't user-editable here.
+  const original = templates.find((t) => t.id === pickedId)
+  const dirty = original
+    ? (original.key !== (draft.key ?? '') ||
+       original.label !== (draft.label ?? '') ||
+       original.subject !== (draft.subject ?? '') ||
+       original.initialMsg !== (draft.initialMsg ?? ''))
+    : Boolean(draft.key || draft.label || draft.subject || draft.initialMsg)
+  useUnsavedGuard(dirty)
+  // ⌘S / Ctrl+S triggers save when in the Edit pane. Suppressed
+  // while pending so a stuck request can't queue up duplicates.
+  useSaveShortcut(() => {
+    if (mode !== 'edit') return
+    start(async () => {
+      const r = await saveTemplateAction(draft as never)
+      if ('error' in r && r.error) { toast.error(r.error); return }
+      toast.success(`Saved (v${(r as { version?: number }).version ?? '?'})`)
+      router.refresh()
+    })
+  }, !pending && mode === 'edit')
 
   // Insert a token at the cursor of whichever field was last focused.
   // Tokens are either {{var}} (variables — substituted per recipient by
@@ -214,28 +241,14 @@ export function TemplateEditor({
 
       {/* Right region — tab strip + conditional pane. */}
       <div className="min-w-0 space-y-4">
-        <div role="tablist" aria-label="Template view" className="inline-flex rounded-lg border bg-card p-1 text-sm">
-          <button
-            role="tab" type="button" aria-selected={mode === 'edit'}
-            onClick={() => setMode('edit')}
-            className={cn(
-              'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 ea-transition',
-              mode === 'edit' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted',
-            )}
-          >
-            <Pencil className="h-3.5 w-3.5" /> Edit
-          </button>
-          <button
-            role="tab" type="button" aria-selected={mode === 'generate'}
-            onClick={() => setMode('generate')}
-            className={cn(
-              'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 ea-transition',
-              mode === 'generate' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted',
-            )}
-          >
-            <Sparkles className="h-3.5 w-3.5" /> Generate (AI)
-          </button>
-        </div>
+        <Segmented<'edit' | 'generate'>
+          ariaLabel="Template view"
+          value={mode} onChange={setMode}
+          options={[
+            { value: 'edit',     label: 'Edit',         icon: Pencil },
+            { value: 'generate', label: 'Generate (AI)', icon: Sparkles },
+          ]}
+        />
 
         {mode === 'generate' ? (
           <GenerateFromContext
