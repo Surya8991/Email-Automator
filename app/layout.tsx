@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Inter, JetBrains_Mono } from 'next/font/google'
 import { ThemeProvider } from '@/components/theme-provider'
 import { Toaster } from 'sonner'
@@ -33,6 +33,12 @@ export const metadata: Metadata = {
     statusBarStyle: 'default',
     title: 'Email Automator',
   },
+}
+
+// Next 16 moved themeColor + viewport tuning out of `metadata` into a
+// separate `viewport` export. Keeping them here silences the build
+// warning that was firing on /jobs (and would flag CI on Vercel too).
+export const viewport: Viewport = {
   themeColor: [
     { media: '(prefers-color-scheme: light)', color: '#ffffff' },
     { media: '(prefers-color-scheme: dark)',  color: '#0b0f17' },
