@@ -16,7 +16,7 @@ export function ImpersonationBanner({ targetEmail }: { targetEmail: string }) {
       <span className="inline-flex items-center gap-1.5">
         <UserCog className="h-3.5 w-3.5" />
         Impersonating <span className="rounded bg-white/20 px-1.5 py-0.5 font-mono">{targetEmail}</span>
-        — every action below is audit-logged with your admin id.
+       , every action below is audit-logged with your admin id.
       </span>
       <Button size="sm" variant="ghost"
         className="h-6 px-2 text-white hover:bg-white/15 hover:text-white"

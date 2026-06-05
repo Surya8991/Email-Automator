@@ -22,7 +22,7 @@ export function PresencePill({ resource }: { resource: string }) {
         if (!r.ok) return
         const { peers } = (await r.json()) as { peers: Peer[] }
         if (!cancelled) setPeers(peers ?? [])
-      } catch { /* network blip — try again next tick */ }
+      } catch { /* network blip, try again next tick */ }
     }
 
     ping()
@@ -31,13 +31,13 @@ export function PresencePill({ resource }: { resource: string }) {
   }, [resource])
 
   if (peers.length === 0) return null
-  // We mask emails to local-part only — the full address would be a
+  // We mask emails to local-part only, the full address would be a
   // small leak across teams when multiple users share a tenant.
   const names = peers.slice(0, 3).map((p) => p.email.split('@')[0]).join(', ')
   const extra = peers.length > 3 ? ` +${peers.length - 3}` : ''
   return (
     <span
-      title={`${peers.length} other ${peers.length === 1 ? 'person' : 'people'} viewing this — approximate (per-instance presence)`}
+      title={`${peers.length} other ${peers.length === 1 ? 'person' : 'people'} viewing this, approximate (per-instance presence)`}
       className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-300 ea-fade-in"
     >
       <Users className="h-3 w-3" />

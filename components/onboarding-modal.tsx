@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { markOnboardingSeenAction } from '@/server/actions/onboarding'
 
 /**
- * The CURRENT_VERSION constant — bump this to re-trigger the modal for
+ * The CURRENT_VERSION constant, bump this to re-trigger the modal for
  * every user on their next sign-in. Useful when shipping a major UX
  * change you want everyone to see. Persisted per-user in settings as
  * `ONBOARDING_SEEN_VERSION`.
@@ -56,7 +56,7 @@ const SLIDES: Slide[] = [
     title: 'Schedule or campaign',
     body: (
       <>
-        <p><Link href="/schedule" className="underline">/schedule</Link> stages every draft out at staggered times. The worker fires them off in the background — pause/resume from the same page.</p>
+        <p><Link href="/schedule" className="underline">/schedule</Link> stages every draft out at staggered times. The worker fires them off in the background, pause/resume from the same page.</p>
         <p><Link href="/campaigns" className="underline">/campaigns</Link> chains multi-step sequences (intro → bump → final follow-up) with delays between steps and auto-stop on reply.</p>
       </>
     ),

@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { Github, Code2, Database, Lock, Zap, Sparkles, Boxes, Workflow } from 'lucide-react'
 
 export const metadata = {
-  title: 'About — Email Automator',
+  title: 'About, Email Automator',
   description: 'A self-hosted outreach tool. Why we built it, who it is for, the tech behind it, and how it stays free.',
 }
 
@@ -28,7 +28,7 @@ export default function AboutPage() {
             Built so you don&apos;t have to pay <span className="text-muted-foreground line-through">$99/mo</span> for outreach.
           </h1>
           <p className="text-base text-muted-foreground sm:text-lg">
-            A self-hosted alternative to Apollo, Outreach.io, Lemlist — without the subscription, without the
+            A self-hosted alternative to Apollo, Outreach.io, Lemlist, without the subscription, without the
             data lock-in, and without the &ldquo;contact sales&rdquo; tier for the features you actually need.
           </p>
         </div>

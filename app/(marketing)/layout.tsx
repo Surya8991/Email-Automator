@@ -3,7 +3,7 @@ import { Workflow, Github, Zap } from 'lucide-react'
 import { ThemeToggle } from '@/components/theme-toggle'
 
 export const metadata = {
-  title: 'Email Automator — outreach at scale, on autopilot',
+  title: 'Email Automator, outreach at scale, on autopilot',
   description: 'Self-hosted email outreach. Templates, multi-step campaigns with A/B testing, AI-assisted writing, company research, multiple identities, audit log, JSON API.',
 }
 
@@ -11,7 +11,7 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
   const year = 2026 // Static rather than Date.now() so build output is deterministic.
   return (
     <div className="min-h-dvh bg-background text-foreground">
-      {/* Skip-to-content for keyboard users — the focus ring shows only on
+      {/* Skip-to-content for keyboard users, the focus ring shows only on
           keyboard nav so the visual chrome stays clean for mouse users. */}
       <a
         href="#main"
@@ -20,7 +20,7 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
         Skip to content
       </a>
 
-      {/* Animated background blobs — pure CSS, respects prefers-reduced-motion via globals.css. */}
+      {/* Animated background blobs, pure CSS, respects prefers-reduced-motion via globals.css. */}
       <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
         <div className="absolute -top-32 -left-24 h-96 w-96 rounded-full bg-primary/15 blur-3xl ea-fade-in" />
         <div className="absolute -bottom-32 -right-24 h-96 w-96 rounded-full bg-emerald-500/15 blur-3xl ea-fade-in" style={{ animationDelay: '120ms' }} />
@@ -65,7 +65,7 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
             </Link>
           </div>
         </nav>
-        {/* Mobile sub-nav row — visible only on narrow viewports */}
+        {/* Mobile sub-nav row, visible only on narrow viewports */}
         <div className="flex items-center justify-center gap-1 border-t bg-background/40 px-3 py-2 text-xs sm:hidden">
           <NavLink href="/" mobile>Home</NavLink>
           <NavLink href="/about" mobile>About</NavLink>

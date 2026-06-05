@@ -13,7 +13,7 @@ const FEATURES = [
   { icon: Sparkles,     title: 'AI assist (Groq)',       blurb: 'Llama 3.3 rewrites bodies, suggests subjects, enriches companies, generates openers.' },
   { icon: FileText,     title: 'Starter templates',      blurb: '5 public + 23 admin-overlay templates. Variables with fallbacks. Clickable insertion palette.' },
   { icon: Building2,    title: 'Company research',       blurb: 'Industry, HQ, size, tech stack, salary range. Auto-fills via AI; surfaces on contact detail.' },
-  { icon: MailPlus,     title: 'Multiple identities',    blurb: 'Personal / Work / role personas — each with its own from-address + encrypted SMTP.' },
+  { icon: MailPlus,     title: 'Multiple identities',    blurb: 'Personal / Work / role personas, each with its own from-address + encrypted SMTP.' },
   { icon: ShieldCheck,  title: 'Hardened defaults',      blurb: 'CSP, HSTS, encrypted creds at rest, HMAC-signed admin cookies, multi-tenant isolation.' },
   { icon: Bot,          title: 'JSON API + webhooks',    blurb: 'Bearer auth with per-key scopes (read/write contacts). HMAC-signed outbound webhooks.' },
   { icon: Eye,          title: 'Dry-run preview',        blurb: 'See exactly what each contact would get before you send anything.' },
@@ -37,7 +37,7 @@ export default async function MarketingHomePage() {
     const session = await auth()
     if (session?.user) redirect('/dashboard')
   } catch (e) {
-    // redirect() throws by design — re-throw so Next handles it.
+    // redirect() throws by design, re-throw so Next handles it.
     if (e instanceof Error && e.message.includes('NEXT_REDIRECT')) throw e
     console.error('[home] auth() failed (rendering marketing anyway):', e)
   }
@@ -140,10 +140,10 @@ export default async function MarketingHomePage() {
               <h2 id="ai-heading" className="text-2xl font-bold tracking-tight">AI on every surface that matters</h2>
               <p className="mt-1 text-sm text-muted-foreground">All running on your own Groq API key (free tier covers a lot). Rate-limited 20/min/user.</p>
               <ul className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
-                <li className="flex items-start gap-2"><span className="mt-0.5 text-primary" aria-hidden>●</span><span><strong>AI Improve</strong> in drafts / schedule / campaigns — pick a tone, rewrite the body, 1-hour Undo.</span></li>
-                <li className="flex items-start gap-2"><span className="mt-0.5 text-primary" aria-hidden>●</span><span><strong>AI subject suggester</strong> in templates — 5 variants from the body, click to swap.</span></li>
-                <li className="flex items-start gap-2"><span className="mt-0.5 text-primary" aria-hidden>●</span><span><strong>AI company fill</strong> in /companies — auto-completes industry, HQ, tech stack, salary range.</span></li>
-                <li className="flex items-start gap-2"><span className="mt-0.5 text-primary" aria-hidden>●</span><span><strong>AI opener</strong> — personalized first sentence per contact (server action ready).</span></li>
+                <li className="flex items-start gap-2"><span className="mt-0.5 text-primary" aria-hidden>●</span><span><strong>AI Improve</strong> in drafts / schedule / campaigns, pick a tone, rewrite the body, 1-hour Undo.</span></li>
+                <li className="flex items-start gap-2"><span className="mt-0.5 text-primary" aria-hidden>●</span><span><strong>AI subject suggester</strong> in templates, 5 variants from the body, click to swap.</span></li>
+                <li className="flex items-start gap-2"><span className="mt-0.5 text-primary" aria-hidden>●</span><span><strong>AI company fill</strong> in /companies, auto-completes industry, HQ, tech stack, salary range.</span></li>
+                <li className="flex items-start gap-2"><span className="mt-0.5 text-primary" aria-hidden>●</span><span><strong>AI opener</strong>, personalized first sentence per contact (server action ready).</span></li>
               </ul>
             </div>
           </div>
@@ -158,7 +158,7 @@ export default async function MarketingHomePage() {
           <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
             <Link href="/login"
               className="inline-flex items-center gap-1.5 rounded-md bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90 ea-transition">
-              Get started — it&apos;s free
+              Get started, it&apos;s free
             </Link>
             <Link href="/guide"
               className="inline-flex items-center gap-1.5 rounded-md border bg-background px-6 py-3 text-sm font-semibold hover:bg-muted ea-transition">

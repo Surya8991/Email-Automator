@@ -36,7 +36,7 @@ export default async function CampaignsPage() {
               { label: 'Stop on reply', hint: 'Default-on per step. A detected reply marks the enrollment Replied and the rest of the sequence is skipped.' },
             ]}
             pitfalls={[
-              { label: 'Status confusion', hint: 'Draft / running / paused. A paused campaign holds new enrollments but does not stop in-flight ones — pause + complete to drain.' },
+              { label: 'Status confusion', hint: 'Draft / running / paused. A paused campaign holds new enrollments but does not stop in-flight ones, pause + complete to drain.' },
             ]}
             guideAnchor="campaigns"
           />
@@ -50,7 +50,7 @@ export default async function CampaignsPage() {
             title="No campaigns yet"
             description="Campaigns let you send a sequence of touches over days or weeks. Each step has its own template, delay, and A/B variants."
             action={<NewCampaignButton />}
-            hint="Each step picks up after its delay elapses — the worker checks every 30 s."
+            hint="Each step picks up after its delay elapses, the worker checks every 30 s."
           />
         </CardContent></Card>
       ) : (

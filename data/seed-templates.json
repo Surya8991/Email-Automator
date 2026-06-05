@@ -2,9 +2,9 @@
   "universal_short_cold": {
     "category": "Universal",
     "label": "Cold short, proof-first",
-    "subject": "Quick question about {{company}}",
-    "initialMsg": "<p>Hi {{name|there}},</p><p>{{one_line_proof|Recent work that maps to what {{company}} is building, happy to share specifics in 15 min.}}</p><p>Worth a short call this week or next?</p><p>Best,<br>{{my_name|}}</p>",
-    "follow1Msg": "<p>Hi {{name|there}},</p><p>Bumping last week's note. Tuesday 3 to 5 pm or Thursday morning work on my side, whichever's easier on yours.</p>",
+    "subject": "{{topic|growth notes for {{company}}}}",
+    "initialMsg": "<p>Hi {{name|there}},</p><p>{{one_line_proof|Quick context on what I've shipped recently, the kind of work that maps to {{company}}'s current focus.}}</p><p>Worth a 15 min call this week or next?</p><p>Best,<br>{{my_name|}}</p>",
+    "follow1Msg": "<p>Hi {{name|there}},</p><p>Bumping last week's note. Happy to grab any window that works on your side.</p>",
     "lastFollowMsg": "<p>Hi {{name|there}},</p><p>Last nudge from me. If the timing isn't right at {{company}}, no problem at all.</p>"
   },
   "starter_jobpost_reply": {
@@ -27,15 +27,15 @@
     "category": "Universal",
     "label": "Thank you, post-interview",
     "subject": "Thanks for your time today",
-    "initialMsg": "<p>Hi {{name|there}},</p><p>Thanks for the conversation about <b>{{role_name|the role}}</b> at <b>{{company}}</b>. Came away more excited about the work and the team.</p><p>{{followup_offer|Happy to share any extra context that would be useful for the next round, references, samples, or a short Loom walking through prior work.}}</p>",
+    "initialMsg": "<p>Hi {{name|there}},</p><p>Thanks for the conversation about <b>{{role_name|the role}}</b> at <b>{{company}}</b>. Came away more excited about the work and the team.</p><p>{{followup_offer|Glad to send references or a short Loom walking through prior work if either would be useful for the next round.}}</p>",
     "follow1Msg": "",
     "lastFollowMsg": ""
   },
   "universal_reengage": {
     "category": "Universal",
     "label": "60 day re-engage",
-    "subject": "Following up from a couple months back",
-    "initialMsg": "<p>Hi {{name|there}},</p><p>We spoke (or I reached out) about <b>{{company}}</b> a couple of months back, wanted to circle back. Things have moved on my side since:</p><p>{{recent_wins|One or two recent wins worth flagging, swap with your latest.}}</p><p>If anything's changed on your end, happy to chat. If not, no worries, I'll keep an eye on <b>{{company}}</b>.</p>",
+    "subject": "Circling back on {{company}}",
+    "initialMsg": "<p>Hi {{name|there}},</p><p>I reached out about <b>{{company}}</b> a couple of months back and wanted to circle back. Things have moved on my side since:</p><p>{{recent_wins|One or two recent wins worth flagging here, replace with whatever's most relevant to {{company}}.}}</p><p>If anything's changed on your side, happy to pick the thread back up. If not, no worries.</p>",
     "follow1Msg": "<p>Hi {{name|there}},</p><p>Bumping this re-engage note in case it got buried.</p>",
     "lastFollowMsg": "<p>Hi {{name|there}},</p><p>Closing the loop fully on this one. If <b>{{company}}</b> ever needs a hand, my inbox is open.</p>"
   }

@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 // shows a small dismissible banner, calls prompt() on user click.
 // Dismissal is sticky for 30 days via localStorage so we don't pester.
 //
-// Safari iOS doesn't fire beforeinstallprompt — we fall back to a
+// Safari iOS doesn't fire beforeinstallprompt, we fall back to a
 // gentle hint with the manual "Share → Add to Home Screen" path.
 
 interface DeferredPrompt extends Event {
@@ -15,7 +15,7 @@ interface DeferredPrompt extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
 }
 
-// Session-only dismissal — show at most once per browser tab session.
+// Session-only dismissal, show at most once per browser tab session.
 // We deliberately use sessionStorage (per-tab, cleared on close) rather
 // than localStorage so a returning user who restarts their browser sees
 // the prompt again. The prior 30-day localStorage gate was too sticky.
@@ -46,11 +46,11 @@ export function InstallPrompt() {
     }
     window.addEventListener('beforeinstallprompt', onBeforeInstall as EventListener)
 
-    // iOS Safari heuristic — UA-based, not perfect but the only signal.
+    // iOS Safari heuristic, UA-based, not perfect but the only signal.
     const ua = navigator.userAgent
     const isIos = /iPhone|iPad|iPod/.test(ua) && !/CriOS|FxiOS/.test(ua)
     if (isIos && !window.matchMedia('(display-mode: standalone)').matches) {
-      // Delay so it doesn't pop on first paint — wait 8 s of "real use".
+      // Delay so it doesn't pop on first paint, wait 8 s of "real use".
       const t = setTimeout(() => { setIosHint(true); setOpen(true) }, 8_000)
       return () => {
         window.removeEventListener('beforeinstallprompt', onBeforeInstall as EventListener)
@@ -74,7 +74,7 @@ export function InstallPrompt() {
     if (result.outcome === 'accepted') {
       setOpen(false)
     } else {
-      // Dismissed — respect the user's choice for the suppression window.
+      // Dismissed, respect the user's choice for the suppression window.
       suppress()
       setOpen(false)
     }
@@ -97,7 +97,7 @@ export function InstallPrompt() {
             </p>
           ) : (
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Add it to your home screen for one-tap access — no app store, no extra account.
+              Add it to your home screen for one-tap access, no app store, no extra account.
             </p>
           )}
           <div className="mt-2 flex flex-wrap items-center gap-2">

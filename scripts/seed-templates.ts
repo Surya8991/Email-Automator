@@ -17,9 +17,15 @@ import { db } from '../server/db/client'
 import { users, templates } from '../server/db/schema'
 import { adminEmails } from '../lib/env'
 
-const args = process.argv.slice(2)
-const targetEmail = (args[0]?.startsWith('--') ? 'test@gmail.com' : (args[0] ?? 'test@gmail.com')).toLowerCase()
-const prune = args.includes('--prune')
+// Parse args independent of order: every "--flag" goes into flags,
+// the first non-flag positional is the target email. Fixes the
+// earlier bug where `npm run seed:templates -- --prune you@x.co`
+// silently retargeted test@gmail.com because args[0] was the flag.
+const rawArgs = process.argv.slice(2)
+const flags = new Set(rawArgs.filter((a) => a.startsWith('--')))
+const positional = rawArgs.filter((a) => !a.startsWith('--'))
+const targetEmail = (positional[0] ?? 'test@gmail.com').toLowerCase()
+const prune = flags.has('--prune')
 // Curated category set: only delete obsolete rows that belong to one of
 // our seed categories. User-created templates with arbitrary category
 // strings stay untouched even when --prune is on.
@@ -89,20 +95,26 @@ async function main() {
   let pruned = 0
   if (prune) {
     const seedKeys = Object.keys(seed)
-    // Only touch rows whose category is in the curated set AND whose key
-    // is no longer in the seed. Keeps user-created templates safe.
-    const stale = await db.select().from(templates)
-      .where(and(
-        eq(templates.userId, user.id),
-        inArray(templates.category, SEED_CATEGORIES),
-        notInArray(templates.key, seedKeys.length > 0 ? seedKeys : ['__never__']),
-      ))
-    if (stale.length > 0) {
-      await db.delete(templates).where(and(
-        eq(templates.userId, user.id),
-        inArray(templates.id, stale.map((r) => r.id)),
-      ))
-      pruned = stale.length
+    if (seedKeys.length === 0) {
+      // Empty seed would mark every curated template as stale and
+      // wipe the user's starter pack. Refuse to prune in that case.
+      console.warn('[seed] refusing to prune: seed has 0 keys (would delete all curated templates)')
+    } else {
+      // Only touch rows whose category is in the curated set AND whose key
+      // is no longer in the seed. Keeps user-created templates safe.
+      const stale = await db.select().from(templates)
+        .where(and(
+          eq(templates.userId, user.id),
+          inArray(templates.category, SEED_CATEGORIES),
+          notInArray(templates.key, seedKeys),
+        ))
+      if (stale.length > 0) {
+        await db.delete(templates).where(and(
+          eq(templates.userId, user.id),
+          inArray(templates.id, stale.map((r) => r.id)),
+        ))
+        pruned = stale.length
+      }
     }
   }
   console.log(`[seed] ${targetEmail} (${isAdmin ? 'admin' : 'public'}): +${added} new, ~${updated} updated${prune ? `, -${pruned} pruned` : ''} (${Object.keys(seed).length} in seed)`)

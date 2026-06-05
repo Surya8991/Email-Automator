@@ -39,7 +39,7 @@ const KIND_LABEL: Record<string, string> = {
 export default async function DashboardPage() {
   const u = await requireUser()
   // Pick up the user's TZ for the Recent Activity timestamps. Server-rendered
-  // here, so we can't use the client useFormatDate() hook — pass it as the
+  // here, so we can't use the client useFormatDate() hook, pass it as the
   // 2nd arg to formatDate instead.
   const [k, recent, nextScheduledRow, tz, smtp, activeTpl, jobLeadsNew] = await Promise.all([
     kpis(u.id),
@@ -55,7 +55,7 @@ export default async function DashboardPage() {
     // dashboard doesn't 500 if either query fails.
     getSmtpFor(u.id).catch(() => ({ source: 'none' as const, user: '', host: '', port: 0, pass: '' })),
     getActive(u.id).catch(() => null),
-    // New job leads — drives the "Pick up where you left off" hint.
+    // New job leads, drives the "Pick up where you left off" hint.
     // Defensive .catch in case migration 0008 hasn't applied yet.
     listLeads(u.id, 'new').catch(() => []),
   ])
@@ -88,7 +88,7 @@ export default async function DashboardPage() {
         accent="violet"
         icon={LayoutDashboard}
         title="Dashboard"
-        description="Your last 30 days at a glance — sent, opens, clicks, replies, plus recent activity."
+        description="Your last 30 days at a glance, sent, opens, clicks, replies, plus recent activity."
         pills={[
           { label: 'sent', value: k.sent, tone: 'info' },
           { label: 'opens', value: k.opens, tone: 'default' },
@@ -97,13 +97,13 @@ export default async function DashboardPage() {
         help={
           <SectionHelp
             title="Dashboard"
-            what={<>The 30-day at-a-glance. Sent / opens / clicks / replies + a quick activity feed. Empty on a fresh account — the &quot;Get started in 3 steps&quot; card walks you through the first send.</>}
+            what={<>The 30-day at-a-glance. Sent / opens / clicks / replies + a quick activity feed. Empty on a fresh account, the &quot;Get started in 3 steps&quot; card walks you through the first send.</>}
             guideAnchor="quick-start"
           />
         }
       />
 
-      {/* Pick-up-where-you-left-off — surfaces the highest-signal
+      {/* Pick-up-where-you-left-off, surfaces the highest-signal
           next actions across the app so the user doesn't have to
           scan the sidebar to find what's waiting on them. */}
       {jobLeadsNew.length > 0 ? (
@@ -114,21 +114,21 @@ export default async function DashboardPage() {
             </span>
             <div className="flex-1">
               <CardTitle className="text-base">{jobLeadsNew.length} new job {jobLeadsNew.length === 1 ? 'lead' : 'leads'} waiting</CardTitle>
-              <CardDescription className="text-xs">Triage them in the Job tracker — save the interesting ones, draft outreach, or ignore.</CardDescription>
+              <CardDescription className="text-xs">Triage them in the Job tracker, save the interesting ones, draft outreach, or ignore.</CardDescription>
             </div>
             <Button asChild size="sm" variant="outline"><Link href="/jobs">Open Job tracker →</Link></Button>
           </CardHeader>
         </Card>
       ) : null}
 
-      {/* Activation checklist — surfaces until all three steps are done,
+      {/* Activation checklist, surfaces until all three steps are done,
           then fades. Replaces the old "empty if no contacts" empty
           state with a richer progressive disclosure. */}
       {!checklistComplete ? (
         <Card className="ea-floating">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-primary" /> Get started — {checklistDone} of {checklist.length} done
+              <Sparkles className="h-5 w-5 text-primary" /> Get started, {checklistDone} of {checklist.length} done
             </CardTitle>
             <CardDescription>
               Three steps to your first send. The card disappears once all are complete.
@@ -165,7 +165,7 @@ export default async function DashboardPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><Sparkles className="h-5 w-5 text-primary" /> Add contacts to keep going</CardTitle>
-            <CardDescription>You&apos;ve done the basics — now bring in your audience.</CardDescription>
+            <CardDescription>You&apos;ve done the basics, now bring in your audience.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">
             <Button asChild><Link href="/contacts"><Upload className="mr-1.5 h-4 w-4" /> Import contacts</Link></Button>
@@ -175,7 +175,7 @@ export default async function DashboardPage() {
         </Card>
       ) : null}
 
-      {/* Next-send card — only shows when there's something queued. Tells
+      {/* Next-send card, only shows when there's something queued. Tells
           the user *when* the worker will next fire so they don't have to
           jump to /schedule to find out. */}
       {nextScheduled ? (
@@ -204,7 +204,7 @@ export default async function DashboardPage() {
         <Stat label="Bounce rate" value={pct(k.bounceRate)} icon={AlertTriangle} />
       </div>
 
-      {/* Recent activity — only useful once the user has any. Returning users
+      {/* Recent activity, only useful once the user has any. Returning users
           land here first; this is the answer to "what happened while I was gone?" */}
       {recent.length > 0 ? (
         <Card>
@@ -221,7 +221,7 @@ export default async function DashboardPage() {
                   detail = m.subject ?? m.url ?? ''
                 } catch { /* ignore */ }
                 // Enrich with the contact email + (if applicable) the
-                // campaign/step it belongs to — so "Opened" rows answer
+                // campaign/step it belongs to, so "Opened" rows answer
                 // "by whom?" without a click.
                 const contactEmail = e.contactId ? contactEmailMap.get(e.contactId) : null
                 let campaignBadge: string | null = null

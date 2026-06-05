@@ -30,7 +30,7 @@ export function ContactForm() {
     if (errors[k as keyof FieldError]) setErrors((e) => ({ ...e, [k]: undefined }))
   }
 
-  // Cheap client-side validation — mirrors the server Zod schema so the
+  // Cheap client-side validation, mirrors the server Zod schema so the
   // user gets fast feedback. The server is still the source of truth.
   function validate(): boolean {
     const e: FieldError = {}
@@ -54,7 +54,7 @@ export function ContactForm() {
       if ('error' in r && r.error) { toast.error(r.error); return }
       setSubmitted(true)
       setState(EMPTY)
-      toast.success(('message' in r && r.message) || 'Thanks — we got it.')
+      toast.success(('message' in r && r.message) || 'Thanks, we got it.')
     })
   }
 
@@ -140,7 +140,7 @@ export function ContactForm() {
         ) : null}
       </div>
 
-      {/* Honeypot — multiple layers so a11y tech / autofill / Puppeteer
+      {/* Honeypot, multiple layers so a11y tech / autofill / Puppeteer
           all skip it. display:none drops from layout AND tab order,
           aria-hidden hides from assistive tech, the input is also marked
           inert and lacks a visible label (uses aria-label only so it

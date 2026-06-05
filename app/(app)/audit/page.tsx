@@ -24,7 +24,7 @@ export default async function AuditPage(props: { searchParams: Promise<{ scope?:
 
   // Single query, conditionally scoped. When adminAll, drop the userId
   // filter and LEFT JOIN users to surface the actor's email per row.
-  // Anchored marker — only match rows whose detail starts with
+  // Anchored marker, only match rows whose detail starts with
   // `impersonator=` OR has ` | impersonator=` as a literal join. Matches
   // the exact format logAdmin emits and skips broadcast / user-typed
   // free-form text that happens to mention "impersonator=".
@@ -66,10 +66,10 @@ export default async function AuditPage(props: { searchParams: Promise<{ scope?:
         help={
           <SectionHelp
             title="Audit log"
-            what={<>Every server-side action that touches data appends a row here: saves, sends, schedules, deletes, AI calls, impersonations. Tamper-evident in the sense that the app never updates a row after insert — only appends.</>}
+            what={<>Every server-side action that touches data appends a row here: saves, sends, schedules, deletes, AI calls, impersonations. Tamper-evident in the sense that the app never updates a row after insert, only appends.</>}
             actions={[
               { label: 'Export CSV', hint: 'Full dump for offline analysis. Admins get all-users; users get their own scope.' },
-              { label: 'Filter Impersonations', hint: 'Admins only — surface rows recorded while an admin was impersonating someone.' },
+              { label: 'Filter Impersonations', hint: 'Admins only, surface rows recorded while an admin was impersonating someone.' },
             ]}
             guideAnchor="settings"
           />

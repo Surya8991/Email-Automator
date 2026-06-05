@@ -33,29 +33,46 @@ export function JobPresetPicker() {
 
   function submit() {
     if (!picked) return
+    // Belt-and-braces guard against a double-click squeaking through
+    // before React commits the disabled prop on the first transition.
+    if (pending) return
     // Multi-role mode: a comma-separated role string creates one
     // job source per role. Single-role mode is the same code path
     // with a 1-item array, so we don't branch on the count.
     const roles = splitRoles(role)
     if (roles.length === 0) { toast.error('Enter at least one role'); return }
-    if (roles.length > 10) { toast.error('Up to 10 roles per batch — split into multiple submissions'); return }
+    if (roles.length > 10) { toast.error('Up to 10 roles per batch, split into multiple submissions'); return }
     start(async () => {
       let ok = 0
       const errors: string[] = []
+      // Track which roles succeeded so a partial failure can drop
+      // those from the input and let the user retry only the failing
+      // ones without re-firing the successful (and now duplicate) ones.
+      const succeeded = new Set<string>()
       for (const r of roles) {
         const { url, label, keywords } = buildPresetUrl(picked, r, location)
         if (!url || url.length < 8) { errors.push(`${r}: URL too short`); continue }
         const res = await addJobSourceAction({ label, url, keywords })
         if ('error' in res && res.error) { errors.push(`${r}: ${res.error}`); continue }
-        ok++
+        ok++; succeeded.add(r)
       }
-      if (ok > 0) {
+      if (ok === roles.length) {
+        // All clear, close the dialog.
         toast.success(
           roles.length === 1
             ? `Added "${buildPresetUrl(picked, roles[0]!, location).label}". Refresh to pull the first leads.`
-            : `Added ${ok} of ${roles.length} sources. Refresh to pull the first leads.`,
+            : `Added ${ok} sources. Refresh to pull the first leads.`,
         )
         setOpen(false); reset()
+        router.refresh()
+        return
+      }
+      // Partial success: surface the count, drop succeeded roles from
+      // the input so re-submit hits only the remaining ones.
+      if (ok > 0) {
+        toast.success(`Added ${ok} of ${roles.length}. ${roles.length - ok} still to retry.`)
+        const remaining = roles.filter((r) => !succeeded.has(r)).join(', ')
+        setRole(remaining)
         router.refresh()
       }
       if (errors.length > 0) {

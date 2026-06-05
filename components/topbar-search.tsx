@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { Search } from 'lucide-react'
 
 // Persistent search "field" in the topbar that triggers the existing
-// ⌘K command palette. It's not a real input — clicking it dispatches
+// ⌘K command palette. It's not a real input, clicking it dispatches
 // the same keydown the shortcut listens for (Ctrl/Cmd+K). Keeps the
 // palette as single source of truth for search logic.
 //
@@ -36,7 +36,7 @@ export function TopbarSearch() {
       className="hidden h-9 min-w-[14rem] items-center gap-2 rounded-md border bg-card/70 px-3 text-xs text-muted-foreground ea-transition hover:bg-card hover:text-foreground sm:inline-flex"
     >
       <Search className="h-3.5 w-3.5" />
-      <span className="flex-1 text-left">Search — jump anywhere</span>
+      <span className="flex-1 text-left">Search, jump anywhere</span>
       <kbd className="ml-2 rounded border bg-background px-1 font-mono text-[10px]">
         {isMac ? '⌘' : 'Ctrl'} K
       </kbd>

@@ -49,7 +49,7 @@ export function CampaignDetail({ campaign, steps, enrollments, templates, tags, 
   // Enroll form
   const [tag, setTag] = useState<string>('')
 
-  // Enrollment filters — client-side. The list can grow into the thousands
+  // Enrollment filters, client-side. The list can grow into the thousands
   // once a tag-based enroll fans out, so we cap the rendered slice and let
   // the user filter to find specific rows.
   const [enrQ, setEnrQ] = useState('')
@@ -103,7 +103,7 @@ export function CampaignDetail({ campaign, steps, enrollments, templates, tags, 
         </CardHeader>
         <CardContent className="space-y-3">
           {steps.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No steps yet — add one below.</p>
+            <p className="text-sm text-muted-foreground">No steps yet, add one below.</p>
           ) : (
             <ol className="space-y-2">
               {steps.map((s, i) => {
@@ -132,7 +132,7 @@ export function CampaignDetail({ campaign, steps, enrollments, templates, tags, 
                     {isAdmin && s.templateId !== null ? (
                       <span className="relative inline-block">
                         <Button variant="ghost" size="icon" aria-label="AI Improve template" disabled={pending || aiBusy === s.id}
-                          title="AI Improve (admin) — rewrites the template body for future sends"
+                          title="AI Improve (admin), rewrites the template body for future sends"
                           onClick={() => setAiRowId(aiRowId === s.id ? null : s.id)}>
                           <Sparkles className={`h-4 w-4 ${aiBusy === s.id ? 'animate-pulse text-primary' : ''}`} />
                         </Button>
@@ -148,10 +148,10 @@ export function CampaignDetail({ campaign, steps, enrollments, templates, tags, 
                                 try {
                                   const r = await improveCampaignTemplateAction(tid, tone)
                                   if ('error' in r) { toast.error(r.error ?? 'Failed'); return }
-                                  toast.success('Template improved — future sends use new body')
+                                  toast.success('Template improved, future sends use new body')
                                   if ('initialMsg' in r && r.initialMsg) setOpenPreview((o) => ({ ...o, [stepId]: r.initialMsg as string }))
                                 } catch {
-                                  toast.error('AI Improve failed — please try again')
+                                  toast.error('AI Improve failed, please try again')
                                 } finally {
                                   setAiBusy(null)
                                 }
@@ -176,14 +176,14 @@ export function CampaignDetail({ campaign, steps, enrollments, templates, tags, 
                   </div>
                   {previewOn ? (
                     <div className="border-t bg-muted/40 p-3">
-                      <div className="text-xs text-muted-foreground">Template body — what each enrolled contact will receive (still {'{{personalized}}'} at send time):</div>
+                      <div className="text-xs text-muted-foreground">Template body, what each enrolled contact will receive (still {'{{personalized}}'} at send time):</div>
                       <div className="prose prose-sm dark:prose-invert mt-2 max-h-72 max-w-none overflow-auto rounded-md border bg-background p-3 text-sm"
                         // eslint-disable-next-line react/no-danger
                         dangerouslySetInnerHTML={{ __html: liveBody || '<em class="text-muted-foreground">empty</em>' }} />
                     </div>
                   ) : null}
 
-                  {/* A/B variants strip — when any rows exist, scheduler
+                  {/* A/B variants strip, when any rows exist, scheduler
                       hash-splits enrollments across them. Empty list ⇒
                       step.templateId is the only path. */}
                   <VariantsStrip
@@ -250,7 +250,7 @@ export function CampaignDetail({ campaign, steps, enrollments, templates, tags, 
             })}><UserPlus className="mr-1.5 h-4 w-4" /> Enroll</Button>
           </div>
 
-          {/* Per-step performance — counts sent/open/click/reply per step
+          {/* Per-step performance, counts sent/open/click/reply per step
               from the events table, plus the share of enrollments that
               advanced past this step. Rates are computed off sent so an
               un-fired step shows zeros instead of dividing by zero. */}
@@ -331,7 +331,7 @@ export function CampaignDetail({ campaign, steps, enrollments, templates, tags, 
                   </tbody>
                 </table>
                 {filteredEnrollments.length > 200 ? (
-                  <p className="mt-2 text-xs text-muted-foreground">Showing first 200 of {filteredEnrollments.length} — narrow the filter to see more.</p>
+                  <p className="mt-2 text-xs text-muted-foreground">Showing first 200 of {filteredEnrollments.length}, narrow the filter to see more.</p>
                 ) : null}
               </>
             )}
@@ -345,7 +345,7 @@ export function CampaignDetail({ campaign, steps, enrollments, templates, tags, 
 // ── A/B variants strip ────────────────────────────────────────────
 // Shows the list of variants for a step, lets the user add another with
 // a template + weight, and remove individual variants. Scheduler-tick's
-// pickVariantTemplateId() handles the rest — hash-stable per contact.
+// pickVariantTemplateId() handles the rest, hash-stable per contact.
 function VariantsStrip({
   stepId, campaignId, primaryTemplateName, variants, templates,
 }: {
@@ -412,7 +412,7 @@ function VariantsStrip({
             })}
           </>
         ) : (
-          <span className="text-muted-foreground">none — all enrollments use the step's template</span>
+          <span className="text-muted-foreground">none, all enrollments use the step's template</span>
         )}
         <button type="button" className="ml-auto rounded-md border bg-background px-2 py-0.5 hover:bg-muted"
           onClick={() => setOpen((o) => !o)}>

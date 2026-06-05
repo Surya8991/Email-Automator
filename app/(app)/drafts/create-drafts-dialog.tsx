@@ -41,7 +41,7 @@ export function CreateDraftsDialog({
   const [open, setOpen] = useState(false)
   const [pending, start] = useTransition()
 
-  // Form state — kept inside the dialog so closing and reopening
+  // Form state, kept inside the dialog so closing and reopening
   // starts from the user's defaults again (active template, 10 drafts).
   const activeId = templates.find((t) => t.active)?.id ?? templates[0]?.id ?? null
   const [templateId, setTemplateId] = useState<number | null>(activeId)
@@ -70,13 +70,13 @@ export function CreateDraftsDialog({
     if (!open) return
     if (debounce.current) clearTimeout(debounce.current)
     // Defer the setPreviewLoading inside the timeout so we don't call
-    // setState synchronously during effect — would otherwise cascade
+    // setState synchronously during effect, would otherwise cascade
     // a re-render before the debounce window even starts.
     debounce.current = setTimeout(async () => {
       setPreviewLoading(true)
       const r = await previewEligibleDraftsAction(filters)
       if ('error' in r && r.error) {
-        // Don't toast — rate-limit error during fast typing is OK.
+        // Don't toast, rate-limit error during fast typing is OK.
         setPreviewLoading(false)
         return
       }
@@ -151,7 +151,7 @@ export function CreateDraftsDialog({
 
         {noTemplates ? (
           <div className="rounded-md border border-warn bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
-            You don&apos;t have any templates yet. Create one in <a href="/templates" className="underline">/templates</a> first — drafts pull subject + body from a template.
+            You don&apos;t have any templates yet. Create one in <a href="/templates" className="underline">/templates</a> first, drafts pull subject + body from a template.
           </div>
         ) : (
           <div className="grid gap-5">
@@ -172,7 +172,7 @@ export function CreateDraftsDialog({
                 ))}
               </select>
               <p className="text-xs text-muted-foreground">
-                Picking a different template here doesn&apos;t change your active one — it&apos;s a one-off override for this batch.
+                Picking a different template here doesn&apos;t change your active one, it&apos;s a one-off override for this batch.
               </p>
             </div>
 

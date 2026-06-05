@@ -4,8 +4,8 @@ import { env } from '@/lib/env'
 import { ContactForm } from './contact-form'
 
 export const metadata = {
-  title: 'Contact — Email Automator',
-  description: "Get in touch. Bug reports, feature ideas, partnership questions — we'll get back within a day or two.",
+  title: 'Contact, Email Automator',
+  description: "Get in touch. Bug reports, feature ideas, partnership questions, we'll get back within a day or two.",
 }
 
 export default function ContactPage() {

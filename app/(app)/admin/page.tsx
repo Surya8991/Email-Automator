@@ -1,4 +1,4 @@
-// Overview tab — instance-wide KPIs + at-a-glance health.
+// Overview tab, instance-wide KPIs + at-a-glance health.
 // Per-tab pages live under app/(app)/admin/{users,queue,webhooks,system,broadcast}.
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -58,7 +58,7 @@ export default async function AdminOverviewPage() {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">
-          <CardHeader><CardTitle>Send activity — last 30 days (all users)</CardTitle></CardHeader>
+          <CardHeader><CardTitle>Send activity, last 30 days (all users)</CardTitle></CardHeader>
           <CardContent>
             <OverviewChart data={chartData} />
           </CardContent>

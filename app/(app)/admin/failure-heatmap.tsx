@@ -29,7 +29,7 @@ export function FailureHeatmap({ grid }: { grid: Cell[] }) {
                 return (
                   <td key={h} className="border border-border/40"
                     style={{ width: 16, height: 16, background: bg }}
-                    title={`${day} ${h}:00 — ${n} failure${n === 1 ? '' : 's'}`} />
+                    title={`${day} ${h}:00, ${n} failure${n === 1 ? '' : 's'}`} />
                 )
               })}
             </tr>

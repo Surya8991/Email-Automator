@@ -28,7 +28,7 @@ interface Props {
 const PAGE_SIZE_OPTIONS = [50, 100, 500, 1000]
 
 // Recognized status buckets for the filter dropdown. We match by substring
-// since the DB stores statuses as text ("Sent (5/30/2026, 7:14 PM)") —
+// since the DB stores statuses as text ("Sent (5/30/2026, 7:14 PM)"),
 // e.g. selecting "Sent" matches any string starting with that word.
 const STATUS_OPTIONS = [
   { value: '', label: 'All statuses' },
@@ -311,8 +311,8 @@ export function ContactsTable({
             <thead>
               <tr>
                 <th className="w-10 px-3 py-2">
-                  {/* Select-all toggle. Selects the visible page only — not
-                      across pages — to avoid surprise deletes on a full
+                  {/* Select-all toggle. Selects the visible page only, not
+                      across pages, to avoid surprise deletes on a full
                       multi-page set the user can't currently see. */}
                   <input type="checkbox" aria-label="Select all on this page"
                     checked={rows.length > 0 && rows.every((c) => selected.has(c.id))}
@@ -356,7 +356,7 @@ export function ContactsTable({
                   </td>
                   <td className="px-3 py-2 text-xs text-muted-foreground">{c.emailStatus || 'Pending'}</td>
                   <td className="px-3 py-2 text-right whitespace-nowrap">
-                    {/* Follow-up — pick a day count, scheduler queues it.
+                    {/* Follow-up, pick a day count, scheduler queues it.
                         Uses the active template, so the user picks the
                         body once and reuses across follow-ups. */}
                     <Button variant="ghost" size="icon" aria-label="Schedule follow-up" disabled={pending} title="Schedule a follow-up"

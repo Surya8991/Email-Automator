@@ -475,7 +475,7 @@ export function splitRoles(roles: string): string[] {
   return Array.from(
     new Set(
       roles
-        .split(/[,;\n]+/)
+        .split(/[,;\r\n]+/)
         .map((r) => r.trim())
         .filter((r) => r.length > 0 && r.length <= 80),
     ),

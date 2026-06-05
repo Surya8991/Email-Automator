@@ -89,8 +89,7 @@ export async function ensureSeededTemplatesFor(userId: string, email = ''): Prom
   // SEED_VERSION. We only delete rows that (a) are in the retired set
   // AND (b) still have version === 1 (never edited). Anything the user
   // touched stays put even if the key was retired in the new seed.
-  // Wrapped defensively so a partial migration doesn't block the
-  // SEED_VERSION upgrade.
+  let pruneOk = true
   try {
     const retiredRows = await db.select({ id: templates.id, key: templates.key, version: templates.version })
       .from(templates).where(eq(templates.userId, userId))
@@ -102,10 +101,14 @@ export async function ensureSeededTemplatesFor(userId: string, email = ''): Prom
       ))
     }
   } catch (e) {
+    pruneOk = false
     console.error('[onboarding] retire-prune failed:', e)
   }
-  // Mark this user as caught up at the current tier so the next page-load
-  // short-circuits. Promotion to admin (or rare demotion) bumps the tier
-  // and triggers a fresh run on the next visit.
-  await setSetting(userId, 'SEED_VERSION', target).catch(() => { /* non-fatal */ })
+  // Only mark as caught-up when the prune actually succeeded. Earlier
+  // version bumped SEED_VERSION even on prune failure, which left
+  // retired rows orphaned forever because the next sign-in short-
+  // circuited. Now a transient DB error means the next visit retries.
+  if (pruneOk) {
+    await setSetting(userId, 'SEED_VERSION', target).catch(() => { /* non-fatal */ })
+  }
 }

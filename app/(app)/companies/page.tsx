@@ -11,7 +11,7 @@ import { pluralWord } from '@/lib/pluralize'
 
 export default async function CompaniesPage() {
   const u = await requireUser()
-  // Defensive — if migration 0006_features hasn't been applied to the prod
+  // Defensive, if migration 0006_features hasn't been applied to the prod
   // DB yet, listCompanies throws "no such table: companies". Fall back to
   // an empty list so the page shows the empty-state CTA instead of 500.
   // The real error lands in Vercel logs via console.error.
@@ -38,7 +38,7 @@ export default async function CompaniesPage() {
         help={
           <SectionHelp
             title="Companies"
-            what={<>Per-company research records: industry, HQ, size, tech stack, salary range, notes. Linked to /contacts by name match — when you open a contact, the matched company shows in the sidebar.</>}
+            what={<>Per-company research records: industry, HQ, size, tech stack, salary range, notes. Linked to /contacts by name match, when you open a contact, the matched company shows in the sidebar.</>}
             actions={[
               { label: 'Add company', hint: 'AI fill button enriches from just the name (needs GROQ_API_KEY).' },
             ]}

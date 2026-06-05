@@ -18,7 +18,7 @@ import { ContactsTable } from './contacts-table'
 import { AddContactDialog } from './add-contact-dialog'
 import { ContactsToolbar } from './contacts-toolbar'
 
-// Valid page sizes — kept in lockstep with the UI selector. Anything
+// Valid page sizes, kept in lockstep with the UI selector. Anything
 // outside this list falls back to 50 to prevent URL-driven over-fetch.
 const PAGE_SIZES = [50, 100, 500, 1000]
 
@@ -52,7 +52,7 @@ export default async function ContactsPage(props: { searchParams: Promise<{ page
       console.error('[contacts] listSavedViews failed:', e); return []
     }),
   ])
-  // Only enrollable campaigns end up in the picker — active or draft.
+  // Only enrollable campaigns end up in the picker, active or draft.
   const enrollableCampaigns = allCampaigns
     .filter((c) => c.status === 'active' || c.status === 'draft')
     .map((c) => ({ id: c.id, name: c.name, status: c.status }))
@@ -87,7 +87,7 @@ export default async function ContactsPage(props: { searchParams: Promise<{ page
             what={<>The directory of every person you might email. Each row carries a name, email, company, role, plus optional tags, platform, and custom fields. The contacts table feeds both the bulk-draft and campaign-enrollment flows.</>}
             actions={[
               { label: 'Search / filter', hint: 'By name / company / email / role · tag · status · company · location · platform. Filters compose; URL-persisted.' },
-              { label: 'Import CSV / Excel', hint: 'Bad rows surface a collapsible error report — not silently dropped.' },
+              { label: 'Import CSV / Excel', hint: 'Bad rows surface a collapsible error report, not silently dropped.' },
               { label: 'Bulk actions', hint: 'Create drafts · Schedule · Enroll in campaign · Add/Remove tag · Block · Delete. Select-all is per-page.' },
               { label: 'Dedupe', hint: 'Removes rows where both name + email match an existing row (case-insensitive). Same email, different name is kept (shared inboxes).' },
             ]}
@@ -98,16 +98,16 @@ export default async function ContactsPage(props: { searchParams: Promise<{ page
           />
         }
       />
-      {/* Saved views — named filter combos persisted per user. */}
+      {/* Saved views, named filter combos persisted per user. */}
       <SavedViewsBar views={savedViewsRows.map((v) => ({ id: v.id, name: v.name, filters: v.filters }))} />
 
-      {/* Follow-up reminders — buckets of active contacts by last-send recency. */}
+      {/* Follow-up reminders, buckets of active contacts by last-send recency. */}
       {(followUps.overdue + followUps.soon + followUps.onTrack + followUps.neverSent) > 0 ? (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <FollowUpCard label="Overdue (14+ days)" v={followUps.overdue} tone="bad" hint="Last send was more than 14 days ago — likely time to nudge." />
+          <FollowUpCard label="Overdue (14+ days)" v={followUps.overdue} tone="bad" hint="Last send was more than 14 days ago, likely time to nudge." />
           <FollowUpCard label="Soon (7–13 days)" v={followUps.soon} tone="warn" hint="Approaching the typical follow-up window." />
-          <FollowUpCard label="On track (<7 days)" v={followUps.onTrack} tone="ok" hint="Recent contact — give the recipient time." />
-          <FollowUpCard label="Never sent" v={followUps.neverSent} hint="Active contacts you haven't emailed yet — candidates for an initial draft." />
+          <FollowUpCard label="On track (<7 days)" v={followUps.onTrack} tone="ok" hint="Recent contact, give the recipient time." />
+          <FollowUpCard label="Never sent" v={followUps.neverSent} hint="Active contacts you haven't emailed yet, candidates for an initial draft." />
         </div>
       ) : null}
       <Card>

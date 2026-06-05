@@ -44,7 +44,7 @@ export function CompanyForm({ initial }: { initial?: Initial }) {
     start(async () => {
       const r = await aiEnrichCompanyAction({ name: state.name })
       if ('error' in r) { toast.error(r.error ?? 'AI failed'); return }
-      // Only fill in empty fields — never overwrite the user's edits.
+      // Only fill in empty fields, never overwrite the user's edits.
       // Banner-style toast prompts a manual verify since the model can
       // hallucinate.
       const filled: string[] = []
@@ -57,8 +57,8 @@ export function CompanyForm({ initial }: { initial?: Initial }) {
         }
       }
       setState(next)
-      if (filled.length === 0) toast('AI had nothing new — fields look complete already.')
-      else toast.success(`AI filled ${filled.length} field${filled.length === 1 ? '' : 's'} — verify before saving.`)
+      if (filled.length === 0) toast('AI had nothing new, fields look complete already.')
+      else toast.success(`AI filled ${filled.length} field${filled.length === 1 ? '' : 's'}, verify before saving.`)
     })
   }
 
@@ -102,7 +102,7 @@ export function CompanyForm({ initial }: { initial?: Initial }) {
           onChange={(e) => set('notes')(e.target.value)}
           rows={4}
           className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-          placeholder="Anything else worth remembering — values, interview format, pay band, etc."
+          placeholder="Anything else worth remembering, values, interview format, pay band, etc."
         />
       </div>
       <div className="flex items-center justify-between gap-3 md:col-span-2">

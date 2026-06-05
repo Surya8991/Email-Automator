@@ -9,7 +9,7 @@ import {
 } from 'lucide-react'
 import { globalSearchAction, type SearchResult } from '@/server/actions/search'
 
-// Quick actions — common "do something" verbs the user might type
+// Quick actions, common "do something" verbs the user might type
 // rather than navigating manually. Each one is a router push to a page
 // that already exposes the entry point (we keep palette stateless).
 interface QuickAction {
@@ -92,7 +92,7 @@ export function CommandPalette({ isAdmin }: { isAdmin?: boolean }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  // Debounced server search. Skip short queries — palette degrades to
+  // Debounced server search. Skip short queries, palette degrades to
   // pure nav list. 200ms debounce keeps the search snappy without
   // hammering on every keystroke.
   //
@@ -104,7 +104,7 @@ export function CommandPalette({ isAdmin }: { isAdmin?: boolean }) {
   useEffect(() => {
     if (!shouldSearch) {
       // No request to make. We deliberately don't reset `searching` here
-      // — it's render-gated by `shouldSearch` in the JSX below, so a
+      //, it's render-gated by `shouldSearch` in the JSX below, so a
       // stale `true` doesn't surface to the user. Avoids a synchronous
       // setState inside the effect.
       return
@@ -161,7 +161,7 @@ export function CommandPalette({ isAdmin }: { isAdmin?: boolean }) {
               autoFocus
               value={q}
               onValueChange={setQ}
-              placeholder="Jump to a page — or type to search contacts, templates, drafts, campaigns…"
+              placeholder="Jump to a page, or type to search contacts, templates, drafts, campaigns…"
               className="flex-1 bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground"
               aria-label="Search"
             />
@@ -172,7 +172,7 @@ export function CommandPalette({ isAdmin }: { isAdmin?: boolean }) {
               {q.trim().length >= 2 ? 'No matches.' : 'Start typing to search your data.'}
             </Command.Empty>
 
-            {/* Quick actions — only when the user has typed something
+            {/* Quick actions, only when the user has typed something
                 and at least one action keyword matches. Renders above
                 the data-search results so verbs are reachable in 1-2
                 keystrokes ("new" → "Create drafts", "imp" → "Import
@@ -226,7 +226,7 @@ export function CommandPalette({ isAdmin }: { isAdmin?: boolean }) {
               )
             })}
 
-            {/* Nav links — always shown so the palette still works when
+            {/* Nav links, always shown so the palette still works when
                 offline / API errors. cmdk's filter handles the "matches
                 what you typed" client side via shouldFilter (set above). */}
             <Command.Group

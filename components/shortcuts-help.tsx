@@ -9,7 +9,7 @@ interface Shortcut { keys: string[]; desc: string; group?: string }
 
 // Single source of truth for all keyboard shortcuts in the app. Open
 // via `?` from anywhere (suppressed when the user is typing in an
-// input/textarea/contenteditable — see useEffect below).
+// input/textarea/contenteditable, see useEffect below).
 const SHORTCUTS: Shortcut[] = [
   // Global
   { keys: ['⌘/Ctrl', 'K'], desc: 'Open command palette (jump or search)', group: 'Global' },
@@ -26,7 +26,7 @@ const SHORTCUTS: Shortcut[] = [
   { keys: ['⌘/Ctrl', 'I'],  desc: 'Italic', group: 'Editor' },
   { keys: ['⌘/Ctrl', 'K'],  desc: 'Link selection', group: 'Editor' },
 
-  // Forms — most table pages support these
+  // Forms, most table pages support these
   { keys: ['/'],            desc: 'Focus the page search input (where present)', group: 'Forms' },
 ]
 
@@ -36,14 +36,14 @@ export function ShortcutsHelp() {
   const [open, setOpen] = useState(false)
 
   useEffect(() => {
-    // Suppress when typing — `?` shifts to `Shift+/` on most layouts and
+    // Suppress when typing, `?` shifts to `Shift+/` on most layouts and
     // we don't want to steal a slash from someone composing an email.
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== '?') return
       const t = e.target as HTMLElement | null
       const tag = t?.tagName?.toLowerCase()
       if (tag === 'input' || tag === 'textarea' || tag === 'select' || t?.isContentEditable) return
-      // Also bail when a modal is open — Esc-to-close is the right
+      // Also bail when a modal is open, Esc-to-close is the right
       // escape hatch, not a stacked help dialog.
       e.preventDefault()
       setOpen(true)
@@ -84,7 +84,7 @@ export function ShortcutsHelp() {
         <div className="space-y-1.5 rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
           <p className="flex items-center gap-1.5">
             <Search className="h-3.5 w-3.5" />
-            The palette searches your data too — try typing a recipient name or template label.
+            The palette searches your data too, try typing a recipient name or template label.
           </p>
           <p className="flex items-center gap-1.5">
             <Sparkles className="h-3.5 w-3.5" />

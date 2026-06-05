@@ -2,10 +2,10 @@
   "growth_friendly": {
     "category": "Growth Marketer",
     "label": "Growth: friendly cold",
-    "subject": "Loved what {{company}} is building, growth here",
-    "initialMsg": "<p>Hi {{name|there}},</p><p>Been watching <b>{{company}}</b> for a bit and wanted to reach out. I'm a growth marketer doing full-funnel work across SEO, paid, and CRO.</p><p>Numbers that say more than the title: <b>+35% organic at Edstellar in 6 months</b>, <b>3.2x ROAS on a ₹30L BeatXP campaign</b>, and a Betterhalf.ai sprint that took bounce from 50% to under 40%.</p><p>Not pitching anything specific, just curious about the growth side at <b>{{company}}</b> and whether a 20 min chat makes sense.</p>",
-    "follow1Msg": "<p>Hi {{name|there}},</p><p>Knew you'd be slammed, bumping this in case it got buried. Even a 15 min call next week would be great, I'll send a calendar link if it helps.</p>",
-    "lastFollowMsg": "<p>Hi {{name|there}},</p><p>I'll stop the inbox spam after this. If the timing's wrong, totally fair. If <b>{{company}}</b> ever needs a growth hand, my door's open.</p>"
+    "subject": "Growth notes for {{company}}",
+    "initialMsg": "<p>Hi {{name|there}},</p><p>Lead with a number, last 18 months: <b>+35% organic at Edstellar in 6 months</b>, <b>3.2x ROAS on a ₹30L BeatXP campaign</b>, and a Betterhalf.ai sprint that took bounce from 50% to under 40%.</p><p>Full-funnel work across SEO, paid, and CRO, currently looking at the growth side of <b>{{company}}</b>. Not pitching anything specific, just curious whether a 20 min chat makes sense.</p>",
+    "follow1Msg": "<p>Hi {{name|there}},</p><p>Bumping this in case it got buried. Happy to grab any window that works on your side, even 15 min is plenty.</p>",
+    "lastFollowMsg": "<p>Hi {{name|there}},</p><p>Last note from me. If the timing's wrong, totally fair. If <b>{{company}}</b> ever needs a growth hand, my door's open.</p>"
   },
   "growth_jobpost": {
     "category": "Growth Marketer",
@@ -26,9 +26,9 @@
   "perf_friendly": {
     "category": "Performance Marketing",
     "label": "Performance: friendly cold",
-    "subject": "Paid media nerd, quick hello",
-    "initialMsg": "<p>Hi {{name|there}},</p><p>Genuinely enjoy this stuff, the kind of person who gets excited when a campaign clears 3x ROAS. (Most recent: ₹30L BeatXP campaign at <b>3.2x ROAS, −18% CPL</b>.)</p><p>Watching <b>{{company}}</b> for a bit and curious about your paid mix. Open to a casual 20 min chat?</p>",
-    "follow1Msg": "<p>Hi {{name|there}},</p><p>Bumping this. If a call is too much, even a Loom exchange on the BeatXP creative + bid strategy works for me.</p>",
+    "subject": "Paid mix question for {{company}}",
+    "initialMsg": "<p>Hi {{name|there}},</p><p>Recent paid-media wins: <b>3.2x ROAS, −18% CPL on a ₹30L BeatXP campaign</b>, and 500+ qualified B2B leads/month at HiringHut through segmented paid search.</p><p>Curious how <b>{{company}}</b> thinks about its paid mix right now. Open to a 20 min call to compare notes?</p>",
+    "follow1Msg": "<p>Hi {{name|there}},</p><p>Bumping this. If a call is too much, even a Loom exchange on the BeatXP creative and bid strategy works on my side.</p>",
     "lastFollowMsg": "<p>Hi {{name|there}},</p><p>Closing the loop. If paid roles open up at <b>{{company}}</b> later, my door's open.</p>"
   },
   "perf_jobpost": {
@@ -66,8 +66,8 @@
   "dm_friendly": {
     "category": "Digital Marketing Executive",
     "label": "Digital Marketing: friendly cold",
-    "subject": "Full-stack marketer, quick hello",
-    "initialMsg": "<p>Hi {{name|there}},</p><p>Can't pick a favourite channel, SEO, paid, analytics, content all light me up. Numbers that say more than words: <b>+35% organic at Edstellar</b>, <b>3.2x ROAS on a ₹30L BeatXP campaign</b>, <b>500+ B2B leads/month at HiringHut</b>.</p><p>What's the marketing setup like at <b>{{company}}</b>? Open to a casual 20 min chat.</p>",
+    "subject": "Marketing setup at {{company}}?",
+    "initialMsg": "<p>Hi {{name|there}},</p><p>Three numbers from the last 18 months: <b>+35% organic at Edstellar</b>, <b>3.2x ROAS on a ₹30L BeatXP campaign</b>, <b>500+ B2B leads/month at HiringHut</b>. Across SEO, paid, analytics, content, the channels feed each other rather than compete.</p><p>Curious what the marketing mix looks like at <b>{{company}}</b> right now. Open to a 20 min chat?</p>",
     "follow1Msg": "<p>Hi {{name|there}},</p><p>Bumping this, 15 min works fine if calendars are tight.</p>",
     "lastFollowMsg": "<p>Hi {{name|there}},</p><p>Last note. If <b>{{company}}</b> needs a versatile hand later, I'd love to reconnect.</p>"
   },

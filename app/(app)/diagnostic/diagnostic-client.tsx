@@ -17,7 +17,7 @@ function Icon({ s }: { s: DiagResult['status'] }) {
   return <XCircle className="h-4 w-4 text-destructive" />
 }
 
-// Order groups by importance — connectivity first (does anything work?),
+// Order groups by importance, connectivity first (does anything work?),
 // background (will sends fire?), deliverability (will mail arrive?),
 // admin (operator config) last.
 const GROUP_ORDER: DiagGroup[] = ['connectivity', 'background', 'deliverability', 'admin']
@@ -66,7 +66,7 @@ export function DiagnosticClient() {
   function copyAsMarkdown() {
     if (!rows) return
     const lines: string[] = []
-    lines.push(`# Diagnostic — ${new Date().toISOString().slice(0, 19).replace('T', ' ')} UTC`)
+    lines.push(`# Diagnostic, ${new Date().toISOString().slice(0, 19).replace('T', ' ')} UTC`)
     if (summary) lines.push(`**Summary:** ${summary.pass} pass · ${summary.warn} warn · ${summary.fail} fail · mode=${lastMode ?? 'full'}\n`)
     for (const g of GROUP_ORDER) {
       const items = grouped[g]
@@ -74,7 +74,7 @@ export function DiagnosticClient() {
       lines.push(`\n## ${GROUP_LABEL[g]}`)
       for (const r of items) {
         const badge = r.status === 'pass' ? '✅' : r.status === 'warn' ? '⚠️' : '❌'
-        lines.push(`- ${badge} **${r.name}** — ${r.detail}`)
+        lines.push(`- ${badge} **${r.name}**, ${r.detail}`)
         if (r.remediation) lines.push(`  - *${r.remediation}*`)
       }
     }
@@ -116,7 +116,7 @@ export function DiagnosticClient() {
       </div>
 
       <p className="text-xs text-muted-foreground">
-        <strong>Quick</strong> skips DNS (SPF/DMARC/MX) — use after deploy. <strong>Full</strong> adds deliverability checks. Reply / bounce checks call the Gmail API — only work if you signed in with Google.
+        <strong>Quick</strong> skips DNS (SPF/DMARC/MX), use after deploy. <strong>Full</strong> adds deliverability checks. Reply / bounce checks call the Gmail API, only work if you signed in with Google.
       </p>
 
       {summary ? (

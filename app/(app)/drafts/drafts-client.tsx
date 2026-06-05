@@ -54,7 +54,7 @@ export function DraftsClient({
   // Schedule-selected dialog state. Lifted to the client root so the
   // dialog renders outside the per-row scrolling list.
   const [scheduleOpen, setScheduleOpen] = useState(false)
-  // Send-confirmation dialog — replaces the browser confirm() so the
+  // Send-confirmation dialog, replaces the browser confirm() so the
   // user sees a preview of who they're about to mail. `kind` controls
   // wording + which action fires on confirm.
   const [sendConfirm, setSendConfirm] = useState<null | { kind: 'all' | 'selected' }>(null)
@@ -64,10 +64,10 @@ export function DraftsClient({
   const [editId, setEditId] = useState<number | null>(null)
   const [editSubject, setEditSubject] = useState('')
   const [editBody, setEditBody] = useState('')
-  // AI Improve UI state — admin-only. Per-row tone picker; null = closed.
+  // AI Improve UI state, admin-only. Per-row tone picker; null = closed.
   const [aiRowId, setAiRowId] = useState<number | null>(null)
   const [aiBusy, setAiBusy] = useState<number | null>(null)
-  // Client-side search — substring match against recipient + subject.
+  // Client-side search, substring match against recipient + subject.
   // Cheap because draft list is capped at 50 rows server-side.
   const [q, setQ] = useState('')
   const filtered = q.trim()
@@ -76,7 +76,7 @@ export function DraftsClient({
         return d.toEmail.toLowerCase().includes(needle) || d.subject.toLowerCase().includes(needle)
       })
     : rows
-  // Per-row selection — drives the "Send selected" button. Cleared
+  // Per-row selection, drives the "Send selected" button. Cleared
   // automatically after a send. Visible-row select-all only.
   const [selected, setSelected] = useState<Set<number>>(new Set())
 
@@ -193,7 +193,7 @@ export function DraftsClient({
             return (
             <li key={d.id} className="px-4 py-3">
               <div className="flex items-start gap-3">
-                {/* Selection checkbox — drives "Send selected (N)" above.
+                {/* Selection checkbox, drives "Send selected (N)" above.
                     Disabled while editing this row to avoid losing edits
                     if the user picks "Send selected" by mistake. */}
                 <input
@@ -220,7 +220,7 @@ export function DraftsClient({
                         rows={12}
                         placeholder="Body"
                       />
-                      {/* Spam-trigger lint while editing — shows the same
+                      {/* Spam-trigger lint while editing, shows the same
                           chip pattern as Templates so users get a single
                           consistent signal across the app. */}
                       <SpamCheckChip subject={editSubject} body={editBody} />
@@ -238,13 +238,13 @@ export function DraftsClient({
                     </details>
                   )}
                 </div>
-                {/* Admin-only AI Improve trigger — opens an inline tone
+                {/* Admin-only AI Improve trigger, opens an inline tone
                     picker. Hidden mid-edit because the rewrite would
                     overwrite unsaved changes. */}
                 {!isEditing ? (
                   <div className="relative">
                     <Button variant="ghost" size="icon" aria-label="AI Improve" disabled={pending || aiBusy === d.id}
-                      title="AI Improve — rewrite in chosen tone"
+                      title="AI Improve, rewrite in chosen tone"
                       onClick={() => setAiRowId(aiRowId === d.id ? null : d.id)}>
                       <Sparkles className={`h-4 w-4 ${aiBusy === d.id ? 'animate-pulse text-primary' : ''}`} />
                     </Button>
@@ -262,13 +262,13 @@ export function DraftsClient({
                             localStorage.setItem(`undo-improve-${draftId}`, JSON.stringify({
                               body: originalBody, subject: originalSubject, at: Date.now(),
                             }))
-                          } catch { /* quota — proceed without undo */ }
+                          } catch { /* quota, proceed without undo */ }
                           setAiBusy(draftId); setAiRowId(null)
                           start(async () => {
                             const r = await improveDraftAction(draftId, tone)
                             setAiBusy(null)
                             if ('error' in r && r.error) { toast.error(r.error); return }
-                            toast.success('Draft improved — review before sending', {
+                            toast.success('Draft improved, review before sending', {
                               action: {
                                 label: 'Undo',
                                 onClick: () => start(async () => {
@@ -407,7 +407,7 @@ export function DraftsClient({
         onScheduled={() => setSelected(new Set())}
       />
 
-      {/* Send-confirmation dialog — gates both Send all and Send
+      {/* Send-confirmation dialog, gates both Send all and Send
           selected behind a preview so the user can catch wrong-template
           / wrong-audience mistakes before SMTP fires. */}
       <SendConfirmDialog
