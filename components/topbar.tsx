@@ -1,4 +1,4 @@
-import { signOut } from '@/auth'
+import { signOutAction } from '@/server/actions/auth'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { TopbarSearch } from '@/components/topbar-search'
 import { TopbarUserMenu } from '@/components/topbar-user-menu'
@@ -15,10 +15,6 @@ import { Shield } from 'lucide-react'
 //   - Admin badge stays.
 
 export function Topbar({ userEmail, isAdmin }: { userEmail?: string; isAdmin?: boolean }) {
-  // Hard-bind the sign-out action to /login so the topbar form has a
-  // stable redirect even if next-auth's default redirect changes.
-  const signOutAction = async () => { 'use server'; await signOut({ redirectTo: '/login' }) }
-
   return (
     <header className="flex h-14 items-center justify-between gap-3 border-b bg-background/70 px-4 pl-14 backdrop-blur md:pl-4">
       {/* Left: breadcrumbs (currently page-driven, empty here) + admin badge. */}

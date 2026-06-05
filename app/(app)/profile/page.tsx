@@ -26,17 +26,25 @@ export default async function ProfilePage() {
   const u = await requireUser()
   const since30 = Date.now() - 30 * DAY_MS
 
+  // Defensive .catch on every read so a single failed query degrades to
+  // an empty card instead of blanking the whole page. The recent prod
+  // 500 (Vercel ERROR 259737202) traced back to a related issue —
+  // never let a single thrown promise inside Promise.all kill /profile.
   const [settings, contactsN, draftsN, eventBuckets, googleRows] = await Promise.all([
-    getMany(u.id, KEYS),
-    db.select({ n: sql<number>`COUNT(*)` }).from(contacts).where(eq(contacts.userId, u.id)),
-    db.select({ n: sql<number>`COUNT(*)` }).from(drafts).where(and(eq(drafts.userId, u.id), eq(drafts.status, 'draft'))),
+    getMany(u.id, KEYS).catch((e) => { console.error('[profile] getMany failed:', e); return {} as Record<string, string | undefined> }),
+    db.select({ n: sql<number>`COUNT(*)` }).from(contacts).where(eq(contacts.userId, u.id))
+      .catch((e) => { console.error('[profile] contacts count failed:', e); return [{ n: 0 }] }),
+    db.select({ n: sql<number>`COUNT(*)` }).from(drafts).where(and(eq(drafts.userId, u.id), eq(drafts.status, 'draft')))
+      .catch((e) => { console.error('[profile] drafts count failed:', e); return [{ n: 0 }] }),
     db.select({ kind: events.kind, n: sql<number>`COUNT(*)` }).from(events)
       .where(and(eq(events.userId, u.id), gte(events.ts, since30)))
-      .groupBy(events.kind),
+      .groupBy(events.kind)
+      .catch((e) => { console.error('[profile] events agg failed:', e); return [] as Array<{ kind: string; n: number }> }),
     // Did this user sign in with Google? If so we can offer Gmail-API features.
     env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
       ? db.select().from(accounts).where(and(eq(accounts.userId, u.id), eq(accounts.provider, 'google')))
-      : Promise.resolve([]),
+        .catch((e) => { console.error('[profile] google accounts failed:', e); return [] as typeof accounts.$inferSelect[] })
+      : Promise.resolve([] as typeof accounts.$inferSelect[]),
   ])
 
   const counts = Object.fromEntries(eventBuckets.map((b) => [b.kind, Number(b.n)]))
@@ -159,7 +167,7 @@ export default async function ProfilePage() {
           <CardDescription>Used in template variables and on every outgoing email.</CardDescription>
         </CardHeader>
         <CardContent>
-          <ProfileForm email={u.email} initial={settings} />
+          <ProfileForm email={u.email} initial={settings as Record<string, string>} />
         </CardContent>
       </Card>
 

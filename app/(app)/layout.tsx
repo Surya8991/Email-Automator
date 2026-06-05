@@ -7,6 +7,7 @@ import { ShortcutsHelp } from '@/components/shortcuts-help'
 import { AccentProvider } from '@/components/accent-provider'
 import { InstallPrompt } from '@/components/install-prompt'
 import { AppShellOrbs } from '@/components/app-shell-orbs'
+import { MobileBottomNav } from '@/components/mobile-bottom-nav'
 import { TimezoneProvider } from '@/components/timezone-provider'
 import { ensureSeededTemplatesFor } from '@/server/services/onboarding'
 import { getSetting } from '@/server/services/settings'
@@ -73,13 +74,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <Sidebar isAdmin={isAdmin} />
           <div className="flex flex-1 flex-col overflow-hidden">
             <Topbar userEmail={session.user.email ?? undefined} isAdmin={isAdmin} />
-            <main className="flex-1 overflow-auto p-4 sm:p-6">{children}</main>
+            <main className="flex-1 overflow-auto p-4 pb-20 sm:p-6 md:pb-6">{children}</main>
           </div>
           <CommandPalette isAdmin={isAdmin} />
           <ShortcutsHelp />
         </div>
       </div>
       {showOnboarding ? <OnboardingModal initialOpen={true} /> : null}
+      <MobileBottomNav />
       <InstallPrompt />
       <AccentProvider accent={userAccent} />
     </TimezoneProvider>

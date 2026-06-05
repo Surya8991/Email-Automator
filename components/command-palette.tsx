@@ -5,8 +5,32 @@ import { Command } from 'cmdk'
 import {
   LayoutDashboard, Users, FileText, Send, CalendarClock, Workflow, BarChart3, Ban, ScrollText,
   UserCircle2, Settings, FlaskConical, Eye, BookOpen, Shield, Building2, User2, Mail, Workflow as CampaignIcon,
+  Sparkles, Plus, Keyboard, HelpCircle,
 } from 'lucide-react'
 import { globalSearchAction, type SearchResult } from '@/server/actions/search'
+
+// Quick actions — common "do something" verbs the user might type
+// rather than navigating manually. Each one is a router push to a page
+// that already exposes the entry point (we keep palette stateless).
+interface QuickAction {
+  href: string
+  label: string
+  hint: string
+  icon: React.ComponentType<{ className?: string }>
+  /** Match against the typed query so the action surfaces when
+   *  relevant. We bias toward verbs ("create", "new", "send", "import"). */
+  keywords: string
+}
+const QUICK_ACTIONS: QuickAction[] = [
+  { href: '/drafts',        label: 'Create drafts',       hint: 'Open the new-drafts dialog',          icon: Sparkles, keywords: 'new draft create batch generate compose write' },
+  { href: '/templates',     label: 'New template',        hint: 'Add a template via the editor',       icon: Plus,     keywords: 'template new create add' },
+  { href: '/campaigns',     label: 'New campaign',        hint: 'Open the new-campaign flow',          icon: Workflow, keywords: 'campaign sequence new create automate' },
+  { href: '/contacts',      label: 'Import contacts',     hint: 'CSV or Excel upload',                 icon: Users,    keywords: 'import upload csv xlsx contact add' },
+  { href: '/companies/new', label: 'Add company',         hint: 'AI-fillable research record',         icon: Building2,keywords: 'company add new research enrich' },
+  { href: '/schedule',      label: 'Schedule send',       hint: 'Bulk schedule with stagger',          icon: CalendarClock, keywords: 'schedule queue stagger send later' },
+  { href: '/diagnostic',    label: 'Run diagnostic',      hint: 'Pre-flight SMTP / DNS / cron checks', icon: FlaskConical, keywords: 'diagnose check test smtp dns deploy' },
+  { href: '/profile',       label: 'Export my data',      hint: 'GDPR JSON dump',                      icon: ScrollText, keywords: 'export download gdpr backup data' },
+]
 
 interface Item { href: string; label: string; icon: React.ComponentType<{ className?: string }>; admin?: boolean }
 const ITEMS: Item[] = [
@@ -113,6 +137,13 @@ export function CommandPalette({ isAdmin }: { isAdmin?: boolean }) {
     if (!grouped[r.kind]) grouped[r.kind] = []
     grouped[r.kind]!.push(r)
   }
+  // Quick actions surface when the query matches the action label or
+  // any of its keywords (substring). Cmdk filters within the group too,
+  // so even with an inexact match the right ones float up.
+  const queryLower = needle.toLowerCase()
+  const matchingActions = needle ? QUICK_ACTIONS.filter((a) =>
+    a.label.toLowerCase().includes(queryLower) || a.keywords.toLowerCase().includes(queryLower)
+  ) : []
 
   function pick(href: string) { setOpen(false); router.push(href) }
 
@@ -138,6 +169,34 @@ export function CommandPalette({ isAdmin }: { isAdmin?: boolean }) {
             <Command.Empty className="px-4 py-6 text-sm text-muted-foreground">
               {q.trim().length >= 2 ? 'No matches.' : 'Start typing to search your data.'}
             </Command.Empty>
+
+            {/* Quick actions — only when the user has typed something
+                and at least one action keyword matches. Renders above
+                the data-search results so verbs are reachable in 1-2
+                keystrokes ("new" → "Create drafts", "imp" → "Import
+                contacts"). */}
+            {matchingActions.length > 0 ? (
+              <Command.Group
+                heading="Quick actions"
+                className="[&_[cmdk-group-heading]]:px-4 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wider [&_[cmdk-group-heading]]:text-muted-foreground"
+              >
+                {matchingActions.map((a, i) => {
+                  const Icon = a.icon
+                  return (
+                    <Command.Item
+                      key={`qa-${i}`}
+                      value={`qa-${a.label}-${a.keywords}`}
+                      onSelect={() => pick(a.href)}
+                      className="flex cursor-pointer items-center gap-2 px-4 py-2 text-sm aria-selected:bg-accent"
+                    >
+                      <Icon className="h-4 w-4 text-primary" />
+                      <span className="font-medium">{a.label}</span>
+                      <span className="ml-auto text-xs text-muted-foreground">{a.hint}</span>
+                    </Command.Item>
+                  )
+                })}
+              </Command.Group>
+            ) : null}
 
             {/* Search results (only when q is set). Each section has at
                 most 5 rows from the server. */}
@@ -187,7 +246,8 @@ export function CommandPalette({ isAdmin }: { isAdmin?: boolean }) {
           <kbd className="rounded border bg-background px-1">↑↓</kbd> navigate ·{' '}
           <kbd className="rounded border bg-background px-1">↵</kbd> open ·{' '}
           <kbd className="rounded border bg-background px-1">esc</kbd> close ·{' '}
-          <kbd className="rounded border bg-background px-1">?</kbd> shortcuts
+          <kbd className="rounded border bg-background px-1">?</kbd> shortcuts ·{' '}
+          <span className="inline-flex items-center gap-1"><Keyboard className="h-3 w-3" /><HelpCircle className="h-3 w-3" /> tip: type a verb (new, send, import)</span>
         </div>
       </div>
     </div>
