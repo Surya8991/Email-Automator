@@ -247,3 +247,115 @@ export async function getUserSuspensions(userIds: string[]): Promise<Record<stri
   for (const r of rows) out[String(r.uid)] = r.value === 'true'
   return out
 }
+
+// ── A5: Fetch full user-detail snapshot for drill-down drawer ────────
+export async function getUserDetailAction(userId: string) {
+  await requireAdmin()
+  const { userDetail } = await import('@/server/services/admin-analytics')
+  const data = await userDetail(userId)
+  if (!data) return { error: 'User not found' }
+  return { ok: true as const, data }
+}
+
+// ── A6: Per-user daily send-limit override ───────────────────────────
+// Stored in settings(key='DAILY_SEND_LIMIT_OVERRIDE') and honored by
+// scheduler-tick. Pass 0 or '' to clear the override (falls back to env).
+export async function setUserQuotaAction(userId: string, dailyLimit: number) {
+  const me = await requireAdmin()
+  if (!adminLimit(me.id, 'set_quota')) return { error: 'Too many admin actions — slow down' }
+  const [target] = await db.select().from(users).where(eq(users.id, userId))
+  if (!target) return { error: 'User not found' }
+  const value = Number.isFinite(dailyLimit) && dailyLimit > 0 ? Math.floor(dailyLimit) : 0
+  if (value === 0) {
+    await db.delete(settings).where(and(eq(settings.userId, userId), eq(settings.key, 'DAILY_SEND_LIMIT_OVERRIDE')))
+    await logAdmin(me.id, 'admin.clear_quota', `target=${target.email ?? userId}`)
+  } else {
+    await setSetting(userId, 'DAILY_SEND_LIMIT_OVERRIDE', String(value))
+    await logAdmin(me.id, 'admin.set_quota', `target=${target.email ?? userId} limit=${value}`)
+  }
+  revalidatePath('/admin')
+  return { ok: true, value }
+}
+
+// ── A8: Impersonate user ─────────────────────────────────────────────
+// Mints a fresh session for the target user and replaces the admin's
+// own session cookie with it. Audit-logged with both actor + target.
+// To return to their admin account, the admin signs out and back in.
+export async function impersonateUserAction(userId: string) {
+  const me = await requireAdmin()
+  if (!adminLimit(me.id, 'impersonate')) return { error: 'Too many admin actions — slow down' }
+  if (userId === me.id) return { error: 'Already signed in as yourself' }
+  const [target] = await db.select().from(users).where(eq(users.id, userId))
+  if (!target) return { error: 'User not found' }
+  // Lazy imports — these touch headers/cookies which Next requires only at
+  // request time. Avoids module-load-time side effects in tests.
+  const { sessions } = await import('@/server/db/schema')
+  const { cookies } = await import('next/headers')
+  const token = crypto.randomUUID()
+  const expires = new Date(Date.now() + 60 * 60 * 1000) // 1h impersonation only
+  await db.insert(sessions).values({ sessionToken: token, userId: target.id, expires })
+  const jar = await cookies()
+  jar.set({
+    name: 'authjs.session-token', value: token,
+    httpOnly: true, sameSite: 'lax', expires, path: '/',
+  })
+  await logAdmin(me.id, 'admin.impersonate', `actor=${me.email ?? me.id} target=${target.email ?? target.id}`)
+  return { ok: true, redirect: '/dashboard' }
+}
+
+// ── A11: Global blocklist add/remove ─────────────────────────────────
+import { blocklist } from '@/server/db/schema'
+
+export async function addGlobalBlockAction(pattern: string, type: 'email' | 'domain') {
+  const me = await requireAdmin()
+  if (!adminLimit(me.id, 'global_block_add')) return { error: 'Too many admin actions — slow down' }
+  const clean = String(pattern ?? '').trim().toLowerCase()
+  if (!clean) return { error: 'Pattern required' }
+  if (type !== 'email' && type !== 'domain') return { error: 'Invalid type' }
+  await db.insert(blocklist).values({ userId: null, pattern: clean, type })
+  await logAdmin(me.id, 'admin.global_block_add', `pattern=${clean} type=${type}`)
+  revalidatePath('/admin/system')
+  revalidatePath('/admin')
+  return { ok: true }
+}
+
+export async function removeGlobalBlockAction(id: number) {
+  const me = await requireAdmin()
+  if (!adminLimit(me.id, 'global_block_remove')) return { error: 'Too many admin actions — slow down' }
+  const [target] = await db.select().from(blocklist).where(and(eq(blocklist.id, id), sql`${blocklist.userId} IS NULL`))
+  if (!target) return { error: 'Global blocklist row not found' }
+  await db.delete(blocklist).where(and(eq(blocklist.id, id), sql`${blocklist.userId} IS NULL`))
+  await logAdmin(me.id, 'admin.global_block_remove', `pattern=${target.pattern} type=${target.type}`)
+  revalidatePath('/admin/system')
+  return { ok: true }
+}
+
+// ── A17: Broadcast announcement to all users ─────────────────────────
+// Stored as an auditLog row with action='admin.broadcast'; layout reads
+// the latest one and renders as a top banner. Empty detail clears it.
+export async function broadcastAction(message: string) {
+  const me = await requireAdmin()
+  if (!adminLimit(me.id, 'broadcast')) return { error: 'Too many admin actions — slow down' }
+  const clean = String(message ?? '').trim().slice(0, 280)
+  await db.insert(auditLog).values({ userId: me.id, action: 'admin.broadcast', detail: clean, ip: '' })
+  revalidatePath('/admin/broadcast')
+  // Layout reads latest broadcast — bust every page cache.
+  revalidatePath('/', 'layout')
+  return { ok: true, message: clean }
+}
+
+// ── Bonus: Recover stuck-Sending rows now (don't wait for next tick) ─
+export async function recoverStuckRowsAction() {
+  const me = await requireAdmin()
+  if (!adminLimit(me.id, 'recover_stuck')) return { error: 'Too many admin actions — slow down' }
+  const { emailLog } = await import('@/server/db/schema')
+  const stuckCutoff = Date.now() - 10 * 60_000
+  const stuck = await db.select({ id: emailLog.id }).from(emailLog)
+    .where(and(eq(emailLog.status, 'Sending'), sql`${emailLog.scheduledAt} <= ${stuckCutoff}`))
+  if (stuck.length === 0) return { ok: true, recovered: 0 }
+  await db.update(emailLog).set({ status: 'Scheduled', lastResult: 'Admin: recovered from stuck Sending' })
+    .where(and(eq(emailLog.status, 'Sending'), sql`${emailLog.scheduledAt} <= ${stuckCutoff}`))
+  await logAdmin(me.id, 'admin.recover_stuck', `count=${stuck.length}`)
+  revalidatePath('/admin/queue')
+  return { ok: true, recovered: stuck.length }
+}

@@ -8,6 +8,7 @@ import { ensureSeededTemplatesFor } from '@/server/services/onboarding'
 import { getSetting } from '@/server/services/settings'
 import { APP_TZ } from '@/lib/utils'
 import { OnboardingModal, ONBOARDING_CURRENT_VERSION } from '@/components/onboarding-modal'
+import { currentBroadcast } from '@/server/services/admin-analytics'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await auth()
@@ -31,12 +32,20 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const devSigninRisky =
     process.env.ALLOW_DEV_SIGNIN === 'true' &&
     (process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL))
+  // Latest broadcast announcement — shown as a banner to every signed-in
+  // user until an admin clears it. Non-fatal if the DB read fails.
+  const broadcast = await currentBroadcast().catch(() => null)
   return (
     <TimezoneProvider tz={userTz}>
       <div className="flex h-dvh flex-col">
         {devSigninRisky && (
           <div className="border-b border-red-600 bg-red-600 px-4 py-1.5 text-center text-xs font-medium text-white">
             ⚠ ALLOW_DEV_SIGNIN=true on a deployed instance — anyone on DEV_BYPASS_EMAILS can sign in without auth. Unset before sharing.
+          </div>
+        )}
+        {broadcast?.message && (
+          <div className="border-b border-amber-500/50 bg-amber-500/10 px-4 py-1.5 text-center text-xs font-medium text-amber-900 dark:text-amber-200">
+            📢 {broadcast.message}
           </div>
         )}
         <div className="flex flex-1 overflow-hidden">

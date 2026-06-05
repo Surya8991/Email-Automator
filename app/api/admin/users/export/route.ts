@@ -8,20 +8,13 @@ import { users, contacts, drafts, events, settings, auditLog } from '@/server/db
 import { adminEmails } from '@/lib/env'
 import { formatDate, APP_TZ } from '@/lib/utils'
 import { logger } from '@/lib/logger'
+import { csvCell, csvResponse, streamCsv } from '@/lib/csv-stream'
 
 const log = logger.child({ component: 'admin-users-export' })
 
 export const dynamic = 'force-dynamic'
 
 const PAGE_SIZE = 1000
-
-function csv(v: string | number | null | undefined): string {
-  const s = String(v ?? '')
-  if (s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r')) {
-    return `"${s.replace(/"/g, '""')}"`
-  }
-  return s
-}
 
 export async function GET() {
   const session = await auth()
@@ -36,63 +29,52 @@ export async function GET() {
   } catch (err) { log.warn({ err }, 'audit insert failed') }
 
   const header = 'id,email,name,created_at,contacts,drafts_pending,events,suspended\n'
-  const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      const enc = new TextEncoder()
-      controller.enqueue(enc.encode(header))
-      let cursor = ''
-      try {
-        while (true) {
-          const where = cursor ? gt(users.id, cursor) : undefined
-          const rows = await (where
-            ? db.select().from(users).where(where).orderBy(asc(users.id)).limit(PAGE_SIZE)
-            : db.select().from(users).orderBy(asc(users.id)).limit(PAGE_SIZE))
-          if (rows.length === 0) break
-          // Compute per-user metrics in one round trip per page rather than per row.
-          const ids = rows.map((r) => r.id)
-          const inClause = sql.join(ids.map((id) => sql`${id}`), sql`, `)
-          const [contactRows, draftRows, eventRows, suspRows] = await Promise.all([
-            db.select({ uid: contacts.userId, n: sql<number>`COUNT(*)` })
-              .from(contacts).where(sql`${contacts.userId} IN (${inClause})`).groupBy(contacts.userId),
-            db.select({ uid: drafts.userId, n: sql<number>`COUNT(*)` })
-              .from(drafts).where(and(sql`${drafts.userId} IN (${inClause})`, eq(drafts.status, 'draft')))
-              .groupBy(drafts.userId),
-            db.select({ uid: events.userId, n: sql<number>`COUNT(*)` })
-              .from(events).where(sql`${events.userId} IN (${inClause})`).groupBy(events.userId),
-            db.select({ uid: settings.userId, v: settings.value }).from(settings)
-              .where(and(sql`${settings.userId} IN (${inClause})`, eq(settings.key, 'SENDS_PAUSED'))),
-          ])
-          const cMap = new Map(contactRows.map((r) => [r.uid, Number(r.n)]))
-          const dMap = new Map(draftRows.map((r) => [r.uid, Number(r.n)]))
-          const eMap = new Map(eventRows.map((r) => [r.uid, Number(r.n)]))
-          const sMap = new Map(suspRows.map((r) => [r.uid, r.v === 'true']))
-          const chunk = rows.map((u) =>
-            [
-              u.id, u.email ?? '', u.name ?? '',
-              formatDate(u.createdAt, APP_TZ),
-              cMap.get(u.id) ?? 0,
-              dMap.get(u.id) ?? 0,
-              eMap.get(u.id) ?? 0,
-              sMap.get(u.id) ? 'true' : 'false',
-            ].map(csv).join(',')
-          ).join('\n') + '\n'
-          controller.enqueue(enc.encode(chunk))
-          cursor = rows[rows.length - 1]!.id
-          if (rows.length < PAGE_SIZE) break
-        }
-      } catch (err) {
-        controller.error(err)
-        return
+  const stream = streamCsv<string>({
+    header,
+    initialCursor: '',
+    fetchPage: async (cursor) => {
+      const where = cursor ? gt(users.id, cursor) : undefined
+      const rows = await (where
+        ? db.select().from(users).where(where).orderBy(asc(users.id)).limit(PAGE_SIZE)
+        : db.select().from(users).orderBy(asc(users.id)).limit(PAGE_SIZE))
+      if (rows.length === 0) return { rows: [], nextCursor: cursor, done: true }
+
+      // Compute per-user metrics in one round trip per page rather than per row.
+      const ids = rows.map((r) => r.id)
+      const inClause = sql.join(ids.map((id) => sql`${id}`), sql`, `)
+      const [contactRows, draftRows, eventRows, suspRows] = await Promise.all([
+        db.select({ uid: contacts.userId, n: sql<number>`COUNT(*)` })
+          .from(contacts).where(sql`${contacts.userId} IN (${inClause})`).groupBy(contacts.userId),
+        db.select({ uid: drafts.userId, n: sql<number>`COUNT(*)` })
+          .from(drafts).where(and(sql`${drafts.userId} IN (${inClause})`, eq(drafts.status, 'draft')))
+          .groupBy(drafts.userId),
+        db.select({ uid: events.userId, n: sql<number>`COUNT(*)` })
+          .from(events).where(sql`${events.userId} IN (${inClause})`).groupBy(events.userId),
+        db.select({ uid: settings.userId, v: settings.value }).from(settings)
+          .where(and(sql`${settings.userId} IN (${inClause})`, eq(settings.key, 'SENDS_PAUSED'))),
+      ])
+      const cMap = new Map(contactRows.map((r) => [r.uid, Number(r.n)]))
+      const dMap = new Map(draftRows.map((r) => [r.uid, Number(r.n)]))
+      const eMap = new Map(eventRows.map((r) => [r.uid, Number(r.n)]))
+      const sMap = new Map(suspRows.map((r) => [r.uid, r.v === 'true']))
+      const lines = rows.map((u) =>
+        [
+          u.id, u.email ?? '', u.name ?? '',
+          formatDate(u.createdAt, APP_TZ),
+          cMap.get(u.id) ?? 0,
+          dMap.get(u.id) ?? 0,
+          eMap.get(u.id) ?? 0,
+          sMap.get(u.id) ? 'true' : 'false',
+        ].map(csvCell).join(',')
+      )
+      return {
+        rows: lines,
+        nextCursor: rows[rows.length - 1]!.id,
+        done: rows.length < PAGE_SIZE,
       }
-      controller.close()
     },
   })
 
   const stamp = new Date().toISOString().slice(0, 10)
-  return new Response(stream, {
-    headers: {
-      'Content-Type': 'text/csv; charset=utf-8',
-      'Content-Disposition': `attachment; filename="users-${stamp}.csv"`,
-    },
-  })
+  return csvResponse(stream, `users-${stamp}.csv`)
 }

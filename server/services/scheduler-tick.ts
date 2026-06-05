@@ -61,7 +61,13 @@ async function tickForUser(userId: string): Promise<{ sent: number; failed: numb
   const dayAgo = now - 24 * 60 * 60_000
   const sentToday = await db.select({ n: sql<number>`COUNT(*)` }).from(events)
     .where(and(eq(events.userId, userId), eq(events.kind, 'sent'), sql`${events.ts} >= ${dayAgo}`))
-  const remaining = Math.max(0, DAILY_LIMIT - Number(sentToday[0]?.n ?? 0))
+  // Per-user daily-limit override — admins can raise/lower an individual
+  // user's quota via /admin/users without touching env. Falls back to env.
+  const overrideRow = await db.select().from(settings)
+    .where(and(eq(settings.userId, userId), eq(settings.key, 'DAILY_SEND_LIMIT_OVERRIDE')))
+  const override = Number(overrideRow[0]?.value ?? 0)
+  const effectiveLimit = Number.isFinite(override) && override > 0 ? Math.floor(override) : DAILY_LIMIT
+  const remaining = Math.max(0, effectiveLimit - Number(sentToday[0]?.n ?? 0))
   let sent = 0, failed = 0, advanced = 0
   if (remaining <= 0) return { sent, failed, advanced }
 
