@@ -18,9 +18,27 @@ import { setSetting } from '@/server/services/settings'
 // Tiny audit-log helper for admin actions. Keeps the call sites one-line
 // so contributors don't forget to log new admin operations. Errors are
 // swallowed so a logging failure can't block the action it's recording.
+// If an ea_impersonator cookie is set (meaning the current request is
+// inside an impersonation session), the impersonator id is appended to
+// the detail string so the audit log can distinguish "user did X" from
+// "admin Y, impersonating user, did X". The userId column still points
+// to whoever currently holds the session — important because we want
+// the cross-user audit view to surface the row under both the
+// target user AND the impersonator.
 async function logAdmin(actorId: string, action: string, detail = '') {
+  let finalDetail = detail
   try {
-    await db.insert(auditLog).values({ userId: actorId, action, detail, ip: '' })
+    const { cookies } = await import('next/headers')
+    const jar = await cookies()
+    const imp = jar.get('ea_impersonator')?.value
+    if (imp && imp !== actorId) {
+      finalDetail = detail
+        ? `${detail} | impersonator=${imp}`
+        : `impersonator=${imp}`
+    }
+  } catch { /* no cookie context — server-only callers; skip */ }
+  try {
+    await db.insert(auditLog).values({ userId: actorId, action, detail: finalDetail, ip: '' })
   } catch { /* non-fatal */ }
 }
 
@@ -312,8 +330,40 @@ export async function impersonateUserAction(userId: string) {
     name: 'authjs.session-token', value: token,
     httpOnly: true, sameSite: 'lax', expires, path: '/',
   })
+  // Audit-trail marker. Every admin action taken in this session writes
+  // an audit row whose detail includes `impersonator=<adminId>`, so a
+  // post-hoc forensics review can reconstruct who really did what.
+  // Cookie expires with the impersonation session; cleared by the
+  // exitImpersonationAction below.
+  jar.set({
+    name: 'ea_impersonator', value: me.id,
+    httpOnly: true, sameSite: 'lax', expires, path: '/',
+  })
   await logAdmin(me.id, 'admin.impersonate', `actor=${me.email ?? me.id} target=${target.email ?? target.id}`)
   return { ok: true, redirect: '/dashboard' }
+}
+
+// Companion to impersonateUserAction. Deletes the active impersonation
+// session, clears both the auth cookie and the impersonator marker, and
+// returns a redirect. The admin signs back in manually afterward.
+export async function exitImpersonationAction() {
+  const { sessions } = await import('@/server/db/schema')
+  const { cookies } = await import('next/headers')
+  const jar = await cookies()
+  const impersonator = jar.get('ea_impersonator')?.value
+  const tok = jar.get('authjs.session-token')?.value
+  if (tok) await db.delete(sessions).where(eq(sessions.sessionToken, tok)).catch(() => {})
+  jar.delete('authjs.session-token')
+  jar.delete('ea_impersonator')
+  // Best-effort audit row under the impersonator (recorded directly since
+  // logAdmin needs an active session, which we just dropped).
+  if (impersonator) {
+    await db.insert(auditLog).values({
+      userId: impersonator, action: 'admin.exit_impersonation',
+      detail: '', ip: '',
+    }).catch(() => {})
+  }
+  return { ok: true, redirect: '/login' }
 }
 
 // ── A11: Global blocklist add/remove ─────────────────────────────────
@@ -364,6 +414,38 @@ export async function broadcastAction(message: string) {
   // here misses.)
   revalidatePath('/', 'layout')
   return { ok: true, message: clean }
+}
+
+// ── Admin queue bulk cancel — flip selected Scheduled/Retrying rows to
+// Cancelled. Idempotent on Sent/Failed/Cancelled rows (the status filter
+// in the UPDATE WHERE means they're untouched). Returns rows-affected
+// count from a second SELECT so the toast can show "Cancelled N of M".
+export async function bulkCancelQueueAction(emailLogIds: number[]) {
+  const me = await requireAdmin()
+  if (!adminLimit(me.id, 'bulk_cancel_queue')) return { error: 'Too many admin actions — slow down' }
+  if (!emailLogIds || emailLogIds.length === 0) return { error: 'No rows selected' }
+  if (emailLogIds.length > 500) return { error: 'Too many rows — max 500 per call' }
+  const { emailLog } = await import('@/server/db/schema')
+  // Only cancel rows still in a cancellable state. Sending rows are NOT
+  // cancelled — they're mid-flight; let them complete or fail naturally.
+  await db.update(emailLog).set({
+    status: 'Cancelled',
+    lastResult: 'Cancelled by admin',
+  }).where(and(
+    inArray(emailLog.id, emailLogIds),
+    inArray(emailLog.status, ['Scheduled', 'Retrying']),
+  ))
+  // Count what actually flipped — the UI may have shown rows that have
+  // since been picked up by the scheduler.
+  const flipped = await db.select({ id: emailLog.id }).from(emailLog)
+    .where(and(
+      inArray(emailLog.id, emailLogIds),
+      eq(emailLog.status, 'Cancelled'),
+      eq(emailLog.lastResult, 'Cancelled by admin'),
+    ))
+  await logAdmin(me.id, 'admin.bulk_cancel_queue', `selected=${emailLogIds.length} cancelled=${flipped.length}`)
+  revalidatePath('/admin/queue')
+  return { ok: true, cancelled: flipped.length, requested: emailLogIds.length }
 }
 
 // ── Bonus: Recover stuck-Sending rows now (don't wait for next tick) ─

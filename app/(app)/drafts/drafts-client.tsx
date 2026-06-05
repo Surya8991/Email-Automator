@@ -14,8 +14,7 @@ import {
 } from '@/server/actions/drafts'
 import type { Draft } from '@/server/db/schema'
 import { useProgress } from '@/components/use-progress'
-
-type Tone = 'professional' | 'friendly' | 'concise' | 'enthusiastic' | 'formal'
+import { AiImprovePicker } from '@/components/ai-improve-picker'
 
 const PAGE_SIZE_OPTIONS = [50, 100, 500, 1000]
 
@@ -53,7 +52,6 @@ export function DraftsClient({
   const [editBody, setEditBody] = useState('')
   // AI Improve UI state — admin-only. Per-row tone picker; null = closed.
   const [aiRowId, setAiRowId] = useState<number | null>(null)
-  const [aiTone, setAiTone] = useState<Tone>('professional')
   const [aiBusy, setAiBusy] = useState<number | null>(null)
   // Client-side search — substring match against recipient + subject.
   // Cheap because draft list is capped at 50 rows server-side.
@@ -238,69 +236,52 @@ export function DraftsClient({
                       <Sparkles className={`h-4 w-4 ${aiBusy === d.id ? 'animate-pulse text-primary' : ''}`} />
                     </Button>
                     {aiRowId === d.id ? (
-                      <div className="absolute right-0 top-9 z-10 w-56 space-y-2 rounded-md border bg-popover p-2 text-sm shadow-md">
-                        <label className="block text-xs font-medium text-muted-foreground">Tone</label>
-                        <select
-                          value={aiTone}
-                          onChange={(e) => setAiTone(e.target.value as Tone)}
-                          className="block w-full rounded-md border bg-background px-2 py-1 text-xs"
-                        >
-                          <option value="professional">Professional</option>
-                          <option value="friendly">Friendly</option>
-                          <option value="concise">Concise</option>
-                          <option value="enthusiastic">Enthusiastic</option>
-                          <option value="formal">Formal</option>
-                        </select>
-                        <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="sm" onClick={() => setAiRowId(null)}>
-                            Cancel
-                          </Button>
-                          <Button size="sm" disabled={aiBusy === d.id} onClick={() => {
-                            const draftId = d.id
-                            const originalBody = d.htmlBody
-                            const originalSubject = d.subject
-                            // Snapshot the pre-improve body so the toast's
-                            // Undo button can restore it. TTL 1 h.
-                            try {
-                              localStorage.setItem(`undo-improve-${draftId}`, JSON.stringify({
-                                body: originalBody, subject: originalSubject, at: Date.now(),
-                              }))
-                            } catch { /* quota — proceed without undo */ }
-                            setAiBusy(draftId); setAiRowId(null)
-                            start(async () => {
-                              const r = await improveDraftAction(draftId, aiTone)
-                              setAiBusy(null)
-                              if ('error' in r && r.error) { toast.error(r.error); return }
-                              toast.success('Draft improved — review before sending', {
-                                action: {
-                                  label: 'Undo',
-                                  onClick: () => start(async () => {
-                                    const raw = localStorage.getItem(`undo-improve-${draftId}`)
-                                    if (!raw) { toast.error('Original no longer available'); return }
-                                    try {
-                                      const saved = JSON.parse(raw) as { body: string; subject: string; at: number }
-                                      if (Date.now() - saved.at > 60 * 60 * 1000) {
-                                        toast.error('Undo expired (1 h)'); return
-                                      }
-                                      await updateDraftAction(draftId, { subject: saved.subject, htmlBody: saved.body })
-                                      localStorage.removeItem(`undo-improve-${draftId}`)
-                                      toast.success('Restored original draft'); router.refresh()
-                                    } catch { toast.error('Restore failed') }
-                                  }),
-                                },
-                              })
-                              // Open the editor on the improved body so the
-                              // admin reviews/edits before send.
-                              if ('htmlBody' in r && typeof r.htmlBody === 'string') {
-                                setEditId(draftId); setEditSubject(d.subject); setEditBody(r.htmlBody)
-                              }
-                              router.refresh()
+                      <AiImprovePicker
+                        busy={aiBusy === d.id}
+                        onCancel={() => setAiRowId(null)}
+                        onApply={(tone) => {
+                          const draftId = d.id
+                          const originalBody = d.htmlBody
+                          const originalSubject = d.subject
+                          // Snapshot the pre-improve body so the toast's
+                          // Undo button can restore it. TTL 1 h.
+                          try {
+                            localStorage.setItem(`undo-improve-${draftId}`, JSON.stringify({
+                              body: originalBody, subject: originalSubject, at: Date.now(),
+                            }))
+                          } catch { /* quota — proceed without undo */ }
+                          setAiBusy(draftId); setAiRowId(null)
+                          start(async () => {
+                            const r = await improveDraftAction(draftId, tone)
+                            setAiBusy(null)
+                            if ('error' in r && r.error) { toast.error(r.error); return }
+                            toast.success('Draft improved — review before sending', {
+                              action: {
+                                label: 'Undo',
+                                onClick: () => start(async () => {
+                                  const raw = localStorage.getItem(`undo-improve-${draftId}`)
+                                  if (!raw) { toast.error('Original no longer available'); return }
+                                  try {
+                                    const saved = JSON.parse(raw) as { body: string; subject: string; at: number }
+                                    if (Date.now() - saved.at > 60 * 60 * 1000) {
+                                      toast.error('Undo expired (1 h)'); return
+                                    }
+                                    await updateDraftAction(draftId, { subject: saved.subject, htmlBody: saved.body })
+                                    localStorage.removeItem(`undo-improve-${draftId}`)
+                                    toast.success('Restored original draft'); router.refresh()
+                                  } catch { toast.error('Restore failed') }
+                                }),
+                              },
                             })
-                          }}>
-                            <Sparkles className="mr-1 h-3.5 w-3.5" /> Improve
-                          </Button>
-                        </div>
-                      </div>
+                            // Open the editor on the improved body so the
+                            // admin reviews/edits before send.
+                            if ('htmlBody' in r && typeof r.htmlBody === 'string') {
+                              setEditId(draftId); setEditSubject(d.subject); setEditBody(r.htmlBody)
+                            }
+                            router.refresh()
+                          })
+                        }}
+                      />
                     ) : null}
                   </div>
                 ) : null}

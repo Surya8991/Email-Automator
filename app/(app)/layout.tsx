@@ -7,8 +7,10 @@ import { TimezoneProvider } from '@/components/timezone-provider'
 import { ensureSeededTemplatesFor } from '@/server/services/onboarding'
 import { getSetting } from '@/server/services/settings'
 import { APP_TZ } from '@/lib/utils'
+import { cookies } from 'next/headers'
 import { OnboardingModal, ONBOARDING_CURRENT_VERSION } from '@/components/onboarding-modal'
 import { currentBroadcast } from '@/server/services/admin-analytics'
+import { ImpersonationBanner } from '@/components/impersonation-banner'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await auth()
@@ -35,6 +37,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // Latest broadcast announcement — shown as a banner to every signed-in
   // user until an admin clears it. Non-fatal if the DB read fails.
   const broadcast = await currentBroadcast().catch(() => null)
+  // Impersonation indicator — visible on every page while an admin is
+  // signed in as another user, so they can't forget they're in
+  // impersonation mode and act under the wrong identity.
+  const jar = await cookies()
+  const impersonating = Boolean(jar.get('ea_impersonator')?.value)
   return (
     <TimezoneProvider tz={userTz}>
       <div className="flex h-dvh flex-col">
@@ -43,6 +50,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             ⚠ ALLOW_DEV_SIGNIN=true on a deployed instance — anyone on DEV_BYPASS_EMAILS can sign in without auth. Unset before sharing.
           </div>
         )}
+        {impersonating && <ImpersonationBanner targetEmail={session.user.email ?? ''} />}
         {broadcast?.message && (
           <div className="border-b border-amber-500/50 bg-amber-500/10 px-4 py-1.5 text-center text-xs font-medium text-amber-900 dark:text-amber-200">
             📢 {broadcast.message}

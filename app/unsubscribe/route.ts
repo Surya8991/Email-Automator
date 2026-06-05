@@ -2,8 +2,15 @@ import { db } from '@/server/db/client'
 import { blocklist } from '@/server/db/schema'
 import { and, eq, isNull } from 'drizzle-orm'
 import { verifyToken } from '@/server/services/unsubscribe'
+import { clientKey, rateLimit } from '@/lib/rate-limit'
 
 async function handle(req: Request): Promise<{ email: string } | Response> {
+  // 10/min/IP. Stops token-enumeration attempts that probe for valid
+  // (email, HMAC) pairs from a known list of leaked recipient addresses.
+  // Real users hit this endpoint once; attackers hit it thousands of times.
+  if (!rateLimit(clientKey(req, 'unsub'), 10, 60_000)) {
+    return new Response('Too many requests', { status: 429 })
+  }
   const url = new URL(req.url)
   const email = String(url.searchParams.get('e') ?? '').toLowerCase().trim()
   const token = String(url.searchParams.get('t') ?? '')

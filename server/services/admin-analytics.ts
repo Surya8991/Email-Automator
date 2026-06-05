@@ -64,7 +64,9 @@ export async function recentFailures(limit = 20) {
 }
 
 // ─── A3: Active Send Queue ───────────────────────────────────────────
-export async function activeSendQueue(limit = 25) {
+export async function activeSendQueue(limit = 25, userId?: string) {
+  const baseWhere = inArray(emailLog.status, ['Scheduled', 'Retrying', 'Sending'])
+  const where = userId ? and(baseWhere, eq(emailLog.userId, userId)) : baseWhere
   const rows = await db.select({
     id: emailLog.id,
     userEmail: users.email,
@@ -74,7 +76,7 @@ export async function activeSendQueue(limit = 25) {
     scheduledAt: emailLog.scheduledAt,
   }).from(emailLog)
     .leftJoin(users, eq(emailLog.userId, users.id))
-    .where(inArray(emailLog.status, ['Scheduled', 'Retrying', 'Sending']))
+    .where(where)
     .orderBy(asc(emailLog.scheduledAt))
     .limit(limit)
   return rows.map((r) => ({
@@ -82,6 +84,11 @@ export async function activeSendQueue(limit = 25) {
     userEmail: r.userEmail ?? '—',
     scheduledAt: new Date(r.scheduledAt).toISOString(),
   }))
+}
+
+// Compact user list for admin filter dropdowns — id + email only.
+export async function listAllUsersForFilter() {
+  return db.select({ id: users.id, email: users.email }).from(users).orderBy(asc(users.email))
 }
 
 // ─── A4: Webhook Delivery Health ─────────────────────────────────────
@@ -105,38 +112,61 @@ export async function webhookHealth() {
 }
 
 // ─── A5: Per-user drill-down ─────────────────────────────────────────
+// Collapsed from 14 sequential SELECT COUNT(*) into 7 round trips:
+// - 1 user lookup
+// - 1 events GROUP BY kind covering sent/open/click/reply/bounce + lastTs
+// - 1 contacts count
+// - 1 drafts count
+// - 1 email_log queued count
+// - 1 active-campaigns count
+// - 1 settings batch covering all 4 user-config keys
+// - 1 recent-sends fetch
+// All non-sequential queries fire in Promise.all so the wall-clock is
+// limited by the slowest of the parallel batch.
+const USER_SETTING_KEYS = [
+  'PER_RECIPIENT_THROTTLE_DAYS',
+  'PER_DOMAIN_DAILY_CAP',
+  'DAILY_SEND_LIMIT_OVERRIDE',
+  'SENDS_PAUSED',
+] as const
+
 export async function userDetail(userId: string) {
   const [user] = await db.select().from(users).where(eq(users.id, userId))
   if (!user) return null
   const since30 = Date.now() - 30 * DAY_MS
-  const [contactsN, draftsN, sent30, opens30, clicks30, replies30, bounces30, queued, activeCampaigns, lastSentEv, throttle, domainCap, quotaOverride, paused] = await Promise.all([
+
+  const [eventBuckets, contactsN, draftsN, queued, activeCampaignsN, settingsRows, recentSends] = await Promise.all([
+    db.select({
+      kind: events.kind,
+      n: sql<number>`COUNT(*)`,
+      lastTs: sql<number>`MAX(${events.ts})`,
+    }).from(events)
+      .where(and(eq(events.userId, userId), gte(events.ts, since30)))
+      .groupBy(events.kind),
     db.select({ n: sql<number>`COUNT(*)` }).from(contacts).where(eq(contacts.userId, userId)),
     db.select({ n: sql<number>`COUNT(*)` }).from(drafts).where(and(eq(drafts.userId, userId), eq(drafts.status, 'draft'))),
-    db.select({ n: sql<number>`COUNT(*)` }).from(events).where(and(eq(events.userId, userId), eq(events.kind, 'sent'), gte(events.ts, since30))),
-    db.select({ n: sql<number>`COUNT(*)` }).from(events).where(and(eq(events.userId, userId), eq(events.kind, 'open'), gte(events.ts, since30))),
-    db.select({ n: sql<number>`COUNT(*)` }).from(events).where(and(eq(events.userId, userId), eq(events.kind, 'click'), gte(events.ts, since30))),
-    db.select({ n: sql<number>`COUNT(*)` }).from(events).where(and(eq(events.userId, userId), eq(events.kind, 'reply'), gte(events.ts, since30))),
-    db.select({ n: sql<number>`COUNT(*)` }).from(events).where(and(eq(events.userId, userId), eq(events.kind, 'bounce'), gte(events.ts, since30))),
     db.select({ n: sql<number>`COUNT(*)` }).from(emailLog).where(and(eq(emailLog.userId, userId), inArray(emailLog.status, ['Scheduled', 'Retrying', 'Sending']))),
     db.select({ n: sql<number>`COUNT(*)` }).from(campaigns).where(and(eq(campaigns.userId, userId), eq(campaigns.status, 'active'))),
-    db.select({ ts: events.ts }).from(events).where(and(eq(events.userId, userId), eq(events.kind, 'sent'))).orderBy(desc(events.ts)).limit(1),
-    db.select({ v: settings.value }).from(settings).where(and(eq(settings.userId, userId), eq(settings.key, 'PER_RECIPIENT_THROTTLE_DAYS'))),
-    db.select({ v: settings.value }).from(settings).where(and(eq(settings.userId, userId), eq(settings.key, 'PER_DOMAIN_DAILY_CAP'))),
-    db.select({ v: settings.value }).from(settings).where(and(eq(settings.userId, userId), eq(settings.key, 'DAILY_SEND_LIMIT_OVERRIDE'))),
-    db.select({ v: settings.value }).from(settings).where(and(eq(settings.userId, userId), eq(settings.key, 'SENDS_PAUSED'))),
+    db.select({ k: settings.key, v: settings.value }).from(settings)
+      .where(and(eq(settings.userId, userId), inArray(settings.key, USER_SETTING_KEYS as unknown as string[]))),
+    db.select({
+      id: emailLog.id,
+      recipient: emailLog.email,
+      subject: emailLog.subject,
+      status: emailLog.status,
+      scheduledAt: emailLog.scheduledAt,
+      lastResult: emailLog.lastResult,
+    }).from(emailLog)
+      .where(eq(emailLog.userId, userId))
+      .orderBy(desc(emailLog.scheduledAt))
+      .limit(10),
   ])
-  // Last 10 sends
-  const recentSends = await db.select({
-    id: emailLog.id,
-    recipient: emailLog.email,
-    subject: emailLog.subject,
-    status: emailLog.status,
-    scheduledAt: emailLog.scheduledAt,
-    lastResult: emailLog.lastResult,
-  }).from(emailLog)
-    .where(eq(emailLog.userId, userId))
-    .orderBy(desc(emailLog.scheduledAt))
-    .limit(10)
+
+  // Pivot the event GROUP BY result into a per-kind shape.
+  const byKind: Record<string, { n: number; lastTs: number | null }> = {}
+  for (const r of eventBuckets) byKind[r.kind] = { n: Number(r.n), lastTs: r.lastTs ? Number(r.lastTs) : null }
+  const settingsByKey = Object.fromEntries(settingsRows.map((r) => [r.k, r.v ?? '']))
+
   return {
     user: {
       id: user.id, email: user.email, name: user.name ?? '',
@@ -145,21 +175,21 @@ export async function userDetail(userId: string) {
     counts: {
       contacts: Number(contactsN[0]?.n ?? 0),
       draftsPending: Number(draftsN[0]?.n ?? 0),
-      sent30: Number(sent30[0]?.n ?? 0),
-      opens30: Number(opens30[0]?.n ?? 0),
-      clicks30: Number(clicks30[0]?.n ?? 0),
-      replies30: Number(replies30[0]?.n ?? 0),
-      bounces30: Number(bounces30[0]?.n ?? 0),
+      sent30: byKind.sent?.n ?? 0,
+      opens30: byKind.open?.n ?? 0,
+      clicks30: byKind.click?.n ?? 0,
+      replies30: byKind.reply?.n ?? 0,
+      bounces30: byKind.bounce?.n ?? 0,
       queued: Number(queued[0]?.n ?? 0),
-      activeCampaigns: Number(activeCampaigns[0]?.n ?? 0),
+      activeCampaigns: Number(activeCampaignsN[0]?.n ?? 0),
     },
     settings: {
-      paused: paused[0]?.v === 'true',
-      throttleDays: Number(throttle[0]?.v ?? 0),
-      domainCap: domainCap[0]?.v ?? '',
-      dailyLimitOverride: quotaOverride[0]?.v ?? '',
+      paused: settingsByKey['SENDS_PAUSED'] === 'true',
+      throttleDays: Number(settingsByKey['PER_RECIPIENT_THROTTLE_DAYS'] ?? 0),
+      domainCap: settingsByKey['PER_DOMAIN_DAILY_CAP'] ?? '',
+      dailyLimitOverride: settingsByKey['DAILY_SEND_LIMIT_OVERRIDE'] ?? '',
     },
-    lastSentAt: lastSentEv[0]?.ts ? new Date(lastSentEv[0].ts).toISOString() : null,
+    lastSentAt: byKind.sent?.lastTs ? new Date(byKind.sent.lastTs).toISOString() : null,
     recentSends: recentSends.map((r) => ({ ...r, scheduledAt: new Date(r.scheduledAt).toISOString() })),
   }
 }
@@ -173,7 +203,9 @@ export async function dbHealth() {
     driver = 'libsql'
   } else {
     try {
-      const dbPath = path.isAbsolute(dbUrl) ? dbUrl : path.join(process.cwd(), dbUrl)
+      const dbPath = path.isAbsolute(dbUrl)
+        ? dbUrl
+        : path.join(/*turbopackIgnore: true*/ process.cwd(), dbUrl)
       if (fs.existsSync(dbPath)) fileSize = fs.statSync(dbPath).size
     } catch { /* ignore */ }
   }

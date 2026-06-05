@@ -21,12 +21,19 @@ export interface ProgressEvent {
 }
 
 const POLL_INTERVAL_MS = 2000
+// Idle window: if no event arrived for this long, stop polling. Resumes
+// on a new SSE event OR on explicit reactivation when the caller knows
+// an operation is in flight.
+const IDLE_AFTER_MS = 30_000
 
 export function useProgress(): ProgressEvent | null {
   const [evt, setEvt] = useState<ProgressEvent | null>(null)
   // Tracks the timestamp of the most recently observed event so the polling
   // endpoint can short-circuit when we're already up to date.
   const lastSeen = useRef(0)
+  // Tracks the wall-clock of the most recent activity so we can pause
+  // polling once it goes quiet. SSE re-arms it whenever an event lands.
+  const lastActivity = useRef(Date.now())
 
   useEffect(() => {
     let closed = false
@@ -38,6 +45,7 @@ export function useProgress(): ProgressEvent | null {
       // Dedupe — both transports may deliver the same event milliseconds apart.
       if (at !== undefined && at <= lastSeen.current) return
       if (at !== undefined) lastSeen.current = at
+      lastActivity.current = Date.now()
       setEvt(data)
     }
 
@@ -61,6 +69,10 @@ export function useProgress(): ProgressEvent | null {
 
     const poll = async () => {
       if (closed) return
+      // Pause polling once we've been quiet for a while. SSE stays
+      // connected (cheap, server-pushed) so a real new event still
+      // re-activates us via apply()'s lastActivity bump.
+      if (Date.now() - lastActivity.current > IDLE_AFTER_MS) return
       try {
         const res = await fetch(`/api/progress/poll?since=${lastSeen.current}`, { cache: 'no-store' })
         if (res.status === 204 || !res.ok) return

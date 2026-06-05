@@ -8,8 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cancelScheduleAction, enqueueScheduleAction, previewScheduleAction, cancelSelectedAction, improveScheduledEmailAction } from '@/server/actions/schedule'
 import { useFormatDate, useTimezone } from '@/components/timezone-provider'
-
-type Tone = 'professional' | 'friendly' | 'concise' | 'enthusiastic' | 'formal'
+import { AiImprovePicker } from '@/components/ai-improve-picker'
 
 interface QueueRow {
   id: number; email: string; subject: string; scheduledAt: string; status: string
@@ -81,7 +80,6 @@ export function ScheduleClient({ queue, queueCount, isAdmin = false }: { queue: 
   // can update it in place without a full router.refresh().
   const [openPreview, setOpenPreview] = useState<Record<number, { body: string }>>({})
   const [aiRowId, setAiRowId] = useState<number | null>(null)
-  const [aiTone, setAiTone] = useState<Tone>('professional')
   const [aiBusy, setAiBusy] = useState<number | null>(null)
   const filtered = queue.filter((r) => {
     if (statusFilter !== 'all' && r.status !== statusFilter) return false
@@ -302,33 +300,21 @@ export function ScheduleClient({ queue, queueCount, isAdmin = false }: { queue: 
                               <Sparkles className={`h-4 w-4 ${aiBusy === r.id ? 'animate-pulse text-primary' : ''}`} />
                             </Button>
                             {aiRowId === r.id ? (
-                              <div className="absolute right-0 top-9 z-10 w-56 space-y-2 rounded-md border bg-popover p-2 text-sm shadow-md">
-                                <label className="block text-xs font-medium text-muted-foreground">Tone</label>
-                                <select value={aiTone} onChange={(e) => setAiTone(e.target.value as Tone)}
-                                  className="block w-full rounded-md border bg-background px-2 py-1 text-xs">
-                                  <option value="professional">Professional</option>
-                                  <option value="friendly">Friendly</option>
-                                  <option value="concise">Concise</option>
-                                  <option value="enthusiastic">Enthusiastic</option>
-                                  <option value="formal">Formal</option>
-                                </select>
-                                <div className="flex justify-end gap-1">
-                                  <Button variant="ghost" size="sm" onClick={() => setAiRowId(null)}>Cancel</Button>
-                                  <Button size="sm" disabled={aiBusy === r.id} onClick={() => {
-                                    const rowId = r.id
-                                    setAiBusy(rowId); setAiRowId(null)
-                                    start(async () => {
-                                      const resp = await improveScheduledEmailAction(rowId, aiTone)
-                                      setAiBusy(null)
-                                      if ('error' in resp) { toast.error(resp.error); return }
-                                      toast.success('Queued email improved — preview to review')
-                                      setOpenPreview((o) => ({ ...o, [rowId]: { body: resp.body } }))
-                                    })
-                                  }}>
-                                    <Sparkles className="mr-1 h-3.5 w-3.5" /> Improve
-                                  </Button>
-                                </div>
-                              </div>
+                              <AiImprovePicker
+                                busy={aiBusy === r.id}
+                                onCancel={() => setAiRowId(null)}
+                                onApply={(tone) => {
+                                  const rowId = r.id
+                                  setAiBusy(rowId); setAiRowId(null)
+                                  start(async () => {
+                                    const resp = await improveScheduledEmailAction(rowId, tone)
+                                    setAiBusy(null)
+                                    if ('error' in resp) { toast.error(resp.error ?? 'Failed'); return }
+                                    toast.success('Queued email improved — preview to review')
+                                    if ('body' in resp && resp.body) setOpenPreview((o) => ({ ...o, [rowId]: { body: resp.body } }))
+                                  })
+                                }}
+                              />
                             ) : null}
                           </span>
                         ) : null}

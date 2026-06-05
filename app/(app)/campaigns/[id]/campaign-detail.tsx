@@ -14,7 +14,7 @@ import {
 } from '@/server/actions/campaigns'
 import { useFormatDate } from '@/components/timezone-provider'
 
-type Tone = 'professional' | 'friendly' | 'concise' | 'enthusiastic' | 'formal'
+import { AiImprovePicker } from '@/components/ai-improve-picker'
 
 interface Step { id: number; campaignId: number; order: number; templateId: number | null; delayHours: number; stopOnReply: boolean }
 interface Enrollment { id: number; contactId: number; currentStep: number; nextRunAt: number; status: string }
@@ -68,7 +68,6 @@ export function CampaignDetail({ campaign, steps, enrollments, templates, tags, 
   // after Improve without a full router.refresh().
   const [openPreview, setOpenPreview] = useState<Record<number, string>>({})
   const [aiRowId, setAiRowId] = useState<number | null>(null)
-  const [aiTone, setAiTone] = useState<Tone>('professional')
   const [aiBusy, setAiBusy] = useState<number | null>(null)
 
   return (
@@ -135,39 +134,27 @@ export function CampaignDetail({ campaign, steps, enrollments, templates, tags, 
                           <Sparkles className={`h-4 w-4 ${aiBusy === s.id ? 'animate-pulse text-primary' : ''}`} />
                         </Button>
                         {aiRowId === s.id ? (
-                          <div className="absolute right-0 top-9 z-10 w-56 space-y-2 rounded-md border bg-popover p-2 text-sm shadow-md">
-                            <label className="block text-xs font-medium text-muted-foreground">Tone</label>
-                            <select value={aiTone} onChange={(e) => setAiTone(e.target.value as Tone)}
-                              className="block w-full rounded-md border bg-background px-2 py-1 text-xs">
-                              <option value="professional">Professional</option>
-                              <option value="friendly">Friendly</option>
-                              <option value="concise">Concise</option>
-                              <option value="enthusiastic">Enthusiastic</option>
-                              <option value="formal">Formal</option>
-                            </select>
-                            <div className="flex justify-end gap-1">
-                              <Button variant="ghost" size="sm" onClick={() => setAiRowId(null)}>Cancel</Button>
-                              <Button size="sm" disabled={aiBusy === s.id} onClick={() => {
-                                const stepId = s.id
-                                const tid = s.templateId!
-                                setAiBusy(stepId); setAiRowId(null)
-                                start(async () => {
-                                  try {
-                                    const r = await improveCampaignTemplateAction(tid, aiTone)
-                                    if ('error' in r) { toast.error(r.error); return }
-                                    toast.success('Template improved — future sends use new body')
-                                    setOpenPreview((o) => ({ ...o, [stepId]: r.initialMsg }))
-                                  } catch {
-                                    toast.error('AI Improve failed — please try again')
-                                  } finally {
-                                    setAiBusy(null)
-                                  }
-                                })
-                              }}>
-                                <Sparkles className="mr-1 h-3.5 w-3.5" /> Improve
-                              </Button>
-                            </div>
-                          </div>
+                          <AiImprovePicker
+                            busy={aiBusy === s.id}
+                            onCancel={() => setAiRowId(null)}
+                            onApply={(tone) => {
+                              const stepId = s.id
+                              const tid = s.templateId!
+                              setAiBusy(stepId); setAiRowId(null)
+                              start(async () => {
+                                try {
+                                  const r = await improveCampaignTemplateAction(tid, tone)
+                                  if ('error' in r) { toast.error(r.error ?? 'Failed'); return }
+                                  toast.success('Template improved — future sends use new body')
+                                  if ('initialMsg' in r && r.initialMsg) setOpenPreview((o) => ({ ...o, [stepId]: r.initialMsg as string }))
+                                } catch {
+                                  toast.error('AI Improve failed — please try again')
+                                } finally {
+                                  setAiBusy(null)
+                                }
+                              })
+                            }}
+                          />
                         ) : null}
                       </span>
                     ) : null}

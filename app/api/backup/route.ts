@@ -4,6 +4,14 @@ import path from 'node:path'
 import { db } from '@/server/db/client'
 import { auditLog } from '@/server/db/schema'
 
+// Resolve the DB path inside a helper so Turbopack's static tracer
+// doesn't treat the whole project as a reachable input through the
+// process.cwd() call. The cwd is stable at request time on every
+// runtime we ship to (Vercel, Linux PM2, Docker).
+function resolveDbPath(dbUrl: string): string {
+  return path.isAbsolute(dbUrl) ? dbUrl : path.join(/*turbopackIgnore: true*/ process.cwd(), dbUrl)
+}
+
 // Whole-DB backup is ADMIN-ONLY — the file contains every user's contacts,
 // templates, drafts, sessions, and events. A per-user logical export
 // (contacts only) is at /api/contacts/export and stays open to every user.
@@ -21,7 +29,7 @@ export async function GET() {
       { status: 501 },
     )
   }
-  const dbPath = path.isAbsolute(dbUrl) ? dbUrl : path.join(process.cwd(), dbUrl)
+  const dbPath = resolveDbPath(dbUrl)
   if (!fs.existsSync(dbPath)) return new Response('No database file found', { status: 404 })
   const stat = fs.statSync(dbPath)
   // Best-effort audit before streaming so the record exists even if the

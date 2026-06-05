@@ -1,13 +1,18 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { activeSendQueue, queueHealth, recentFailures } from '@/server/services/admin-analytics'
+import { activeSendQueue, listAllUsersForFilter, queueHealth, recentFailures } from '@/server/services/admin-analytics'
 import { ServerFormat } from '../server-format'
 import { QueueActions } from './queue-actions'
+import { ActiveQueueTable } from './active-queue-table'
+import { UserFilter } from './user-filter'
 
-export default async function AdminQueuePage() {
-  const [queue, active, failures] = await Promise.all([
+export default async function AdminQueuePage({ searchParams }: { searchParams: Promise<{ user?: string }> }) {
+  const { user } = await searchParams
+  const userId = user || undefined
+  const [queue, active, failures, allUsers] = await Promise.all([
     queueHealth(),
-    activeSendQueue(50),
+    activeSendQueue(50, userId),
     recentFailures(20),
+    listAllUsersForFilter(),
   ])
 
   return (
@@ -33,34 +38,17 @@ export default async function AdminQueuePage() {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Active queue (next 50)</CardTitle></CardHeader>
+        <CardHeader>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle>Active queue (next 50)</CardTitle>
+            <UserFilter
+              users={allUsers.map((u) => ({ id: u.id, email: u.email ?? '—' }))}
+              selectedId={userId ?? ''}
+            />
+          </div>
+        </CardHeader>
         <CardContent className="p-0">
-          {active.length === 0 ? (
-            <p className="px-4 py-6 text-sm text-muted-foreground">Nothing scheduled right now.</p>
-          ) : (
-            <table className="w-full text-sm">
-              <thead className="bg-muted/40 text-left text-xs uppercase text-muted-foreground">
-                <tr>
-                  <th className="px-3 py-2">When</th>
-                  <th className="px-3 py-2">User</th>
-                  <th className="px-3 py-2">Recipient</th>
-                  <th className="px-3 py-2">Subject</th>
-                  <th className="px-3 py-2">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {active.map((r) => (
-                  <tr key={r.id} className="border-t">
-                    <td className="px-3 py-2 text-xs text-muted-foreground"><ServerFormat at={r.scheduledAt} /></td>
-                    <td className="px-3 py-2 font-mono text-xs">{r.userEmail}</td>
-                    <td className="px-3 py-2 font-mono text-xs">{r.recipient}</td>
-                    <td className="px-3 py-2 truncate" title={r.subject}>{r.subject}</td>
-                    <td className="px-3 py-2"><StatusBadge status={r.status} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+          <ActiveQueueTable rows={active} />
         </CardContent>
       </Card>
 
@@ -113,12 +101,4 @@ function Cell({ label, v, tone }: { label: string; v: number; tone?: 'ok' | 'war
       <div className={`mt-0.5 text-xl font-semibold tabular-nums ${cls}`}>{v}</div>
     </div>
   )
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const cls =
-    status === 'Sending' ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
-    : status === 'Retrying' ? 'bg-orange-500/15 text-orange-700 dark:text-orange-400'
-    : 'bg-muted text-foreground'
-  return <span className={`rounded px-1.5 py-0.5 text-xs ${cls}`}>{status}</span>
 }

@@ -1,6 +1,7 @@
 'use client'
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 import { Megaphone, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { broadcastAction } from '@/server/actions/admin'
@@ -8,14 +9,16 @@ import { broadcastAction } from '@/server/actions/admin'
 export function BroadcastForm({ current }: { current: string }) {
   const router = useRouter()
   const [msg, setMsg] = useState(current)
-  const [status, setStatus] = useState<string | null>(null)
   const [pending, start] = useTransition()
 
   function submit() {
     start(async () => {
       const r = await broadcastAction(msg)
-      if ('error' in r) { setStatus(r.error ?? 'Broadcast failed'); return }
-      setStatus('message' in r && r.message ? 'Broadcast updated.' : 'Broadcast cleared.')
+      if ('error' in r) { toast.error(r.error ?? 'Broadcast failed'); return }
+      const wasCleared = !('message' in r) || !r.message
+      toast.success(wasCleared
+        ? 'Broadcast cleared. The banner will disappear from every page on the next navigation.'
+        : 'Broadcast posted. It will appear at the top of every signed-in page.')
       router.refresh()
     })
   }
@@ -42,7 +45,6 @@ export function BroadcastForm({ current }: { current: string }) {
           </Button>
         </div>
       </div>
-      {status && <p className="text-xs text-emerald-600 dark:text-emerald-400">{status}</p>}
     </div>
   )
 }

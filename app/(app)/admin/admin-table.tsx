@@ -27,6 +27,8 @@ export function AdminTable({ rows }: { rows: Row[] }) {
   const [filter, setFilter] = useState<'all' | 'active' | 'suspended' | 'admin'>('all')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [drawerUserId, setDrawerUserId] = useState<string | null>(null)
+  const [quotaTarget, setQuotaTarget] = useState<Row | null>(null)
+  const [quotaInput, setQuotaInput] = useState('')
   const visible = useMemo(() => rows.filter((r) => {
     if (filter === 'suspended' && !r.suspended) return false
     if (filter === 'active' && r.suspended) return false
@@ -57,14 +59,23 @@ export function AdminTable({ rows }: { rows: Row[] }) {
   }
   function clearSelection() { setSelected(new Set()) }
 
-  function promptQuota(r: Row) {
-    const cur = r.quotaOverride > 0 ? String(r.quotaOverride) : ''
-    const v = prompt(`Daily send limit for ${r.email}? Leave blank to clear override (use global env).`, cur)
-    if (v === null) return
-    const n = Number(v)
+  function openQuotaDialog(r: Row) {
+    setQuotaTarget(r)
+    setQuotaInput(r.quotaOverride > 0 ? String(r.quotaOverride) : '')
+  }
+  function submitQuota() {
+    if (!quotaTarget) return
+    const trimmed = quotaInput.trim()
+    const n = trimmed === '' ? 0 : Number(trimmed)
+    if (trimmed !== '' && (!Number.isFinite(n) || n < 0)) {
+      setErr('Quota must be a positive integer (or blank to clear).')
+      return
+    }
+    const target = quotaTarget
+    setQuotaTarget(null)
     start(async () => {
       setErr(null)
-      const res = await setUserQuotaAction(r.id, Number.isFinite(n) ? n : 0)
+      const res = await setUserQuotaAction(target.id, n)
       if ('error' in res && res.error) setErr(res.error)
       router.refresh()
     })
@@ -190,7 +201,7 @@ export function AdminTable({ rows }: { rows: Row[] }) {
                     <>
                       <Button variant="ghost" size="icon" aria-label="Set quota"
                         title="Set per-user daily send limit" disabled={pending}
-                        onClick={() => promptQuota(r)}>
+                        onClick={() => openQuotaDialog(r)}>
                         <KeyRound className="h-4 w-4" />
                       </Button>
                       <Button variant="ghost" size="icon" aria-label="Impersonate"
@@ -238,6 +249,33 @@ export function AdminTable({ rows }: { rows: Row[] }) {
       </table>
       {drawerUserId ? (
         <UserDetailDrawer userId={drawerUserId} onClose={() => setDrawerUserId(null)} />
+      ) : null}
+      {quotaTarget ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true">
+          <div className="w-full max-w-md rounded-lg border bg-background p-6 shadow-lg">
+            <h2 className="text-base font-semibold">Set daily send limit</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Override the global <code>DAILY_SEND_LIMIT</code> for <span className="font-mono">{quotaTarget.email}</span>.
+              Leave blank to clear the override and fall back to the env default.
+            </p>
+            <Input
+              type="number" inputMode="numeric" min={0}
+              autoFocus
+              value={quotaInput}
+              onChange={(e) => setQuotaInput(e.target.value)}
+              placeholder="e.g. 100"
+              className="mt-4"
+              onKeyDown={(e) => { if (e.key === 'Enter') submitQuota() }}
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="ghost" size="sm" disabled={pending}
+                onClick={() => setQuotaTarget(null)}>Cancel</Button>
+              <Button size="sm" disabled={pending} onClick={submitQuota}>
+                {quotaInput.trim() === '' ? 'Clear override' : 'Save'}
+              </Button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </>
   )
