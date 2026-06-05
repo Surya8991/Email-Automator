@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from 'drizzle-orm'
+import { and, desc, eq, inArray, sql } from 'drizzle-orm'
 import { db } from '@/server/db/client'
 import { jobSources, jobLeads, type JobSource, type JobLead } from '@/server/db/schema'
 import { fetchForAi } from './ai-generate'
@@ -26,6 +26,69 @@ const MAX_NEW_PER_TICK = 25
 
 export async function listSources(userId: string): Promise<JobSource[]> {
   return db.select().from(jobSources).where(eq(jobSources.userId, userId)).orderBy(desc(jobSources.id))
+}
+
+/**
+ * Per-source lead count (any status). Used in the Sources tab as a
+ * quick indicator of which sources are pulling weight. Returns a
+ * Map keyed by source id so the caller can join in O(1).
+ */
+export async function leadCountsBySource(userId: string): Promise<Map<number, number>> {
+  const rows = await db.select({
+    sourceId: jobLeads.sourceId,
+    n: sql<number>`COUNT(*)`,
+  }).from(jobLeads).where(eq(jobLeads.userId, userId)).groupBy(jobLeads.sourceId)
+  return new Map(rows.map((r) => [r.sourceId, Number(r.n)]))
+}
+
+/**
+ * Toggle a source between active and paused. Paused sources are
+ * skipped by tickAll but kept in the list — useful when iterating on
+ * keyword filters without losing the URL + history.
+ */
+export async function setSourceActive(userId: string, id: number, active: boolean): Promise<void> {
+  await db.update(jobSources).set({ active })
+    .where(and(eq(jobSources.id, id), eq(jobSources.userId, userId)))
+}
+
+/**
+ * Edit the label / url / keywords on a source without delete + recreate.
+ * Returns the patched row so the UI can refresh state without a full
+ * re-fetch.
+ */
+export async function updateSource(
+  userId: string, id: number,
+  patch: { label?: string; url?: string; keywords?: string },
+): Promise<JobSource | null> {
+  const clean: typeof patch = {}
+  if (patch.label !== undefined) clean.label = patch.label.trim().slice(0, 120)
+  if (patch.url !== undefined) clean.url = patch.url.trim().slice(0, 500)
+  if (patch.keywords !== undefined) clean.keywords = patch.keywords.trim().slice(0, 400)
+  if (Object.keys(clean).length === 0) return null
+  await db.update(jobSources).set(clean)
+    .where(and(eq(jobSources.id, id), eq(jobSources.userId, userId)))
+  const [row] = await db.select().from(jobSources)
+    .where(and(eq(jobSources.id, id), eq(jobSources.userId, userId)))
+  return row ?? null
+}
+
+/**
+ * Bulk-set status on a list of lead ids. Used by the bulk-triage
+ * checkbox row in the leads table. Each id is filtered by userId so
+ * a leaked id can't change another user's lead.
+ */
+export async function bulkSetLeadStatus(
+  userId: string, ids: number[], status: 'new' | 'saved' | 'ignored' | 'applied',
+): Promise<{ updated: number }> {
+  if (!ids || ids.length === 0) return { updated: 0 }
+  if (ids.length > 500) ids = ids.slice(0, 500)
+  let updated = 0
+  for (const id of ids) {
+    await db.update(jobLeads).set({ status })
+      .where(and(eq(jobLeads.id, id), eq(jobLeads.userId, userId)))
+    updated++
+  }
+  return { updated }
 }
 
 export async function listLeads(userId: string, status: string = 'new'): Promise<JobLead[]> {

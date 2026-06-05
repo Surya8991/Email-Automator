@@ -65,6 +65,82 @@ export async function setJobLeadStatusAction(id: number, status: 'new' | 'saved'
 }
 
 /**
+ * Bulk status change on a checkbox-selected set of lead ids. Cap at
+ * 500 ids per call to keep the loop bounded.
+ */
+export async function bulkSetJobLeadStatusAction(ids: number[], status: 'new' | 'saved' | 'ignored' | 'applied') {
+  const u = await requireUser()
+  if (!ids || ids.length === 0) return { error: 'No leads selected' }
+  if (ids.length > 500) return { error: 'Pick at most 500 leads at a time' }
+  if (!rateLimit(`lead-bulk:${u.id}`, 6, 60_000)) return { error: 'Too many bulk actions — slow down' }
+  const r = await svc.bulkSetLeadStatus(u.id, ids, status)
+  revalidatePath('/jobs')
+  return { ok: true as const, ...r }
+}
+
+/** Pause / resume a source. Paused = skipped by the cron tickAll. */
+export async function toggleJobSourceActiveAction(id: number, active: boolean) {
+  const u = await requireUser()
+  await svc.setSourceActive(u.id, id, active)
+  revalidatePath('/jobs')
+  return { ok: true as const }
+}
+
+const EditSchema = z.object({
+  label: z.string().min(1).max(120).optional(),
+  url: z.string().min(8).max(500).optional(),
+  keywords: z.string().max(400).optional(),
+})
+
+/**
+ * Edit a source in place. If the URL changes, we re-run the SSRF
+ * validator before saving so the new URL has the same guard.
+ */
+export async function editJobSourceAction(id: number, input: z.infer<typeof EditSchema>) {
+  const u = await requireUser()
+  const parsed = EditSchema.safeParse(input)
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Invalid input' }
+  if (!rateLimit(`source-edit:${u.id}`, 20, 60_000)) return { error: 'Slow down' }
+  if (parsed.data.url) {
+    const sanity = await fetchForAi(parsed.data.url).catch((e) => ({ ok: false, error: e instanceof Error ? e.message : 'fetch failed' } as const))
+    if (!sanity.ok) return { error: `URL rejected: ${'error' in sanity ? sanity.error : 'invalid'}` }
+  }
+  try {
+    await svc.updateSource(u.id, id, parsed.data)
+    revalidatePath('/jobs')
+    return { ok: true as const }
+  } catch (e) {
+    return actionError(e, 'Edit failed')
+  }
+}
+
+/**
+ * Manual "refresh all" — runs tickAll for THIS user only (not every
+ * tenant on the instance). Useful when iterating on keywords without
+ * waiting an hour for the cron. Bounded by the per-source MAX_NEW_PER_TICK
+ * inside the service.
+ */
+export async function refreshAllForUserAction() {
+  const u = await requireUser()
+  if (!rateLimit(`refresh-all:${u.id}`, 3, 60_000)) return { error: 'Too many full refreshes — wait a minute' }
+  try {
+    const sources = await svc.listSources(u.id)
+    let addedTotal = 0
+    let scanned = 0
+    for (const s of sources) {
+      if (!s.active) continue
+      const r = await svc.tickSource(s)
+      addedTotal += r.added
+      scanned++
+    }
+    revalidatePath('/jobs')
+    return { ok: true as const, scanned, addedTotal }
+  } catch (e) {
+    return actionError(e, 'Refresh-all failed')
+  }
+}
+
+/**
  * Convert a job lead into a contact + draft outreach. The user gets
  * a pre-filled draft they can edit and send, plus the company recorded
  * as a contact so future analytics aggregate correctly.

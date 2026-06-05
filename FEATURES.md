@@ -3,6 +3,38 @@
 Everything Email Automator currently does, grouped by section.
 Last refreshed: 2026-06-05.
 
+## 🆕 What's new (2026-06-06, sixth batch — Job tracker functionality + organization)
+
+**5 marketing-domain presets added (user request)** for SEO / Digital Marketing / Performance Marketing / Paid Media roles:
+- **Built In — Marketing** (`builtin.com/jobs`) — marketing at tech companies.
+- **MarTech Jobs** (`martechjobs.com`) — performance + paid-media specialist roles.
+- **The Drum Jobs** (`thedrum.com/jobs`) — UK/EU marketing-industry publication.
+- **MarketerHire** (`marketerhire.com/talent`) — vetted FT + freelance.
+- **Workable — Marketing** (`jobs.workable.com`) — ATS aggregator with marketing keyword search.
+
+**3 more general presets**:
+- **Glassdoor** — search across companies with salary + review filters.
+- **Hacker News Who is hiring** — monthly thread via Algolia search.
+- **FlexJobs** — vetted remote / flexible.
+
+**Picker reorganized by category** with a sticky-scroll panel. Six categories with their own heading + blurb: Marketing / SEO / Paid Media, General aggregators, Remote-first, Startup-focused, Paste a company URL, Other. Each preset now carries a "Best for" pill (e.g. "Performance + paid media") so the right pick is one glance away.
+
+**New job-tracker functionality**
+- **Bulk triage** — checkbox per row + select-all visible; sticky action bar shows when ≥ 1 selected: "Save all / Mark all applied / Ignore all / Clear selection". Capped at 500 ids per call.
+- **Refresh all** — top-bar button kicks tickAll for the current user only (not every tenant). Rate-limited 3/min so it's iterating-friendly but not abuse-friendly.
+- **Source pause/resume** — pause toggle on every row. Paused sources are skipped by the cron tickAll but kept in the list — useful for iterating on keyword filters without losing the URL + history.
+- **Edit source** — change label / URL / keywords in place. If the URL changes, we re-run the SSRF guard before saving.
+- **Per-source lead count** — new column shows total leads ever extracted from this source, so you can spot which sources are pulling weight.
+- **Paused indicator** — paused sources render at 50 % opacity with an amber `paused` chip.
+
+**4 new tests** ensure: every preset has a category that exists; the marketing category has ≥ 5 entries (covering the user's request); every declared category has at least one preset; ids and templates remain non-empty.
+
+**Service layer additions**
+- `leadCountsBySource(userId)` — `Map<sourceId, count>` for the new column.
+- `setSourceActive(userId, id, active)` — pause/resume.
+- `updateSource(userId, id, patch)` — in-place edit with field-length clamps.
+- `bulkSetLeadStatus(userId, ids, status)` — per-userId guard, 500-id cap.
+
 ## 🆕 What's new (2026-06-06, fifth batch — Job tracker polish)
 
 - **Job-board preset picker** — new `Add from preset` button on `/jobs` with 10 popular sources: LinkedIn, Wellfound (AngelList), Naukri, Indeed, Remote OK, We Work Remotely, Y Combinator, Greenhouse company URL, Lever company URL, and generic company careers pages. Fill in role + (optional) location → we build the URL + label + suggested keywords. The SSRF-defended fetcher still validates whatever URL we end up with.

@@ -1,6 +1,6 @@
 import { Briefcase } from 'lucide-react'
 import { requireUser } from '@/auth'
-import { listSources, listLeads } from '@/server/services/job-tracker'
+import { listSources, listLeads, leadCountsBySource } from '@/server/services/job-tracker'
 import { Card, CardContent } from '@/components/ui/card'
 import { PageHeader } from '@/components/ui/page-header'
 import { SectionHelp } from '@/components/section-help'
@@ -13,10 +13,11 @@ export default async function JobsPage() {
   // Defensive on both reads — migration 0008 may not be applied to
   // prod yet. Each .catch falls back to an empty array so the page
   // renders an empty-state instead of 500ing.
-  const [sources, leadsNew, leadsSaved] = await Promise.all([
+  const [sources, leadsNew, leadsSaved, leadCounts] = await Promise.all([
     listSources(u.id).catch((e) => { console.error('[jobs] listSources failed:', e); return [] as JobSource[] }),
     listLeads(u.id, 'new').catch((e) => { console.error('[jobs] listLeads new failed:', e); return [] as JobLead[] }),
     listLeads(u.id, 'saved').catch((e) => { console.error('[jobs] listLeads saved failed:', e); return [] as JobLead[] }),
+    leadCountsBySource(u.id).catch(() => new Map<number, number>()),
   ])
   const activeSources = sources.filter((s) => s.active).length
   return (
@@ -65,6 +66,7 @@ export default async function JobsPage() {
           id: s.id, label: s.label, url: s.url, keywords: s.keywords, active: s.active,
           lastFetchedAt: s.lastFetchedAt ?? null,
           lastStatus: s.lastStatus, lastError: s.lastError,
+          leadCount: leadCounts.get(s.id) ?? 0,
         }))}
         leadsNew={leadsNew.map((l) => ({
           id: l.id, title: l.title, company: l.company, link: l.link, location: l.location,

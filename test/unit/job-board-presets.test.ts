@@ -1,17 +1,32 @@
 import { describe, it, expect } from 'vitest'
-import { JOB_BOARD_PRESETS, buildPresetUrl } from '@/lib/job-board-presets'
+import { JOB_BOARD_PRESETS, PRESET_CATEGORIES, buildPresetUrl } from '@/lib/job-board-presets'
 
 describe('job-board-presets catalog', () => {
-  it('every preset has a non-empty template', () => {
+  it('every preset has a non-empty template + category', () => {
     for (const p of JOB_BOARD_PRESETS) {
       expect(p.template.length).toBeGreaterThan(0)
       expect(p.name.length).toBeGreaterThan(0)
       expect(p.id).toMatch(/^[a-z][a-z0-9-]*$/)
+      // Category must be declared and match one of the known categories.
+      expect(PRESET_CATEGORIES.find((c) => c.id === p.category)).toBeTruthy()
     }
   })
   it('ids are unique', () => {
     const ids = JOB_BOARD_PRESETS.map((p) => p.id)
     expect(new Set(ids).size).toBe(ids.length)
+  })
+  it('at least 5 marketing-specific presets exist (user request 2026-06-06)', () => {
+    const marketing = JOB_BOARD_PRESETS.filter((p) => p.category === 'marketing')
+    expect(marketing.length).toBeGreaterThanOrEqual(5)
+  })
+  it('catalog covers every declared category at least once', () => {
+    for (const cat of PRESET_CATEGORIES) {
+      // Every category in the picker UI should have at least one preset
+      // — otherwise the picker renders a heading with no entries.
+      const inCat = JOB_BOARD_PRESETS.filter((p) => p.category === cat.id)
+      if (cat.id === 'general') continue // 'general' is the "anything else" fallback bucket
+      expect(inCat.length).toBeGreaterThan(0)
+    }
   })
 })
 

@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog'
-import { JOB_BOARD_PRESETS, buildPresetUrl, type JobBoardPreset } from '@/lib/job-board-presets'
+import { JOB_BOARD_PRESETS, PRESET_CATEGORIES, buildPresetUrl, type JobBoardPreset } from '@/lib/job-board-presets'
 import { addJobSourceAction } from '@/server/actions/job-tracker'
 import { cn } from '@/lib/utils'
 
@@ -60,20 +60,43 @@ export function JobPresetPicker() {
         </DialogHeader>
 
         {!picked ? (
-          <div className="grid gap-2 sm:grid-cols-2">
-            {JOB_BOARD_PRESETS.map((p) => (
-              <button
-                key={p.id} type="button"
-                onClick={() => setPicked(p)}
-                className="flex items-start gap-3 rounded-lg border bg-card p-3 text-left hover:border-primary/40 hover:bg-accent/30 ea-transition"
-              >
-                <span className="text-2xl" aria-hidden>{p.icon}</span>
-                <div className="min-w-0">
-                  <div className="font-medium">{p.name}</div>
-                  <div className="mt-0.5 text-xs text-muted-foreground">{p.description}</div>
+          <div className="space-y-5 max-h-[60vh] overflow-y-auto pr-1">
+            {PRESET_CATEGORIES.map((cat) => {
+              const inCat = JOB_BOARD_PRESETS.filter((p) => p.category === cat.id)
+              if (inCat.length === 0) return null
+              return (
+                <div key={cat.id}>
+                  <div className="mb-2">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                      {cat.label}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground/80">{cat.blurb}</div>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {inCat.map((p) => (
+                      <button
+                        key={p.id} type="button"
+                        onClick={() => setPicked(p)}
+                        className="flex items-start gap-3 rounded-lg border bg-card p-3 text-left ea-transition hover:border-primary/40 hover:bg-accent/30"
+                      >
+                        <span className="text-2xl" aria-hidden>{p.icon}</span>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{p.name}</span>
+                            {p.bestFor ? (
+                              <span className="inline-flex shrink-0 items-center rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                                {p.bestFor}
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="mt-0.5 text-xs text-muted-foreground">{p.description}</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </button>
-            ))}
+              )
+            })}
           </div>
         ) : (
           <div className="space-y-3">
