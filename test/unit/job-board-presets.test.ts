@@ -15,9 +15,16 @@ describe('job-board-presets catalog', () => {
     const ids = JOB_BOARD_PRESETS.map((p) => p.id)
     expect(new Set(ids).size).toBe(ids.length)
   })
-  it('at least 5 marketing-specific presets exist (user request 2026-06-06)', () => {
+  it('at least 10 marketing-specific presets exist (user request 2026-06-06)', () => {
     const marketing = JOB_BOARD_PRESETS.filter((p) => p.category === 'marketing')
-    expect(marketing.length).toBeGreaterThanOrEqual(5)
+    expect(marketing.length).toBeGreaterThanOrEqual(10)
+  })
+  it('every marketing preset requires both role and location (user request 2026-06-06)', () => {
+    const marketing = JOB_BOARD_PRESETS.filter((p) => p.category === 'marketing')
+    for (const p of marketing) {
+      expect(p.needs.role).toBe(true)
+      expect(p.needs.location).toBe(true)
+    }
   })
   it('at least 10 India presets exist (user request 2026-06-06)', () => {
     // Naukri / Foundit / Shine / TimesJobs / Hirist / Cutshort /

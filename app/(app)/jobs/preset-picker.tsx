@@ -38,7 +38,7 @@ export function JobPresetPicker() {
     start(async () => {
       const r = await addJobSourceAction({ label, url, keywords })
       if ('error' in r && r.error) { toast.error(r.error); return }
-      toast.success(`Added "${label}" — refresh to pull the first leads`)
+      toast.success(`Added "${label}". Refresh to pull the first leads`)
       setOpen(false); reset()
       router.refresh()
     })
@@ -55,7 +55,7 @@ export function JobPresetPicker() {
         <DialogHeader>
           <DialogTitle>Add from a popular board</DialogTitle>
           <DialogDescription>
-            Pick a job board, fill in the role + optional location, and we&apos;ll generate the URL. The SSRF-defended fetcher still validates whatever URL we end up with.
+            Pick a job board, fill in the role and location, and we&apos;ll generate the URL. The SSRF-defended fetcher still validates whatever URL we end up with.
           </DialogDescription>
         </DialogHeader>
 
@@ -121,7 +121,7 @@ export function JobPresetPicker() {
 
             <div className="grid gap-1.5">
               <Label htmlFor="preset-role">
-                {picked.template === '{role}' ? 'Board URL' : 'Role / keyword'}
+                {picked.template === '{role}' ? 'Board URL' : 'Role / keyword'} <span className="text-destructive">*</span>
               </Label>
               <Input
                 id="preset-role"
@@ -133,7 +133,7 @@ export function JobPresetPicker() {
 
             {picked.needs.location ? (
               <div className="grid gap-1.5">
-                <Label htmlFor="preset-loc">Location</Label>
+                <Label htmlFor="preset-loc">Location <span className="text-destructive">*</span></Label>
                 <Input
                   id="preset-loc"
                   value={location} onChange={(e) => setLocation(e.target.value)}
@@ -145,7 +145,7 @@ export function JobPresetPicker() {
             <div className={cn('rounded-md border bg-card p-3 text-xs', !role && 'opacity-50')}>
               <div className="font-medium text-muted-foreground">Preview</div>
               <div className="mt-1 truncate font-mono text-foreground">
-                {role ? buildPresetUrl(picked, role, location).url : 'Enter a role to preview the URL…'}
+                {role ? buildPresetUrl(picked, role, location).url : 'Enter a role to preview the URL.'}
               </div>
             </div>
           </div>
@@ -154,7 +154,7 @@ export function JobPresetPicker() {
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
           {picked ? (
-            <Button onClick={submit} disabled={pending || !role.trim()}>
+            <Button onClick={submit} disabled={pending || !role.trim() || (picked.needs.location && !location.trim())}>
               {pending ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Plus className="mr-1.5 h-4 w-4" />}
               Add source
             </Button>

@@ -69,7 +69,7 @@ export default async function JobsPage() {
               { label: 'Triage leads', hint: 'Each row has Save / Ignore / Applied. Saved + applied leave the New tray.' },
             ]}
             pitfalls={[
-              { label: 'Auth-walled pages', hint: 'LinkedIn search results behind a login wall return very few listings — try the public anonymous URL or a company careers page instead.' },
+              { label: 'Auth-walled pages', hint: 'LinkedIn search results behind a login wall return very few listings. Try the public anonymous URL or a company careers page instead.' },
               { label: 'Cron secret', hint: 'The /api/cron/job-tracker endpoint requires CRON_SECRET (same env var as scheduled sends).' },
             ]}
           />

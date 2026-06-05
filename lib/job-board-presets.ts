@@ -27,20 +27,30 @@ export interface JobBoardPreset {
   /** When set, the picker shows this as the "best for" tag — helps
    *  marketing users find the right board without reading every line. */
   bestFor?: string
+  /** Visible to non-admin users. When false (the default), the
+   *  preset is admin-only — full catalogs are reserved for operators
+   *  who can manage cron / Groq cost. Regular users see only a small
+   *  curated `sample: true` subset so they can experience the feature
+   *  without unbounded fan-out. */
+  sample?: boolean
 }
+
+/** Hard cap on the number of sources a non-admin user can create.
+ *  Admin users have no cap. Pairs with the sample-preset gate above. */
+export const NON_ADMIN_SOURCE_CAP = 3
 
 export const JOB_BOARD_PRESETS: JobBoardPreset[] = [
   // ── General aggregators ─────────────────────────────────────────
   {
     id: 'linkedin',
     name: 'LinkedIn Jobs',
-    description: 'Public LinkedIn job search. Best for senior + tech roles.',
+    description: 'Public LinkedIn job search. Best for senior and tech roles.',
     template: 'https://www.linkedin.com/jobs/search/?keywords={role}&location={location}',
     needs: { role: true, location: true },
     suggestedKeywords: '{role}',
     icon: '🟦',
     category: 'aggregator',
-    bestFor: 'Senior IC + management roles',
+    bestFor: 'Senior IC and management',
   },
   {
     id: 'indeed',
@@ -56,7 +66,7 @@ export const JOB_BOARD_PRESETS: JobBoardPreset[] = [
   {
     id: 'glassdoor',
     name: 'Glassdoor',
-    description: 'Search across companies with salary + review filters.',
+    description: 'Search across companies with salary and review filters.',
     template: 'https://www.glassdoor.com/Job/jobs.htm?sc.keyword={role}&locKeyword={location}',
     needs: { role: true, location: true },
     suggestedKeywords: '{role}',
@@ -80,7 +90,7 @@ export const JOB_BOARD_PRESETS: JobBoardPreset[] = [
   {
     id: 'builtin-marketing',
     name: 'Built In — Marketing',
-    description: 'Tech + marketing-tech roles. Strong company database, filterable.',
+    description: 'Tech and marketing-tech roles. Strong company database, filterable.',
     template: 'https://builtin.com/jobs?search={role}&loc={location}',
     needs: { role: true, location: true },
     suggestedKeywords: '{role}, marketing',
@@ -91,49 +101,104 @@ export const JOB_BOARD_PRESETS: JobBoardPreset[] = [
   {
     id: 'martechjobs',
     name: 'MarTech Jobs',
-    description: 'Performance / lifecycle / paid-media specialist roles.',
-    template: 'https://martechjobs.com/?s={role}',
-    needs: { role: true, location: false },
+    description: 'Performance, lifecycle, and paid-media specialist roles.',
+    template: 'https://martechjobs.com/?s={role}+{location}',
+    needs: { role: true, location: true },
     suggestedKeywords: '{role}, performance, paid media',
     icon: '📈',
     category: 'marketing',
-    bestFor: 'Performance + paid media',
+    bestFor: 'Performance and paid media',
   },
   {
     id: 'thedrum',
     name: 'The Drum Jobs',
-    description: 'Marketing-industry publication job board. UK + EU heavy.',
-    template: 'https://www.thedrum.com/jobs?keywords={role}',
-    needs: { role: true, location: false },
+    description: 'Marketing-industry publication job board. UK and EU heavy.',
+    template: 'https://www.thedrum.com/jobs?keywords={role}&location={location}',
+    needs: { role: true, location: true },
     suggestedKeywords: '{role}',
     icon: '🥁',
     category: 'marketing',
-    bestFor: 'Brand + agency-side',
+    bestFor: 'Brand and agency-side',
   },
   {
     id: 'marketerhire',
     name: 'MarketerHire',
-    description: 'Vetted marketing talent — FT + freelance.',
-    template: 'https://marketerhire.com/talent',
-    needs: { role: false, location: false },
-    suggestedKeywords: 'SEO, paid media, growth, performance, lifecycle',
+    description: 'Vetted marketing talent. FT and freelance.',
+    template: 'https://marketerhire.com/talent?role={role}&location={location}',
+    needs: { role: true, location: true },
+    suggestedKeywords: '{role}, SEO, paid media, growth, performance, lifecycle',
     icon: '💼',
     category: 'marketing',
-    bestFor: 'Freelance / fractional',
+    bestFor: 'Freelance and fractional',
   },
   {
     id: 'workable-marketing',
-    name: 'Workable — Marketing',
+    name: 'Workable, Marketing',
     description: 'ATS aggregator. Broad marketing keyword search.',
-    template: 'https://jobs.workable.com/search?query={role}',
-    needs: { role: true, location: false },
+    template: 'https://jobs.workable.com/search?query={role}&location={location}',
+    needs: { role: true, location: true },
     suggestedKeywords: '{role}, digital marketing',
     icon: '🟢',
     category: 'marketing',
     bestFor: 'Aggregated mid-market roles',
   },
+  {
+    id: 'mediabistro',
+    name: 'Mediabistro',
+    description: 'Media, advertising, and marketing roles. Strong on brand and agency-side.',
+    template: 'https://www.mediabistro.com/jobs?keywords={role}&location={location}',
+    needs: { role: true, location: true },
+    suggestedKeywords: '{role}, digital marketing, paid media',
+    icon: '📺',
+    category: 'marketing',
+    bestFor: 'Brand and agency-side',
+  },
+  {
+    id: 'marketinghire',
+    name: 'MarketingHire.com',
+    description: 'Marketing-only board. SEO, performance, growth, lifecycle, content.',
+    template: 'https://www.marketinghire.com/jobs/search?keywords={role}&location={location}',
+    needs: { role: true, location: true },
+    suggestedKeywords: '{role}, SEO, performance, paid media',
+    icon: '🎯',
+    category: 'marketing',
+    bestFor: 'Marketing only',
+  },
+  {
+    id: 'powderkeg',
+    name: 'Powderkeg',
+    description: 'Tech and marketing roles outside the coastal hubs. Good for performance and growth roles.',
+    template: 'https://powderkeg.com/jobs?search={role}&location={location}',
+    needs: { role: true, location: true },
+    suggestedKeywords: '{role}, growth, performance',
+    icon: '🔥',
+    category: 'marketing',
+    bestFor: 'Tech marketing',
+  },
+  {
+    id: 'talent-marketing',
+    name: 'Talent.com, Marketing',
+    description: 'Aggregator with strong filters. Use a marketing-specific keyword line to focus.',
+    template: 'https://www.talent.com/jobs?k={role}&l={location}',
+    needs: { role: true, location: true },
+    suggestedKeywords: '{role}, digital marketing, SEO, paid media',
+    icon: '🟧',
+    category: 'marketing',
+    bestFor: 'Volume across countries',
+  },
+  {
+    id: 'growthhackers',
+    name: 'GrowthHackers Jobs',
+    description: 'Growth, performance, and lifecycle marketing community board.',
+    template: 'https://growthhackers.com/jobs?q={role}&l={location}',
+    needs: { role: true, location: true },
+    suggestedKeywords: '{role}, growth, performance, lifecycle',
+    icon: '📊',
+    category: 'marketing',
+    bestFor: 'Growth and lifecycle',
+  },
 
-  // ── India boards (added 2026-06-06) ────────────────────────────
+  // India boards (added 2026-06-06)
   {
     id: 'naukri',
     name: 'Naukri',
@@ -192,7 +257,7 @@ export const JOB_BOARD_PRESETS: JobBoardPreset[] = [
   {
     id: 'cutshort',
     name: 'Cutshort',
-    description: 'Indian startup board. Strong for product / growth / engineering at funded startups.',
+    description: 'Indian startup board. Strong for product, growth, and engineering at funded startups.',
     template: 'https://cutshort.io/jobs?search={role}&location={location}',
     needs: { role: true, location: true },
     suggestedKeywords: '{role}',
@@ -203,7 +268,7 @@ export const JOB_BOARD_PRESETS: JobBoardPreset[] = [
   {
     id: 'instahyre',
     name: 'Instahyre',
-    description: 'AI-matched tech board. Heavily-curated; product / engineering / data roles.',
+    description: 'AI-matched tech board. Heavily curated product, engineering, and data roles.',
     template: 'https://www.instahyre.com/search-jobs/?q={role}&l={location}',
     needs: { role: true, location: true },
     suggestedKeywords: '{role}',
@@ -214,7 +279,7 @@ export const JOB_BOARD_PRESETS: JobBoardPreset[] = [
   {
     id: 'iimjobs',
     name: 'iimjobs',
-    description: 'Premium roles for MBA / senior management. Strategy, BD, growth leadership.',
+    description: 'Premium roles for MBA and senior management. Strategy, BD, growth leadership.',
     template: 'https://www.iimjobs.com/search?searchTerm={role}&loc={location}',
     needs: { role: true, location: true },
     suggestedKeywords: '{role}',
@@ -236,7 +301,7 @@ export const JOB_BOARD_PRESETS: JobBoardPreset[] = [
   {
     id: 'apna',
     name: 'Apna',
-    description: 'Mobile-first, fastest-growing. Broad — entry to mid-level, blue + white collar.',
+    description: 'Mobile-first, fastest growing. Broad coverage from entry to mid-level.',
     template: 'https://apna.co/jobs?q={role}&l={location}',
     needs: { role: true, location: true },
     suggestedKeywords: '{role}',
@@ -247,7 +312,7 @@ export const JOB_BOARD_PRESETS: JobBoardPreset[] = [
   {
     id: 'glassdoor-in',
     name: 'Glassdoor India',
-    description: 'India-specific Glassdoor with salary + review filters.',
+    description: 'India-specific Glassdoor with salary and review filters.',
     template: 'https://www.glassdoor.co.in/Job/jobs.htm?sc.keyword={role}&locKeyword={location}',
     needs: { role: true, location: true },
     suggestedKeywords: '{role}',
@@ -282,7 +347,7 @@ export const JOB_BOARD_PRESETS: JobBoardPreset[] = [
   {
     id: 'flexjobs',
     name: 'FlexJobs',
-    description: 'Vetted remote / flexible roles across industries.',
+    description: 'Vetted remote and flexible roles across industries.',
     template: 'https://www.flexjobs.com/search?searchkeyword={role}',
     needs: { role: true, location: false },
     suggestedKeywords: '{role}, remote, flexible',
@@ -295,7 +360,7 @@ export const JOB_BOARD_PRESETS: JobBoardPreset[] = [
   {
     id: 'wellfound',
     name: 'Wellfound (AngelList)',
-    description: 'Startup-heavy listings. Good for product / growth / early-stage.',
+    description: 'Startup-heavy listings. Good for product, growth, and early-stage.',
     template: 'https://wellfound.com/jobs?role={role}&location={location}',
     needs: { role: true, location: true },
     suggestedKeywords: '{role}',
@@ -306,7 +371,7 @@ export const JOB_BOARD_PRESETS: JobBoardPreset[] = [
   {
     id: 'ycombinator',
     name: 'Y Combinator Work',
-    description: 'YC-backed startup roles. Senior IC + leadership weighted.',
+    description: 'YC-backed startup roles. Senior IC and leadership weighted.',
     template: 'https://www.ycombinator.com/jobs/role/{role}',
     needs: { role: true, location: false },
     suggestedKeywords: '{role}',
@@ -341,7 +406,7 @@ export const JOB_BOARD_PRESETS: JobBoardPreset[] = [
   {
     id: 'company-careers',
     name: 'Company careers page',
-    description: 'Paste a /careers or /jobs page URL on a company\'s own site.',
+    description: 'Paste a careers or jobs page URL on a company\'s own site.',
     template: '{role}',
     needs: { role: true, location: false },
     suggestedKeywords: '',
@@ -358,13 +423,13 @@ export const PRESET_CATEGORIES: Array<{ id: PresetCategory; label: string; blurb
   // India sits first — most of our active users are India-based, so
   // surface the IN boards by default. The `featured` flag drives the
   // visual "primary" treatment in the picker.
-  { id: 'india',      label: '🇮🇳 India',                    blurb: 'India-focused job boards — broad coverage across Naukri, Foundit, Shine, TimesJobs + tech (Hirist, Instahyre), startups (Cutshort), MBA (iimjobs), mobile-first (Apna), and Indeed/Glassdoor IN.', featured: true },
-  { id: 'marketing',  label: 'Marketing / SEO / Paid Media', blurb: 'Domain-specific boards for SEO, digital, performance, and paid-media roles.' },
+  { id: 'india',      label: '🇮🇳 India',                    blurb: 'India-focused job boards. Broad coverage across Naukri, Foundit, Shine, TimesJobs, plus tech (Hirist, Instahyre), startups (Cutshort), MBA (iimjobs), mobile-first (Apna), and Indeed/Glassdoor IN.', featured: true },
+  { id: 'marketing',  label: 'Marketing, SEO, Paid Media',   blurb: 'Domain-specific boards for SEO, digital, performance, and paid-media roles.' },
   { id: 'aggregator', label: 'General aggregators',          blurb: 'Cross-industry boards with broad coverage and search filters.' },
-  { id: 'remote',     label: 'Remote-first',                 blurb: 'Boards that screen for fully-remote / flexible roles.' },
+  { id: 'remote',     label: 'Remote-first',                 blurb: 'Boards that screen for fully-remote or flexible roles.' },
   { id: 'startup',    label: 'Startup-focused',              blurb: 'Early-stage and growth-stage company listings.' },
-  { id: 'company',    label: 'Paste a company URL',          blurb: 'Greenhouse / Lever / careers pages — paste the URL and we fetch it like any other source.' },
-  { id: 'general',    label: 'Other',                        blurb: 'Anything that didn\'t fit cleanly above.' },
+  { id: 'company',    label: 'Paste a company URL',          blurb: 'Greenhouse, Lever, or careers pages. Paste the URL and we fetch it like any other source.' },
+  { id: 'general',    label: 'Other',                        blurb: 'Anything that did not fit cleanly above.' },
 ]
 
 /**

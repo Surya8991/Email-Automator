@@ -115,7 +115,7 @@ function AddSourceDialog() {
     start(async () => {
       const r = await addJobSourceAction({ label, url, keywords })
       if ('error' in r && r.error) { toast.error(r.error); return }
-      toast.success('Source added — refresh to pull the first leads')
+      toast.success('Source added. Refresh to pull the first leads.')
       setOpen(false); setLabel(''); setUrl(''); setKeywords('')
       router.refresh()
     })
@@ -135,7 +135,7 @@ function AddSourceDialog() {
         <div className="space-y-3">
           <div className="grid gap-1.5">
             <Label htmlFor="js-label">Label</Label>
-            <Input id="js-label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Wellfound — PM in Bangalore" />
+            <Input id="js-label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Wellfound, PM in Bangalore" />
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="js-url">URL</Label>
@@ -367,7 +367,7 @@ function LeadsTable({
     start(async () => {
       const r = await leadToDraftAction(id)
       if ('error' in r && r.error) { toast.error(r.error); return }
-      toast.success('Draft created — finish it in /drafts')
+      toast.success('Draft created. Finish it in /drafts.')
       router.refresh()
     })
   }
@@ -466,8 +466,8 @@ function LeadsTable({
                       <div className="text-[10px] text-muted-foreground">via {src.label}</div>
                     ) : null}
                   </td>
-                  <td className="text-xs text-muted-foreground">{l.company || '—'}</td>
-                  <td className="text-xs text-muted-foreground">{l.location || '—'}</td>
+                  <td className="text-xs text-muted-foreground">{l.company || '–'}</td>
+                  <td className="text-xs text-muted-foreground">{l.location || '–'}</td>
                   <td className="text-xs text-muted-foreground">{new Date(l.seenAt).toLocaleDateString()}</td>
                   <td>
                     <div className="ea-row-actions flex justify-end gap-1">
