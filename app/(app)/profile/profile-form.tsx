@@ -1,5 +1,5 @@
 'use client'
-import { useMemo, useState, useTransition } from 'react'
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { toast } from 'sonner'
 import { Save, ExternalLink, Eye, EyeOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -9,12 +9,20 @@ import { saveProfileAction } from '@/server/actions/profile'
 import { RichTextEditor } from '@/components/rich-text-editor'
 
 // Best-effort URL normalizer — prepends https:// if the user typed a bare
-// domain. Keeps the displayed value clean; only fixes the stored form.
+// domain. Rejects javascript:, data:, file:, etc. so a malicious value
+// can never land as a clickable href elsewhere in the app (admin user
+// drawer, future template rendering, etc.). Returns '' for unsafe input.
 function normalizeUrl(v: string): string {
   const t = v.trim()
   if (!t) return ''
-  if (/^https?:\/\//i.test(t)) return t
+  // Explicit scheme: only allow http(s). Mailto/tel/etc. blocked here so
+  // the simple "Portfolio / LinkedIn" inputs can't smuggle a payload.
+  if (/^[a-z][a-z0-9+.-]*:/i.test(t)) {
+    return /^https?:\/\//i.test(t) ? t : ''
+  }
+  // No scheme — only prepend https:// if it actually looks like a domain.
   if (/^[a-z0-9.-]+\.[a-z]{2,}/i.test(t)) return `https://${t}`
+  // Anything else (free-form text) we leave as the user typed it.
   return t
 }
 
@@ -33,6 +41,29 @@ export function ProfileForm({ email, initial }: { email: string; initial: Record
   })
   const [pending, start] = useTransition()
   const [showPreview, setShowPreview] = useState(false)
+  // Track the initial snapshot so we can detect unsaved edits. beforeunload
+  // catches tab close / hard nav; in-app sidebar links would need a Next
+  // router intercept which is involved — beforeunload alone covers the
+  // most painful loss path (close tab, browser back).
+  const initialSnapshot = useRef<string>('')
+  const currentSnapshot = JSON.stringify(state)
+  useEffect(() => {
+    // Capture once on mount so resetting after save also clears the flag.
+    if (!initialSnapshot.current) initialSnapshot.current = currentSnapshot
+  }, [currentSnapshot])
+  const dirty = initialSnapshot.current !== '' && initialSnapshot.current !== currentSnapshot
+  useEffect(() => {
+    if (!dirty) return
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      // Modern browsers ignore custom text; setting returnValue triggers
+      // the native "Leave site?" dialog. This is the only path that
+      // works across browsers today.
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [dirty])
 
   const set = (k: keyof typeof state) => (v: string) => setState((s) => ({ ...s, [k]: v }))
 
@@ -61,6 +92,8 @@ export function ProfileForm({ email, initial }: { email: string; initial: Record
         toast.error(r.error)
       } else {
         toast.success('Profile saved')
+        // Reset the dirty-state snapshot so beforeunload + indicator clear.
+        initialSnapshot.current = JSON.stringify(normalized)
       }
     })
   }
@@ -136,10 +169,17 @@ export function ProfileForm({ email, initial }: { email: string; initial: Record
         {showPreview ? (
           <div className="rounded-md border bg-muted/20 p-4 text-sm">
             <div className="mb-2 text-xs uppercase text-muted-foreground">Preview — appended to outgoing emails</div>
-            <div
-              className="prose prose-sm dark:prose-invert max-w-none"
-              // eslint-disable-next-line react/no-danger
-              dangerouslySetInnerHTML={{ __html: state.CACHED_SIGNATURE || '<em class="text-muted-foreground">Signature empty.</em>' }}
+            {/* SECURITY: render the signature HTML in a sandboxed iframe.
+                sandbox="" with no allow-* tokens means: no script execution,
+                no top-navigation, no form submission, no same-origin. So
+                even a pasted <script> or <img onerror> can't run against
+                the user's session. srcDoc avoids ever assigning unsafe
+                strings to an attribute that resolves to a URL. */}
+            <iframe
+              title="Signature preview"
+              sandbox=""
+              srcDoc={`<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0;font-family:system-ui,sans-serif;color:#111;font-size:14px;line-height:1.5}@media (prefers-color-scheme:dark){body{color:#eee;background:transparent}}</style></head><body>${state.CACHED_SIGNATURE || '<em style="color:#888">Signature empty.</em>'}</body></html>`}
+              className="h-40 w-full rounded border bg-background"
             />
           </div>
         ) : null}
@@ -167,9 +207,12 @@ export function ProfileForm({ email, initial }: { email: string; initial: Record
       </section>
 
       <div className="flex items-center gap-3 border-t pt-4">
-        <Button type="submit" disabled={pending}>
-          <Save className="mr-1.5 h-4 w-4" /> {pending ? 'Saving…' : 'Save changes'}
+        <Button type="submit" disabled={pending || !dirty}>
+          <Save className="mr-1.5 h-4 w-4" /> {pending ? 'Saving…' : dirty ? 'Save changes' : 'Saved'}
         </Button>
+        {dirty ? (
+          <span className="text-xs text-muted-foreground">Unsaved changes</span>
+        ) : null}
         {(portfolioInvalid || linkedinInvalid) ? (
           <span className="text-xs text-amber-600 dark:text-amber-400">Some URLs look off — saving anyway.</span>
         ) : null}

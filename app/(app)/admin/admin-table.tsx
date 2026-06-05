@@ -183,19 +183,22 @@ export function AdminTable({ rows }: { rows: Row[] }) {
                 </div>
               </div>
             </div>
-            <div className="-mx-1 flex flex-wrap items-center gap-0.5">
-              <Button variant="ghost" size="icon" aria-label="View details" onClick={() => setDrawerUserId(r.id)}>
-                <Eye className="h-4 w-4" />
+            {/* Mobile action row — 44px tap targets (size='sm' h-9), readable
+                gap, and the destructive Delete pushed to the end with extra
+                space + red color cue so it's never adjacent to Suspend. */}
+            <div className="-mx-1 flex flex-wrap items-center gap-2">
+              <Button variant="ghost" size="sm" className="h-9 px-2" onClick={() => setDrawerUserId(r.id)}>
+                <Eye className="mr-1 h-4 w-4" /> View
               </Button>
               {!r.isMe && !r.isAdmin && (
                 <>
-                  <Button variant="ghost" size="icon" aria-label="Set quota" disabled={pending} onClick={() => openQuotaDialog(r)}>
-                    <KeyRound className="h-4 w-4" />
+                  <Button variant="ghost" size="sm" className="h-9 px-2" disabled={pending} onClick={() => openQuotaDialog(r)}>
+                    <KeyRound className="mr-1 h-4 w-4" /> Quota
                   </Button>
-                  <Button variant="ghost" size="icon" aria-label="Impersonate" disabled={pending} onClick={() => impersonate(r)}>
-                    <UserCog className="h-4 w-4" />
+                  <Button variant="ghost" size="sm" className="h-9 px-2" disabled={pending} onClick={() => impersonate(r)}>
+                    <UserCog className="mr-1 h-4 w-4" /> Impersonate
                   </Button>
-                  <Button variant="ghost" size="icon" aria-label={r.suspended ? 'Resume sends' : 'Suspend sends'}
+                  <Button variant="ghost" size="sm" className="h-9 px-2"
                     disabled={pending}
                     onClick={() => start(async () => {
                       setErr(null)
@@ -203,9 +206,11 @@ export function AdminTable({ rows }: { rows: Row[] }) {
                       if ('error' in res && res.error) setErr(res.error)
                       router.refresh()
                     })}>
-                    {r.suspended ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
+                    {r.suspended ? <><Play className="mr-1 h-4 w-4" /> Resume</> : <><Pause className="mr-1 h-4 w-4" /> Suspend</>}
                   </Button>
-                  <Button variant="ghost" size="icon" aria-label="Delete user" disabled={pending}
+                  <Button variant="ghost" size="sm"
+                    className="ml-auto h-9 px-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    disabled={pending}
                     onClick={() => {
                       if (!confirm(`Delete ${r.email}? Their contacts/templates/drafts/sessions/events all go too.`)) return
                       start(async () => {
@@ -215,7 +220,7 @@ export function AdminTable({ rows }: { rows: Row[] }) {
                         router.refresh()
                       })
                     }}>
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 className="mr-1 h-4 w-4" /> Delete
                   </Button>
                 </>
               )}
@@ -333,10 +338,18 @@ export function AdminTable({ rows }: { rows: Row[] }) {
         <UserDetailDrawer userId={drawerUserId} onClose={() => setDrawerUserId(null)} />
       ) : null}
       {quotaTarget ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true">
-          <div className="w-full max-w-md rounded-lg border bg-background p-6 shadow-lg">
-            <h2 className="text-base font-semibold">Set daily send limit</h2>
-            <p className="mt-1 text-xs text-muted-foreground">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="quota-dialog-title"
+          aria-describedby="quota-dialog-desc"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={(e) => { if (e.target === e.currentTarget) setQuotaTarget(null) }}
+          onKeyDown={(e) => { if (e.key === 'Escape') setQuotaTarget(null) }}
+        >
+          <div className="w-full max-w-md rounded-lg border bg-background p-6 shadow-lg" onClick={(e) => e.stopPropagation()}>
+            <h2 id="quota-dialog-title" className="text-base font-semibold">Set daily send limit</h2>
+            <p id="quota-dialog-desc" className="mt-1 text-xs text-muted-foreground">
               Override the global <code>DAILY_SEND_LIMIT</code> for <span className="font-mono">{quotaTarget.email}</span>.
               Leave blank to clear the override and fall back to the env default.
             </p>
@@ -347,7 +360,10 @@ export function AdminTable({ rows }: { rows: Row[] }) {
               onChange={(e) => setQuotaInput(e.target.value)}
               placeholder="e.g. 100"
               className="mt-4"
-              onKeyDown={(e) => { if (e.key === 'Enter') submitQuota() }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') submitQuota()
+                if (e.key === 'Escape') setQuotaTarget(null)
+              }}
             />
             <div className="mt-4 flex justify-end gap-2">
               <Button variant="ghost" size="sm" disabled={pending}

@@ -53,12 +53,22 @@ export default async function ProfilePage() {
   ]
   const completion = Math.round((checklist.filter((c) => c.done).length / checklist.length) * 100)
 
-  const initials = (settings.PROFILE_NAME || u.email)
-    .split(/\s+|@/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() ?? '')
-    .join('') || '?'
+  // Initials: ASCII-letters-only, codepoint-aware. Emoji, surrogate pairs,
+  // and non-letter chars are stripped so we never render a broken glyph
+  // or tofu box in the avatar. Falls back to '?' when nothing usable
+  // is left — handles edge cases like "@example.com" or " " or "🎯🎯".
+  function deriveInitials(name: string, email: string): string {
+    const source = name.trim() || email
+    const words = source.split(/[\s@._-]+/).filter(Boolean)
+    const chars: string[] = []
+    for (const w of words) {
+      const ch = [...w].find((c) => /^[a-zA-Z]$/.test(c))
+      if (ch) chars.push(ch.toUpperCase())
+      if (chars.length >= 2) break
+    }
+    return chars.length > 0 ? chars.join('') : '?'
+  }
+  const initials = deriveInitials(settings.PROFILE_NAME ?? '', u.email)
 
   const hasGoogleAccount = googleRows.length > 0
   const googleConfigured = Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET)

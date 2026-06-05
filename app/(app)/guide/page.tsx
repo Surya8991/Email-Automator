@@ -86,7 +86,7 @@ export default function GuidePage() {
         </p>
         <ol className="list-decimal pl-6 space-y-2 text-sm">
           <li>Go to <Link href="/profile" className="underline">Profile</Link>. Set your name, portfolio link, and signature (rich-text or HTML).</li>
-          <li>Open <Link href="/templates" className="underline">Templates</Link>. 20 starter templates are auto-seeded on first visit. Pick one (e.g. "Growth Marketer · Professional & Formal"), click <strong>Activate</strong>.</li>
+          <li>Open <Link href="/templates" className="underline">Templates</Link>. 5 public starter templates are auto-seeded on first visit (admins get an additional 23-template overlay). Pick one, click <strong>Activate</strong>.</li>
           <li>Open <Link href="/contacts" className="underline">Contacts</Link> → <strong>Sample CSV</strong> downloads a starter file with canonical headers and 5 realistic rows. Edit, save, then <strong>Import</strong> — SSE progress bar shows live import status.</li>
           <li>Open <Link href="/dry-run" className="underline">Dry run</Link>. First 100 eligible contacts render with their personalized subject + body. Nothing is sent — just visual verification before you commit.</li>
           <li>Open <Link href="/drafts" className="underline">Drafts</Link> → set count to 5 → <strong>Create drafts</strong>. SSE progress fills as drafts materialize.</li>
@@ -542,7 +542,7 @@ npm install --legacy-peer-deps`}</pre>
 
         <h3 className="text-sm font-semibold mt-3">F. Initialize the DB</h3>
         <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs font-mono">{`npm run db:migrate                                # creates ./data/tracker.db
-npm run seed:templates -- you@example.com         # optional: load 20 starter templates`}</pre>
+npm run seed:templates -- you@example.com         # optional: load 5 public + 23 admin-overlay starter templates`}</pre>
 
         <h3 className="text-sm font-semibold mt-3">G. Run</h3>
         <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs font-mono">{`npm run build && npm start    # production, port 3000

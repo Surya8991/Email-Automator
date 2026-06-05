@@ -4,16 +4,30 @@ import { eq } from 'drizzle-orm'
 import { db } from '@/server/db/client'
 import { auditLog, sessions, users } from '@/server/db/schema'
 import { clientKey, rateLimit } from '@/lib/rate-limit'
+import { sessionCookieAttrs } from '@/lib/cookies'
 
-// Best-effort audit row for failed sign-in attempts. Uses a sentinel
-// 'system' userId since the column is nullable in the schema; surfaces
-// at /audit?scope=all so admins can spot probing patterns.
+// Sanitize the email-ish value the attacker controls before it lands in
+// the audit detail. Without this, a payload like
+//   email='victim@example.com reason=success granted=admin'
+// would let an attacker forge log fields that confuse admins skimming
+// /audit. We keep only [a-z0-9.@_+-] and clamp to 120 chars.
+function safeEmail(raw: string): string {
+  return raw.toLowerCase().replace(/[^a-z0-9.@_+\-]/g, '').slice(0, 120)
+}
+
+// Best-effort audit row for failed sign-in attempts. Surfaces at
+// /audit?scope=all so admins can spot probing patterns.
 async function logSignInFailure(reason: string, ip: string, email: string) {
   try {
+    // Detail is structured as `reason=<safe-keyword>` only. The submitted
+    // email goes through safeEmail and lives in a separate quoted field
+    // so an attacker can't inject "reason=" into the audit string.
+    const detail = email
+      ? `reason=${reason} email="${safeEmail(email)}"`
+      : `reason=${reason}`
     await db.insert(auditLog).values({
       userId: null, action: 'security.dev_signin_denied',
-      detail: `reason=${reason} email=${email || '(empty)'}`,
-      ip,
+      detail, ip,
     })
   } catch { /* non-fatal */ }
 }
@@ -66,13 +80,6 @@ export async function POST(req: Request) {
   await db.insert(sessions).values({ sessionToken: token, userId: row.id, expires })
 
   const jar = await cookies()
-  jar.set({
-    name: 'authjs.session-token',
-    value: token,
-    httpOnly: true,
-    sameSite: 'lax',
-    expires,
-    path: '/',
-  })
+  jar.set({ name: 'authjs.session-token', value: token, ...sessionCookieAttrs(), expires })
   return NextResponse.json({ ok: true, redirect: '/dashboard' })
 }

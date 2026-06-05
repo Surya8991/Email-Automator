@@ -8,6 +8,7 @@ import { ensureSeededTemplatesFor } from '@/server/services/onboarding'
 import { getSetting } from '@/server/services/settings'
 import { APP_TZ } from '@/lib/utils'
 import { cookies } from 'next/headers'
+import { verifyCookieValue } from '@/lib/cookies'
 import { OnboardingModal, ONBOARDING_CURRENT_VERSION } from '@/components/onboarding-modal'
 import { currentBroadcast } from '@/server/services/admin-analytics'
 import { ImpersonationBanner } from '@/components/impersonation-banner'
@@ -41,7 +42,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // signed in as another user, so they can't forget they're in
   // impersonation mode and act under the wrong identity.
   const jar = await cookies()
-  const impersonating = Boolean(jar.get('ea_impersonator')?.value)
+  // Verify the HMAC signature before treating the cookie as real — a
+  // DevTools-planted value will fail verifyCookieValue and not surface
+  // the banner (matching what logAdmin does on the server side).
+  const impersonating = Boolean(verifyCookieValue(jar.get('ea_impersonator')?.value))
   return (
     <TimezoneProvider tz={userTz}>
       <div className="flex h-dvh flex-col">

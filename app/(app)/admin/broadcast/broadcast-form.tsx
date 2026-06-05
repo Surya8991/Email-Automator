@@ -12,6 +12,13 @@ export function BroadcastForm({ current }: { current: string }) {
   const [pending, start] = useTransition()
 
   function submit() {
+    // Clearing a live banner is a destructive site-wide action — confirm
+    // before sending so an accidental click on the empty-msg button can't
+    // wipe an active maintenance announcement.
+    const willClear = msg.trim() === ''
+    if (willClear && current.trim() !== '') {
+      if (!confirm(`Clear the current broadcast? It will disappear from every signed-in page.\n\nCurrent: "${current}"`)) return
+    }
     start(async () => {
       const r = await broadcastAction(msg)
       if ('error' in r) { toast.error(r.error ?? 'Broadcast failed'); return }

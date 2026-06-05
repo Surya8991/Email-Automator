@@ -19,7 +19,7 @@ npm run dev                      # Next dev server on :3000
 npm run worker                   # long-running scheduler tick loop (separate process)
 
 npm run typecheck                # tsc --noEmit, MUST stay clean
-npm test                         # Vitest, 88 tests, MUST stay green
+npm test                         # Vitest — MUST stay green
 npm run build                    # Next prod build
 npm run e2e                      # Playwright (optional, slow)
 ```

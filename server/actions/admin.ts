@@ -15,22 +15,21 @@ import { setSetting } from '@/server/services/settings'
 // adminLimit lives in lib/admin-limit.ts — 'use server' files reject
 // non-async exports at build time, so the helper can't live here.
 
-// Tiny audit-log helper for admin actions. Keeps the call sites one-line
-// so contributors don't forget to log new admin operations. Errors are
-// swallowed so a logging failure can't block the action it's recording.
-// If an ea_impersonator cookie is set (meaning the current request is
-// inside an impersonation session), the impersonator id is appended to
-// the detail string so the audit log can distinguish "user did X" from
-// "admin Y, impersonating user, did X". The userId column still points
-// to whoever currently holds the session — important because we want
-// the cross-user audit view to surface the row under both the
-// target user AND the impersonator.
+// Tiny audit-log helper for admin actions. If an ea_impersonator cookie
+// is set (meaning the current request is inside an impersonation session),
+// the impersonator id is appended to the detail so audit forensics can
+// distinguish "user did X" from "admin Y, impersonating user, did X".
+// The cookie value is HMAC-signed with AUTH_SECRET — DevTools forgery
+// (plant `ea_impersonator=<some-admin-id>` and have your own actions
+// attributed to that admin) is rejected by verifyCookieValue. Failures
+// are swallowed so a logging error can't block the action being recorded.
 async function logAdmin(actorId: string, action: string, detail = '') {
   let finalDetail = detail
   try {
     const { cookies } = await import('next/headers')
+    const { verifyCookieValue } = await import('@/lib/cookies')
     const jar = await cookies()
-    const imp = jar.get('ea_impersonator')?.value
+    const imp = verifyCookieValue(jar.get('ea_impersonator')?.value)
     if (imp && imp !== actorId) {
       finalDetail = detail
         ? `${detail} | impersonator=${imp}`
@@ -323,22 +322,18 @@ export async function impersonateUserAction(userId: string) {
   if (oldToken) {
     await db.delete(sessions).where(eq(sessions.sessionToken, oldToken)).catch(() => {})
   }
+  const { sessionCookieAttrs, signCookieValue } = await import('@/lib/cookies')
+  const attrs = sessionCookieAttrs()
   const token = crypto.randomUUID()
   const expires = new Date(Date.now() + 60 * 60 * 1000) // 1h impersonation only
   await db.insert(sessions).values({ sessionToken: token, userId: target.id, expires })
-  jar.set({
-    name: 'authjs.session-token', value: token,
-    httpOnly: true, sameSite: 'lax', expires, path: '/',
-  })
-  // Audit-trail marker. Every admin action taken in this session writes
-  // an audit row whose detail includes `impersonator=<adminId>`, so a
-  // post-hoc forensics review can reconstruct who really did what.
-  // Cookie expires with the impersonation session; cleared by the
-  // exitImpersonationAction below.
-  jar.set({
-    name: 'ea_impersonator', value: me.id,
-    httpOnly: true, sameSite: 'lax', expires, path: '/',
-  })
+  jar.set({ name: 'authjs.session-token', value: token, ...attrs, expires })
+  // Audit-trail marker. HMAC-signed so a malicious user can't open
+  // DevTools and plant `ea_impersonator=<some-admin-id>` to launder
+  // their own actions onto that admin's audit trail. logAdmin's
+  // verifyCookieValue rejects forged values. Cookie expires with the
+  // impersonation session; cleared by exitImpersonationAction below.
+  jar.set({ name: 'ea_impersonator', value: signCookieValue(me.id), ...attrs, expires })
   await logAdmin(me.id, 'admin.impersonate', `actor=${me.email ?? me.id} target=${target.email ?? target.id}`)
   return { ok: true, redirect: '/dashboard' }
 }
