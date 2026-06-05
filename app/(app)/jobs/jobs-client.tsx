@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useMemo, useState, useTransition } from 'react'
+import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import {
@@ -250,27 +250,26 @@ function SourcesTable({
           </tbody>
         </table>
       </div>
-      <EditSourceDialog source={editing} onClose={() => setEditing(null)} />
+      {editing ? (
+        // key={editing.id} forces a fresh mount per row so the lazy
+        // useState initializers re-seed cleanly — avoids the React 19
+        // "setState in effect" lint while keeping per-row freshness.
+        <EditSourceDialog key={editing.id} source={editing} onClose={() => setEditing(null)} />
+      ) : null}
     </>
   )
 }
 
-function EditSourceDialog({ source, onClose }: { source: SourceRow | null; onClose: () => void }) {
+function EditSourceDialog({ source, onClose }: { source: SourceRow; onClose: () => void }) {
   const router = useRouter()
-  const [label, setLabel] = useState(source?.label ?? '')
-  const [url, setUrl] = useState(source?.url ?? '')
-  const [keywords, setKeywords] = useState(source?.keywords ?? '')
+  // Lazy initializers run once per mount; the parent re-mounts this
+  // component with key={source.id} when the row changes, so we get
+  // fresh-seeded state per row without needing an effect.
+  const [label, setLabel] = useState(source.label)
+  const [url, setUrl] = useState(source.url)
+  const [keywords, setKeywords] = useState(source.keywords)
   const [pending, start] = useTransition()
-  // Re-seed local state every time the dialog mounts with a different
-  // source row. The previous version used a useState lazy initializer
-  // here, which only fires once — opening the dialog on row B after
-  // editing row A showed row A's stale values.
-  useEffect(() => {
-    if (source) { setLabel(source.label); setUrl(source.url); setKeywords(source.keywords) }
-  }, [source])
-  if (!source) return null
   function submit() {
-    if (!source) return
     start(async () => {
       const r = await editJobSourceAction(source.id, { label, url, keywords })
       if ('error' in r && r.error) { toast.error(r.error); return }
@@ -280,7 +279,7 @@ function EditSourceDialog({ source, onClose }: { source: SourceRow | null; onClo
     })
   }
   return (
-    <Dialog open={Boolean(source)} onOpenChange={(v) => { if (!v) onClose() }}>
+    <Dialog open onOpenChange={(v) => { if (!v) onClose() }}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Edit source</DialogTitle>

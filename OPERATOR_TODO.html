@@ -82,8 +82,9 @@
 <div class="toc">
   <strong>Sections</strong>
   <ol>
-    <li><a href="#urgent">🚨 URGENT — apply prod migrations</a> <span class="pill urgent">do first</span></li>
-    <li><a href="#verify">Verify it worked</a></li>
+    <li><a href="#urgent">🚨 URGENT &mdash; apply prod migrations (fixes the Job tracker insert error)</a> <span class="pill urgent">do first</span></li>
+    <li><a href="#verify">Verify it worked</a> <span class="pill recommended">5 min</span></li>
+    <li><a href="#jobtracker">Job tracker &mdash; getting the best out of it</a> <span class="pill recommended">new</span></li>
     <li><a href="#hardening">Recommended hardening</a> <span class="pill recommended">soon</span></li>
     <li><a href="#github">Optional: GitHub OAuth</a> <span class="pill optional">10 min</span></li>
     <li><a href="#redis">Optional: Redis rate limiter</a> <span class="pill optional">15 min</span></li>
@@ -94,23 +95,36 @@
 </div>
 
 <!-- ── URGENT ───────────────────────────────────────────────────────── -->
-<h2 id="urgent"><span class="step-num">1</span> URGENT — apply prod migrations</h2>
+<h2 id="urgent"><span class="step-num">1</span> URGENT &mdash; apply prod migrations <span class="pill urgent">YOU ARE HERE</span></h2>
 <div class="danger">
-  <strong>Why your prod is 500'ing.</strong> The latest pushes added eight new database tables:
-  <code>progress_events</code>, <code>companies</code>, <code>email_identities</code>,
-  <code>campaign_step_variants</code>, <code>saved_views</code> (for /contacts saved filter combos),
-  <code>job_sources</code> + <code>job_leads</code> (new — for the Job tracker),
-  plus the <code>contact_form</code> audit rows. Until you run the migrations
-  against your Turso DB, every page that touches one of these tables crashes — that's what's
-  behind the <code>/settings</code>, <code>/companies</code>, and <code>/contacts</code> (saved-views
-  read) errors you've been seeing. Defensive <code>.catch</code> wrappers degrade gracefully
-  but you still need to migrate to unlock the features themselves.
+  <strong>Why your prod is still 500'ing on Job tracker.</strong> The error you keep pasting:
+  <br><code style="display:block;margin-top:6px;font-size:11px">Failed query: insert into "job_sources" (...) ...</code>
+  <br>means migration <code>0008_job_tracker</code> has not been applied to your Turso production
+  database yet. The local schema knows about <code>job_sources</code> / <code>job_leads</code> but
+  the live DB does not, so every insert from the <em>Add source</em> button errors out.
+  <br><br>
+  Same fix unlocks the older missing tables too: <code>progress_events</code>, <code>companies</code>,
+  <code>email_identities</code>, <code>campaign_step_variants</code>, <code>saved_views</code>,
+  <code>job_sources</code>, <code>job_leads</code>. One command, one redeploy, all gone.
 </div>
 
-<h3>Step 1.1 — Run the migrations</h3>
+<h3>Step 1.1 &mdash; Run the migrations (preferred: from your laptop)</h3>
 <p>From your laptop, with the credentials Vercel uses for prod:</p>
 <pre><button class="copy-btn">copy</button>cd C:\Coding\Email-Automator
 DATABASE_URL='libsql://YOUR-DB.turso.io' TURSO_AUTH_TOKEN='eyJ...' npm run db:migrate</pre>
+
+<h3>Step 1.1.b &mdash; Fallback: apply migration <code>0008</code> via the Turso CLI</h3>
+<p>If the <code>db:migrate</code> command above won't run (Node not installed, dependencies
+  not built, etc.), you can apply the missing migration directly with the Turso shell:</p>
+<pre><button class="copy-btn">copy</button>turso db shell YOUR-DB-NAME &lt; server/db/migrations/0008_job_tracker.sql</pre>
+<p class="muted">Replace <code>YOUR-DB-NAME</code> with the database name shown in your Turso dashboard.
+  This works in CI too &mdash; just <code>cat</code> the file and pipe it. After the shell exits cleanly,
+  jump to <strong>Step 1.2</strong>.</p>
+
+<h3>Step 1.1.c &mdash; Sanity-check the tables exist before redeploying</h3>
+<pre><button class="copy-btn">copy</button>turso db shell YOUR-DB-NAME ".tables job_%"</pre>
+<p class="muted">Should print <code>job_leads job_sources</code>. If the output is empty, the migration
+  did not apply &mdash; re-run with verbose output: <code>npm run db:migrate -- --verbose</code>.</p>
 
 <p>Where to find those two values:</p>
 <ul class="checklist">
@@ -155,8 +169,78 @@ DATABASE_URL='libsql://YOUR-DB.turso.io' TURSO_AUTH_TOKEN='eyJ...' npm run db:mi
   defensive <code>console.error</code> markers I added so you see exactly which read failed.
 </div>
 
-<!-- ── HARDENING ───────────────────────────────────────────────────── -->
-<h2 id="hardening"><span class="step-num">3</span> Recommended hardening <span class="pill recommended">soon</span></h2>
+<!-- Job tracker -->
+<h2 id="jobtracker"><span class="step-num">3</span> Job tracker &mdash; getting the best out of it</h2>
+<p>The Job tracker watches search URLs and careers pages, fetches them on a cron tick, AI-extracts
+  fresh listings, and surfaces them in <code>/jobs</code> for triage. Once the migration in section
+  1 is applied, here is the operator-side checklist to make it useful:</p>
+
+<h3>3.1 &mdash; Wire the cron tick</h3>
+<p>The endpoint is <code>GET /api/cron/job-tracker?secret=$CRON_SECRET</code>. Add it to your
+  Vercel <code>vercel.json</code> alongside the existing scheduler tick. Recommended cadence: hourly.
+  Each tick caps at 40 sources so it stays inside the Vercel function limit.</p>
+<pre><button class="copy-btn">copy</button>{
+  "crons": [
+    { "path": "/api/cron/tick?secret=YOUR_CRON_SECRET", "schedule": "*/5 * * * *" },
+    { "path": "/api/cron/job-tracker?secret=YOUR_CRON_SECRET", "schedule": "0 * * * *" }
+  ]
+}</pre>
+
+<h3>3.2 &mdash; Confirm <code>GROQ_API_KEY</code> is set</h3>
+<p>The extractor uses Groq's structured JSON output to pull jobs out of the fetched HTML. Without
+  a key the tick will fetch, log <code>[job-tracker] no GROQ_API_KEY</code>, and skip extraction.
+  Either set <code>GROQ_API_KEY</code> in Vercel env (cheapest path &mdash; one shared key) or have each
+  user set their own under <code>/settings</code> &rarr; AI.</p>
+
+<h3>3.3 &mdash; Use the preset picker</h3>
+<p>The <em>Add from preset</em> button in <code>/jobs</code> ships with 30+ curated boards across
+  seven categories:</p>
+<ul>
+  <li><strong>India</strong> (12 boards, featured) &mdash; Naukri, Foundit, Shine, TimesJobs, Hirist,
+    Cutshort, Instahyre, iimjobs, Apna, Indeed IN, Glassdoor IN, plus the LinkedIn IN search.</li>
+  <li><strong>Marketing / SEO / Paid Media</strong> (10 boards) &mdash; Built In, MarTech Jobs, The Drum,
+    MarketerHire, Workable, Mediabistro, MarketingHire, Powderkeg, Talent.com, GrowthHackers.</li>
+  <li><strong>General aggregators</strong>, <strong>Remote-first</strong>, <strong>Startup-focused</strong>,
+    plus Greenhouse / Lever / careers-page pass-throughs.</li>
+</ul>
+
+<h3>3.4 &mdash; Multi-role batch add (new)</h3>
+<p>The preset picker accepts a comma-separated role list. Typing
+  <code>SEO, Performance Marketing, Paid Media</code> in the Role field creates three sources in one
+  click, all sharing the same location + keyword line. Max 10 per batch to keep the SSRF fetcher
+  honest. Single-role usage is unchanged.</p>
+
+<h3>3.5 &mdash; Keyword filter is optional and additive</h3>
+<p>The Keywords field on every source is a comma-separated allow-list. A listing is kept only if its
+  title or company contains <em>at least one</em> of the keywords. Leave the field empty to capture
+  everything the board returns. The picker pre-populates a sensible default per board (the role plus
+  domain-specific synonyms) so you usually don't need to change it.</p>
+
+<h3>3.6 &mdash; Triage flow</h3>
+<p>New listings land in the <strong>New</strong> tab. Three per-row actions:</p>
+<ul>
+  <li><strong>Save</strong> &mdash; move to the <em>Saved</em> tray to revisit later.</li>
+  <li><strong>Applied</strong> &mdash; mark as applied; leaves the New tray, shows up in <em>Archive</em>.</li>
+  <li><strong>Ignore</strong> &mdash; dismiss; same destination as Applied.</li>
+</ul>
+<p>Bulk-select via the checkbox column to triage in batches. Use the <em>Source</em> dropdown to
+  filter by which board a lead came from.</p>
+
+<h3>3.7 &mdash; Verifying a preset actually works</h3>
+<p>After adding a source, click the <em>Refresh now</em> (↻) button on its row. Three outcomes:</p>
+<ol>
+  <li><strong>+N new leads</strong> toast &mdash; preset and extractor both work.</li>
+  <li><strong>No new leads</strong> toast &mdash; the fetch succeeded but the AI didn't find listings.
+    Check the URL in a browser; if it shows jobs to a logged-out user, retry once more.</li>
+  <li><strong>Toast with error message</strong> &mdash; the fetch failed (auth-walled, 4xx/5xx, SSRF reject).
+    The error string is stored on the source row's <em>Last error</em> column.</li>
+</ol>
+<p class="muted">LinkedIn / Glassdoor search results are heavily login-walled in production. Prefer
+  public anonymous URLs (e.g. <code>linkedin.com/jobs/search/?keywords=PM</code> without a session) or
+  use a company's own careers page for the highest hit rate.</p>
+
+<!-- HARDENING -->
+<h2 id="hardening"><span class="step-num">4</span> Recommended hardening <span class="pill recommended">soon</span></h2>
 
 <h3>3.1 — Set <code>ENCRYPTION_KEY</code></h3>
 <p>SMTP passwords and Groq API keys are AES-GCM encrypted at rest. The key derives from
@@ -200,7 +284,7 @@ DATABASE_URL='libsql://YOUR-DB.turso.io' TURSO_AUTH_TOKEN='eyJ...' npm run db:mi
 </ul>
 
 <!-- ── GITHUB OAUTH ────────────────────────────────────────────────── -->
-<h2 id="github"><span class="step-num">4</span> Optional: GitHub OAuth <span class="pill optional">10 min</span></h2>
+<h2 id="github"><span class="step-num">5</span> Optional: GitHub OAuth <span class="pill optional">10 min</span></h2>
 <p>Adds a <em>Continue with GitHub</em> button on <code>/login</code> alongside Google + magic link.</p>
 <ul class="checklist">
   <li><input type="checkbox" id="g1" /><label for="g1">Open <a href="https://github.com/settings/developers" target="_blank">github.com/settings/developers</a> → New OAuth App</label></li>
@@ -213,7 +297,7 @@ DATABASE_URL='libsql://YOUR-DB.turso.io' TURSO_AUTH_TOKEN='eyJ...' npm run db:mi
 </ul>
 
 <!-- ── REDIS ──────────────────────────────────────────────────────── -->
-<h2 id="redis"><span class="step-num">5</span> Optional: Redis rate limiter <span class="pill optional">15 min</span></h2>
+<h2 id="redis"><span class="step-num">6</span> Optional: Redis rate limiter <span class="pill optional">15 min</span></h2>
 <p>The current in-memory rate limiter is per-Lambda instance — on Vercel, an attacker can
   hit the same endpoint from one IP and the bucket resets for each warm Lambda. Wire Upstash
   Redis to fix that.</p>
@@ -228,7 +312,7 @@ DATABASE_URL='libsql://YOUR-DB.turso.io' TURSO_AUTH_TOKEN='eyJ...' npm run db:mi
   on every route. The warning goes away; the actual swap is a follow-up sprint.</p>
 
 <!-- ── CSP ────────────────────────────────────────────────────────── -->
-<h2 id="csp"><span class="step-num">6</span> Optional: CSP nonce <span class="pill optional">audit first</span></h2>
+<h2 id="csp"><span class="step-num">7</span> Optional: CSP nonce <span class="pill optional">audit first</span></h2>
 <div class="warn">
   <strong>Do not enable until you've audited every inline script in the app.</strong> The
   middleware ships ready, but enabling it without first threading the nonce through Next's
@@ -239,7 +323,7 @@ DATABASE_URL='libsql://YOUR-DB.turso.io' TURSO_AUTH_TOKEN='eyJ...' npm run db:mi
 </ul>
 
 <!-- ── WHAT'S NEW ─────────────────────────────────────────────────── -->
-<h2 id="whatsnew"><span class="step-num">7</span> What's new in the latest push</h2>
+<h2 id="whatsnew"><span class="step-num">8</span> What's new in the latest push</h2>
 <div class="card">
   <h3>Public marketing site</h3>
   <p><code>/</code> Home · <code>/about</code> About · <code>/contact</code> Contact (with a real form
@@ -271,7 +355,7 @@ DATABASE_URL='libsql://YOUR-DB.turso.io' TURSO_AUTH_TOKEN='eyJ...' npm run db:mi
 </div>
 
 <!-- ── TROUBLESHOOTING ────────────────────────────────────────────── -->
-<h2 id="troubleshoot"><span class="step-num">8</span> Troubleshooting</h2>
+<h2 id="troubleshoot"><span class="step-num">9</span> Troubleshooting</h2>
 
 <h3>How to read Vercel logs</h3>
 <ol>
@@ -328,10 +412,25 @@ DATABASE_URL='libsql://YOUR-DB.turso.io' TURSO_AUTH_TOKEN='eyJ...' npm run db:mi
     <td style="padding: 6px 8px">Per-Lambda buckets warning</td>
     <td style="padding: 6px 8px">Wire Upstash (section 5)</td>
   </tr>
-  <tr>
+  <tr style="border-bottom: 1px solid var(--line)">
     <td style="padding: 6px 8px"><code>[cron/tick] CRON_SECRET is not set</code></td>
     <td style="padding: 6px 8px">Critical: scheduler endpoint is open to the public</td>
-    <td style="padding: 6px 8px">Set CRON_SECRET in Vercel + GitHub Actions secrets (section 3.2)</td>
+    <td style="padding: 6px 8px">Set CRON_SECRET in Vercel + GitHub Actions secrets (section 4.2)</td>
+  </tr>
+  <tr style="border-bottom: 1px solid var(--line)">
+    <td style="padding: 6px 8px"><code>Failed query: insert into "job_sources"</code></td>
+    <td style="padding: 6px 8px">Migration 0008 not applied (Job tracker tables missing)</td>
+    <td style="padding: 6px 8px">Run section 1 (preferred) or the Turso CLI fallback in section 1.1.b</td>
+  </tr>
+  <tr style="border-bottom: 1px solid var(--line)">
+    <td style="padding: 6px 8px"><code>[job-tracker] no GROQ_API_KEY</code></td>
+    <td style="padding: 6px 8px">Fetcher runs but no AI extraction happens</td>
+    <td style="padding: 6px 8px">Set GROQ_API_KEY (Vercel env or per-user Settings → AI)</td>
+  </tr>
+  <tr>
+    <td style="padding: 6px 8px"><code>URL rejected: HTTP 403/404</code> (Add source)</td>
+    <td style="padding: 6px 8px">Board refuses default UA from a CI IP</td>
+    <td style="padding: 6px 8px">Source still saves &mdash; the cron fetcher retries on its own schedule. Or try the public anonymous URL of the same search.</td>
   </tr>
 </table>
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { JOB_BOARD_PRESETS, PRESET_CATEGORIES, buildPresetUrl } from '@/lib/job-board-presets'
+import { JOB_BOARD_PRESETS, PRESET_CATEGORIES, buildPresetUrl, splitRoles } from '@/lib/job-board-presets'
 
 describe('job-board-presets catalog', () => {
   it('every preset has a non-empty template + category', () => {
@@ -91,6 +91,14 @@ describe('buildPresetUrl', () => {
     expect(r.keywords).toBe('Designer')
   })
 
+  it('label uses a plain separator, not an em dash (user request 2026-06-06)', () => {
+    const r = buildPresetUrl(linkedin, 'Product Manager', 'Bangalore')
+    // The label used to be `${name} — ${role} (${loc})`; em dashes
+    // were stripped to keep labels copy-paste-clean across spreadsheets.
+    expect(r.label).not.toContain('—')
+    expect(r.label).toContain(': Product Manager')
+  })
+
   // Hyphenation special-cases (Naukri / Shine use path-style URLs with
   // literal hyphens; param-style boards keep URL-encoded spaces).
   it('Shine uses hyphenated role + location like Naukri', () => {
@@ -111,5 +119,30 @@ describe('buildPresetUrl', () => {
     const r = buildPresetUrl(tj, 'Digital Marketing', 'Mumbai')
     expect(r.url).toContain('Digital%20Marketing')
     expect(r.url).toContain('Mumbai')
+  })
+})
+
+describe('splitRoles (multi-role preset picker)', () => {
+  it('returns [] for empty input', () => {
+    expect(splitRoles('')).toEqual([])
+    expect(splitRoles('   ')).toEqual([])
+  })
+  it('returns a single-element array for a single role', () => {
+    expect(splitRoles('Product Manager')).toEqual(['Product Manager'])
+  })
+  it('splits comma-separated roles and trims', () => {
+    expect(splitRoles('SEO, Performance Marketing, Paid Media')).toEqual([
+      'SEO', 'Performance Marketing', 'Paid Media',
+    ])
+  })
+  it('also accepts semicolons and newlines as separators', () => {
+    expect(splitRoles('SEO; Paid Media\nGrowth')).toEqual(['SEO', 'Paid Media', 'Growth'])
+  })
+  it('de-duplicates identical entries', () => {
+    expect(splitRoles('SEO, SEO, Growth')).toEqual(['SEO', 'Growth'])
+  })
+  it('drops empty and over-long entries', () => {
+    const long = 'x'.repeat(200)
+    expect(splitRoles(`SEO, , ${long}, Growth`)).toEqual(['SEO', 'Growth'])
   })
 })

@@ -457,7 +457,27 @@ export function buildPresetUrl(
       .replace('{role}', encodeURIComponent(cleanRole.replace(/\s+/g, HYPHEN_ROLE.has(preset.id) ? '-' : ' ')))
       .replace('{location}', encodeURIComponent(cleanLoc.replace(/\s+/g, HYPHEN_LOC.has(preset.id) ? '-' : ' ')))
   }
-  const label = `${preset.name}${cleanRole ? ` — ${cleanRole}` : ''}${cleanLoc ? ` (${cleanLoc})` : ''}`.slice(0, 120)
+  const label = `${preset.name}${cleanRole ? `: ${cleanRole}` : ''}${cleanLoc ? ` (${cleanLoc})` : ''}`.slice(0, 120)
   const keywords = (preset.suggestedKeywords ?? '').replace('{role}', cleanRole)
   return { url, label, keywords }
+}
+
+/**
+ * Split a comma-separated role string into individual roles so a
+ * user typing "SEO, Performance Marketing, Paid Media" generates
+ * three job sources in one flow instead of three dialog opens.
+ *
+ * Returns an array of cleaned roles; falls back to [role] if no
+ * commas (so single-role callers still work transparently).
+ */
+export function splitRoles(roles: string): string[] {
+  if (!roles.trim()) return []
+  return Array.from(
+    new Set(
+      roles
+        .split(/[,;\n]+/)
+        .map((r) => r.trim())
+        .filter((r) => r.length > 0 && r.length <= 80),
+    ),
+  )
 }

@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog'
-import { JOB_BOARD_PRESETS, PRESET_CATEGORIES, buildPresetUrl, type JobBoardPreset } from '@/lib/job-board-presets'
+import { JOB_BOARD_PRESETS, PRESET_CATEGORIES, buildPresetUrl, splitRoles, type JobBoardPreset } from '@/lib/job-board-presets'
 import { addJobSourceAction } from '@/server/actions/job-tracker'
 import { cn } from '@/lib/utils'
 
@@ -33,14 +33,34 @@ export function JobPresetPicker() {
 
   function submit() {
     if (!picked) return
-    const { url, label, keywords } = buildPresetUrl(picked, role, location)
-    if (!url || url.length < 8) { toast.error('URL is too short'); return }
+    // Multi-role mode: a comma-separated role string creates one
+    // job source per role. Single-role mode is the same code path
+    // with a 1-item array, so we don't branch on the count.
+    const roles = splitRoles(role)
+    if (roles.length === 0) { toast.error('Enter at least one role'); return }
+    if (roles.length > 10) { toast.error('Up to 10 roles per batch — split into multiple submissions'); return }
     start(async () => {
-      const r = await addJobSourceAction({ label, url, keywords })
-      if ('error' in r && r.error) { toast.error(r.error); return }
-      toast.success(`Added "${label}". Refresh to pull the first leads`)
-      setOpen(false); reset()
-      router.refresh()
+      let ok = 0
+      const errors: string[] = []
+      for (const r of roles) {
+        const { url, label, keywords } = buildPresetUrl(picked, r, location)
+        if (!url || url.length < 8) { errors.push(`${r}: URL too short`); continue }
+        const res = await addJobSourceAction({ label, url, keywords })
+        if ('error' in res && res.error) { errors.push(`${r}: ${res.error}`); continue }
+        ok++
+      }
+      if (ok > 0) {
+        toast.success(
+          roles.length === 1
+            ? `Added "${buildPresetUrl(picked, roles[0]!, location).label}". Refresh to pull the first leads.`
+            : `Added ${ok} of ${roles.length} sources. Refresh to pull the first leads.`,
+        )
+        setOpen(false); reset()
+        router.refresh()
+      }
+      if (errors.length > 0) {
+        toast.error(errors.slice(0, 3).join(' · ') + (errors.length > 3 ? ` (+${errors.length - 3} more)` : ''))
+      }
     })
   }
 
@@ -121,14 +141,22 @@ export function JobPresetPicker() {
 
             <div className="grid gap-1.5">
               <Label htmlFor="preset-role">
-                {picked.template === '{role}' ? 'Board URL' : 'Role / keyword'} <span className="text-destructive">*</span>
+                {picked.template === '{role}' ? 'Board URL' : 'Role / keyword(s)'} <span className="text-destructive">*</span>
               </Label>
               <Input
                 id="preset-role"
                 value={role} onChange={(e) => setRole(e.target.value)}
-                placeholder={picked.template === '{role}' ? 'https://…' : 'e.g. Product Manager'}
+                placeholder={picked.template === '{role}' ? 'https://…' : 'e.g. SEO, Performance Marketing, Paid Media'}
                 autoFocus
               />
+              {picked.template !== '{role}' ? (
+                <div className="text-[11px] text-muted-foreground">
+                  Separate multiple roles with commas. We&apos;ll create one job source per role, all sharing the location and keyword line.
+                  {splitRoles(role).length > 1 ? (
+                    <span className="ml-1 font-medium text-foreground">{splitRoles(role).length} sources will be added.</span>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
 
             {picked.needs.location ? (
@@ -143,9 +171,9 @@ export function JobPresetPicker() {
             ) : null}
 
             <div className={cn('rounded-md border bg-card p-3 text-xs', !role && 'opacity-50')}>
-              <div className="font-medium text-muted-foreground">Preview</div>
+              <div className="font-medium text-muted-foreground">Preview {splitRoles(role).length > 1 ? `(first of ${splitRoles(role).length})` : ''}</div>
               <div className="mt-1 truncate font-mono text-foreground">
-                {role ? buildPresetUrl(picked, role, location).url : 'Enter a role to preview the URL.'}
+                {role ? buildPresetUrl(picked, splitRoles(role)[0] ?? role, location).url : 'Enter a role to preview the URL.'}
               </div>
             </div>
           </div>
