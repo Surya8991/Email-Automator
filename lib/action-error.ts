@@ -32,11 +32,29 @@ function looksLikeLeak(msg: string): boolean {
  * string for the client: the original message if it looks safe to surface
  * (a deliberate `throw new Error('No active template')` from a service),
  * or the fallback when it smells like a driver / internal leak.
+ *
+ * Special-case for the most common operator footgun: when a write hits a
+ * table that hasn't been migrated yet, we substitute a clear, actionable
+ * message instead of the leak-scrubbed generic. The "Add failed" was true
+ * but useless — the user couldn't tell that the fix is a DB migration.
  */
 export function actionError(e: unknown, fallback: string, ctx?: Record<string, unknown>): { error: string } {
   log.warn({ err: e, ...ctx }, fallback)
+  if (isSchemaMissingError(e)) {
+    return { error: 'Database is missing a required table. The operator needs to apply the latest migrations (see OPERATOR_TODO.html § 1).' }
+  }
   if (e instanceof Error && !looksLikeLeak(e.message)) {
     return { error: e.message }
   }
   return { error: fallback }
+}
+
+/**
+ * True iff the error looks like "no such table" / "no such column" / a
+ * libsql equivalent. Exported so /jobs (and similar pages added later)
+ * can render an above-the-fold banner that tells the operator what to do.
+ */
+export function isSchemaMissingError(e: unknown): boolean {
+  if (!(e instanceof Error)) return false
+  return /no such table|no such column|SQLITE_ERROR.*no such/i.test(e.message)
 }

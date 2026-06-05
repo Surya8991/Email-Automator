@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { actionError } from '@/lib/action-error'
+import { actionError, isSchemaMissingError } from '@/lib/action-error'
 
 // Each LEAK_PATTERNS entry is responsible for catching real-world driver/
 // runtime error shapes without false-positive-ing safe operational
@@ -12,8 +12,8 @@ describe('lib/action-error', () => {
       ['SQLITE_BUSY: database is locked', 'SQLite errno'],
       ['LibsqlError: SERVER_ERROR: foo', 'Libsql wrapper'],
       ['SQLite3 Error: near "FROM"', 'better-sqlite3 wrapper'],
-      ['no such column: foo', 'schema mismatch'],
-      ['no such table: bar', 'missing table'],
+      // "no such column" / "no such table" now route to the schema-missing
+      // branch — those are covered in the dedicated section below.
       ['UNIQUE constraint failed: contacts.email', 'unique violation'],
       ['FOREIGN KEY constraint failed', 'FK violation'],
       // Postgres / Drizzle
@@ -66,5 +66,34 @@ describe('lib/action-error', () => {
     expect(actionError(null, 'Generic failure').error).toBe('Generic failure')
     expect(actionError(undefined, 'Generic failure').error).toBe('Generic failure')
     expect(actionError({ random: 'object' }, 'Generic failure').error).toBe('Generic failure')
+  })
+
+  describe('schema-missing detection', () => {
+    const SCHEMA_MSGS = [
+      'no such table: job_sources',
+      'no such column: source_id',
+      'SQLITE_ERROR: no such table: foo',
+    ]
+    for (const msg of SCHEMA_MSGS) {
+      it(`detects "${msg}"`, () => {
+        expect(isSchemaMissingError(new Error(msg))).toBe(true)
+      })
+    }
+    it('does NOT detect generic SQLite errors', () => {
+      expect(isSchemaMissingError(new Error('SQLITE_BUSY: locked'))).toBe(false)
+      expect(isSchemaMissingError(new Error('UNIQUE constraint failed'))).toBe(false)
+    })
+    it('does NOT detect non-Error inputs', () => {
+      expect(isSchemaMissingError('no such table: x')).toBe(false)
+      expect(isSchemaMissingError(null)).toBe(false)
+      expect(isSchemaMissingError(undefined)).toBe(false)
+    })
+    it('actionError returns an actionable message for schema-missing errors', () => {
+      const r = actionError(new Error('no such table: job_sources'), 'Add failed')
+      // Must mention migrations + OPERATOR_TODO so the user can act,
+      // not just "Add failed" which left them stranded before this fix.
+      expect(r.error).toMatch(/migration/i)
+      expect(r.error).toMatch(/OPERATOR_TODO/i)
+    })
   })
 })

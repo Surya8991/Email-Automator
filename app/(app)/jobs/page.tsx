@@ -1,6 +1,7 @@
-import { Briefcase } from 'lucide-react'
+import { Briefcase, AlertTriangle } from 'lucide-react'
 import { requireUser } from '@/auth'
 import { listSources, listLeads, leadCountsBySource } from '@/server/services/job-tracker'
+import { isSchemaMissingError } from '@/lib/action-error'
 import { Card, CardContent } from '@/components/ui/card'
 import { PageHeader } from '@/components/ui/page-header'
 import { SectionHelp } from '@/components/section-help'
@@ -13,11 +14,23 @@ export default async function JobsPage() {
   // Defensive on both reads — migration 0008 may not be applied to
   // prod yet. Each .catch falls back to an empty array so the page
   // renders an empty-state instead of 500ing.
+  // Track whether any underlying read failed because the migration
+  // isn't applied yet — drives the banner below. We catch errors here
+  // and inspect them with isSchemaMissingError instead of letting the
+  // defensive .catch silently mask the operator footgun.
+  let schemaMissing = false
+  function trackSchema<T>(promise: Promise<T>, fallback: T, label: string): Promise<T> {
+    return promise.catch((e) => {
+      if (isSchemaMissingError(e)) schemaMissing = true
+      console.error(`[jobs] ${label} failed:`, e)
+      return fallback
+    })
+  }
   const [sources, leadsNew, leadsSaved, leadCounts] = await Promise.all([
-    listSources(u.id).catch((e) => { console.error('[jobs] listSources failed:', e); return [] as JobSource[] }),
-    listLeads(u.id, 'new').catch((e) => { console.error('[jobs] listLeads new failed:', e); return [] as JobLead[] }),
-    listLeads(u.id, 'saved').catch((e) => { console.error('[jobs] listLeads saved failed:', e); return [] as JobLead[] }),
-    leadCountsBySource(u.id).catch(() => new Map<number, number>()),
+    trackSchema(listSources(u.id),        [] as JobSource[], 'listSources'),
+    trackSchema(listLeads(u.id, 'new'),   [] as JobLead[],   'listLeads(new)'),
+    trackSchema(listLeads(u.id, 'saved'), [] as JobLead[],   'listLeads(saved)'),
+    trackSchema(leadCountsBySource(u.id), new Map<number, number>(), 'leadCountsBySource'),
   ])
   const activeSources = sources.filter((s) => s.active).length
   return (
@@ -49,6 +62,26 @@ export default async function JobsPage() {
           />
         }
       />
+
+      {schemaMissing ? (
+        <div className="flex items-start gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-amber-900 dark:text-amber-200 ea-fade-in">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+          <div className="space-y-1 text-sm">
+            <div className="font-semibold">Database migration not applied</div>
+            <div>
+              The Job tracker tables (<code className="rounded bg-amber-500/20 px-1">job_sources</code> + <code className="rounded bg-amber-500/20 px-1">job_leads</code>) aren&apos;t in your database yet. Adding a source or pulling leads will fail until you run:
+            </div>
+            <pre className="mt-2 overflow-x-auto rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 font-mono text-xs">
+{`DATABASE_URL='libsql://your-db.turso.io' \\
+TURSO_AUTH_TOKEN='eyJ…' \\
+npm run db:migrate`}
+            </pre>
+            <div className="text-xs">
+              Full walkthrough in <a href="/OPERATOR_TODO.html" className="underline">OPERATOR_TODO.html § 1</a>.
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {sources.length === 0 ? (
         <Card><CardContent className="p-0">
