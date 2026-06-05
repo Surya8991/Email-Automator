@@ -110,6 +110,36 @@ function isPrivateIp(host: string): boolean {
 export type FetchResult = { ok: true; text: string; truncated: boolean } | { ok: false; error: string }
 
 /**
+ * Cheap URL shape + SSRF validator. Returns the cleaned URL (with
+ * credentials stripped) on success; an error string on rejection.
+ * Used by call sites that only want to validate a URL for later
+ * fetching — e.g. job-tracker addSource, which saves the URL but
+ * leaves the actual HTTP fetch for the cron tick.
+ *
+ * This DOES NOT perform a fetch. It blocks the same SSRF surface as
+ * fetchForAi (private IPs, loopback, link-local, *.localhost etc).
+ * Boards that 403 our default UA still pass validation here — the
+ * cron records the HTTP error on the source row so the user can fix
+ * the URL without being blocked at add-time.
+ */
+export function validateUrlForFetch(rawUrl: string): { ok: true; url: string } | { ok: false; error: string } {
+  let u: URL
+  try { u = new URL(rawUrl.trim()) } catch { return { ok: false, error: 'Invalid URL' } }
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') {
+    return { ok: false, error: 'Only http(s) URLs are supported' }
+  }
+  if ((process.env.NODE_ENV === 'production' || process.env.VERCEL) && u.protocol !== 'https:') {
+    return { ok: false, error: 'Only https URLs accepted in production' }
+  }
+  if (isPrivateIp(u.hostname)) {
+    return { ok: false, error: 'URL points at an internal / private host' }
+  }
+  u.username = ''
+  u.password = ''
+  return { ok: true, url: u.toString() }
+}
+
+/**
  * Fetch a user-supplied URL with SSRF defenses, body cap, and content-
  * type guard. Returns the page body as plain text (HTML tags stripped)
  * so it can be safely passed into the AI prompt.

@@ -6,7 +6,7 @@ import { requireUser } from '@/auth'
 import { db } from '@/server/db/client'
 import { jobLeads, contacts as contactsTbl, drafts as draftsTbl } from '@/server/db/schema'
 import * as svc from '@/server/services/job-tracker'
-import { fetchForAi } from '@/server/services/ai-generate'
+import { validateUrlForFetch } from '@/server/services/ai-generate'
 import { actionError } from '@/lib/action-error'
 import { rateLimit } from '@/lib/rate-limit'
 
@@ -21,12 +21,16 @@ export async function addJobSourceAction(input: z.infer<typeof AddSchema>) {
   const parsed = AddSchema.safeParse(input)
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Invalid input' }
   if (!rateLimit(`job-add:${u.id}`, 10, 60_000)) return { error: 'Slow down — try again in a minute' }
-  // Re-use the SSRF-defended URL validator from ai-generate. We don't
-  // actually need the response here, only the validation — so request
-  // a tiny range; if the URL fails the guard it's rejected.
-  const sanity = await fetchForAi(parsed.data.url).catch((e) => ({ ok: false, error: e instanceof Error ? e.message : 'fetch failed' } as const))
+  // Validate URL shape + SSRF surface WITHOUT actually fetching. The
+  // earlier version called fetchForAi here, which rejected sources
+  // that returned 403/404 to our default UA at add time (real-world
+  // example: Built In, MarTech Jobs, several India boards that block
+  // generic bots). Those URLs are still valid — the cron tick uses a
+  // fresh request and records any HTTP error on the source row, so
+  // the user can iterate on the URL after adding.
+  const sanity = validateUrlForFetch(parsed.data.url)
   if (!sanity.ok) {
-    return { error: `URL rejected: ${'error' in sanity ? sanity.error : 'invalid'}` }
+    return { error: `URL rejected: ${sanity.error}` }
   }
   try {
     await svc.createSource(u.id, parsed.data.label, parsed.data.url, parsed.data.keywords ?? '')
@@ -102,8 +106,9 @@ export async function editJobSourceAction(id: number, input: z.infer<typeof Edit
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Invalid input' }
   if (!rateLimit(`source-edit:${u.id}`, 20, 60_000)) return { error: 'Slow down' }
   if (parsed.data.url) {
-    const sanity = await fetchForAi(parsed.data.url).catch((e) => ({ ok: false, error: e instanceof Error ? e.message : 'fetch failed' } as const))
-    if (!sanity.ok) return { error: `URL rejected: ${'error' in sanity ? sanity.error : 'invalid'}` }
+    // Same lighter validator as addJobSourceAction — shape + SSRF only.
+    const sanity = validateUrlForFetch(parsed.data.url)
+    if (!sanity.ok) return { error: `URL rejected: ${sanity.error}` }
   }
   try {
     await svc.updateSource(u.id, id, parsed.data)

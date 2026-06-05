@@ -19,6 +19,12 @@ describe('job-board-presets catalog', () => {
     const marketing = JOB_BOARD_PRESETS.filter((p) => p.category === 'marketing')
     expect(marketing.length).toBeGreaterThanOrEqual(5)
   })
+  it('at least 5 India presets exist (user request 2026-06-06)', () => {
+    // Naukri / Foundit / Shine / TimesJobs / Hirist / Cutshort — must
+    // remain ≥5 so the India-focused user always has options.
+    const india = JOB_BOARD_PRESETS.filter((p) => p.category === 'india')
+    expect(india.length).toBeGreaterThanOrEqual(5)
+  })
   it('catalog covers every declared category at least once', () => {
     for (const cat of PRESET_CATEGORIES) {
       // Every category in the picker UI should have at least one preset
@@ -67,5 +73,27 @@ describe('buildPresetUrl', () => {
   it('suggested keywords substitute {role}', () => {
     const r = buildPresetUrl(linkedin, 'Designer', 'Remote')
     expect(r.keywords).toBe('Designer')
+  })
+
+  // Hyphenation special-cases (Naukri / Shine use path-style URLs with
+  // literal hyphens; param-style boards keep URL-encoded spaces).
+  it('Shine uses hyphenated role + location like Naukri', () => {
+    const shine = JOB_BOARD_PRESETS.find((p) => p.id === 'shine')!
+    const r = buildPresetUrl(shine, 'Performance Marketing', 'New Delhi')
+    expect(r.url).toContain('Performance-Marketing')
+    expect(r.url).toContain('New-Delhi')
+    expect(r.url).not.toContain(' ')
+  })
+  it('Foundit (param-style) uses URL-encoded spaces, not hyphens', () => {
+    const foundit = JOB_BOARD_PRESETS.find((p) => p.id === 'foundit')!
+    const r = buildPresetUrl(foundit, 'Paid Media', 'Bangalore')
+    expect(r.url).toContain('Paid%20Media')
+    expect(r.url).toContain('Bangalore')
+  })
+  it('TimesJobs (param-style) uses %20 spaces', () => {
+    const tj = JOB_BOARD_PRESETS.find((p) => p.id === 'timesjobs')!
+    const r = buildPresetUrl(tj, 'Digital Marketing', 'Mumbai')
+    expect(r.url).toContain('Digital%20Marketing')
+    expect(r.url).toContain('Mumbai')
   })
 })

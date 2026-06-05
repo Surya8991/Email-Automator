@@ -8,7 +8,7 @@
 // done at substitute() time, not in the template, so the templates
 // stay human-readable.
 
-export type PresetCategory = 'general' | 'marketing' | 'remote' | 'aggregator' | 'company' | 'startup'
+export type PresetCategory = 'general' | 'marketing' | 'remote' | 'aggregator' | 'company' | 'startup' | 'india'
 
 export interface JobBoardPreset {
   id: string
@@ -63,17 +63,6 @@ export const JOB_BOARD_PRESETS: JobBoardPreset[] = [
     icon: '🟢',
     category: 'aggregator',
     bestFor: 'Salary visibility',
-  },
-  {
-    id: 'naukri',
-    name: 'Naukri',
-    description: 'India\'s biggest board. Best for IN-based roles.',
-    template: 'https://www.naukri.com/{role}-jobs-in-{location}',
-    needs: { role: true, location: true },
-    suggestedKeywords: '{role}',
-    icon: '🇮🇳',
-    category: 'aggregator',
-    bestFor: 'India-based',
   },
   {
     id: 'hn-hiring',
@@ -142,6 +131,74 @@ export const JOB_BOARD_PRESETS: JobBoardPreset[] = [
     icon: '🟢',
     category: 'marketing',
     bestFor: 'Aggregated mid-market roles',
+  },
+
+  // ── India boards (added 2026-06-06) ────────────────────────────
+  {
+    id: 'naukri',
+    name: 'Naukri',
+    description: 'India\'s biggest board. Broad coverage across roles + cities.',
+    template: 'https://www.naukri.com/{role}-jobs-in-{location}',
+    needs: { role: true, location: true },
+    suggestedKeywords: '{role}',
+    icon: '🇮🇳',
+    category: 'india',
+    bestFor: 'Volume across IN',
+  },
+  {
+    id: 'foundit',
+    name: 'Foundit (ex-Monster IN)',
+    description: 'Monster\'s India successor. Mid + senior coverage, strong filters.',
+    template: 'https://www.foundit.in/srp/results?query={role}&locations={location}',
+    needs: { role: true, location: true },
+    suggestedKeywords: '{role}',
+    icon: '🟧',
+    category: 'india',
+    bestFor: 'Mid + senior IN',
+  },
+  {
+    id: 'shine',
+    name: 'Shine',
+    description: 'HT Group\'s board. Strong for fresher → mid-level roles.',
+    template: 'https://www.shine.com/job-search/{role}-jobs-in-{location}',
+    needs: { role: true, location: true },
+    suggestedKeywords: '{role}',
+    icon: '✨',
+    category: 'india',
+    bestFor: 'Fresher / mid-level IN',
+  },
+  {
+    id: 'timesjobs',
+    name: 'TimesJobs',
+    description: 'Times Group\'s board. Cross-industry — IT through traditional sectors.',
+    template: 'https://www.timesjobs.com/candidate/job-search.html?searchType=personalizedSearch&from=submit&txtKeywords={role}&txtLocation={location}',
+    needs: { role: true, location: true },
+    suggestedKeywords: '{role}',
+    icon: '📰',
+    category: 'india',
+    bestFor: 'Cross-industry IN',
+  },
+  {
+    id: 'hirist',
+    name: 'Hirist',
+    description: 'Tech-only India board. Strong for engineering + product + design.',
+    template: 'https://www.hirist.tech/jobs?search={role}&location={location}',
+    needs: { role: true, location: true },
+    suggestedKeywords: '{role}',
+    icon: '🛠️',
+    category: 'india',
+    bestFor: 'IN tech-only',
+  },
+  {
+    id: 'cutshort',
+    name: 'Cutshort',
+    description: 'Indian startup board. Strong for product / growth / engineering at funded startups.',
+    template: 'https://cutshort.io/jobs?search={role}&location={location}',
+    needs: { role: true, location: true },
+    suggestedKeywords: '{role}',
+    icon: '⚡',
+    category: 'india',
+    bestFor: 'IN startups',
   },
 
   // ── Remote-first ───────────────────────────────────────────────
@@ -244,6 +301,7 @@ export const JOB_BOARD_PRESETS: JobBoardPreset[] = [
 // logical-discovery order.
 export const PRESET_CATEGORIES: Array<{ id: PresetCategory; label: string; blurb: string }> = [
   { id: 'marketing',  label: 'Marketing / SEO / Paid Media', blurb: 'Domain-specific boards for SEO, digital, performance, and paid-media roles.' },
+  { id: 'india',      label: 'India',                        blurb: 'India-focused job boards — Naukri, Foundit, Shine, TimesJobs, Hirist, Cutshort.' },
   { id: 'aggregator', label: 'General aggregators',          blurb: 'Cross-industry boards with broad coverage and search filters.' },
   { id: 'remote',     label: 'Remote-first',                 blurb: 'Boards that screen for fully-remote / flexible roles.' },
   { id: 'startup',    label: 'Startup-focused',              blurb: 'Early-stage and growth-stage company listings.' },
@@ -266,9 +324,15 @@ export function buildPresetUrl(
     // Pass-through preset (user pasted the full URL).
     url = cleanRole
   } else {
+    // Boards whose URL template uses hyphenated path segments (Naukri,
+    // Shine, Remote OK, We Work Remotely) need spaces converted to
+    // hyphens before URL-encoding. Param-style boards (?search=…&loc=…)
+    // get plain URL-encoded spaces, which all major boards accept.
+    const HYPHEN_ROLE = new Set(['naukri', 'shine', 'remoteok', 'weworkremotely'])
+    const HYPHEN_LOC  = new Set(['naukri', 'shine'])
     url = url
-      .replace('{role}', encodeURIComponent(cleanRole.replace(/\s+/g, preset.id === 'naukri' || preset.id === 'remoteok' || preset.id === 'weworkremotely' ? '-' : ' ')))
-      .replace('{location}', encodeURIComponent(cleanLoc.replace(/\s+/g, preset.id === 'naukri' ? '-' : ' ')))
+      .replace('{role}', encodeURIComponent(cleanRole.replace(/\s+/g, HYPHEN_ROLE.has(preset.id) ? '-' : ' ')))
+      .replace('{location}', encodeURIComponent(cleanLoc.replace(/\s+/g, HYPHEN_LOC.has(preset.id) ? '-' : ' ')))
   }
   const label = `${preset.name}${cleanRole ? ` — ${cleanRole}` : ''}${cleanLoc ? ` (${cleanLoc})` : ''}`.slice(0, 120)
   const keywords = (preset.suggestedKeywords ?? '').replace('{role}', cleanRole)
