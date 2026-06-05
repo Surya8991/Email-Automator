@@ -19,11 +19,20 @@ describe('job-board-presets catalog', () => {
     const marketing = JOB_BOARD_PRESETS.filter((p) => p.category === 'marketing')
     expect(marketing.length).toBeGreaterThanOrEqual(5)
   })
-  it('at least 5 India presets exist (user request 2026-06-06)', () => {
-    // Naukri / Foundit / Shine / TimesJobs / Hirist / Cutshort — must
-    // remain ≥5 so the India-focused user always has options.
+  it('at least 10 India presets exist (user request 2026-06-06)', () => {
+    // Naukri / Foundit / Shine / TimesJobs / Hirist / Cutshort /
+    // Instahyre / iimjobs / Indeed India / Apna / Glassdoor IN —
+    // must remain ≥10 so the India-focused user has broad coverage.
     const india = JOB_BOARD_PRESETS.filter((p) => p.category === 'india')
-    expect(india.length).toBeGreaterThanOrEqual(5)
+    expect(india.length).toBeGreaterThanOrEqual(10)
+  })
+  it('India category is marked as featured (recommended-first position)', () => {
+    const indiaCat = PRESET_CATEGORIES.find((c) => c.id === 'india')
+    expect(indiaCat).toBeTruthy()
+    expect(indiaCat?.featured).toBe(true)
+  })
+  it('India is the first category in PRESET_CATEGORIES (default-visible)', () => {
+    expect(PRESET_CATEGORIES[0]?.id).toBe('india')
   })
   it('catalog covers every declared category at least once', () => {
     for (const cat of PRESET_CATEGORIES) {

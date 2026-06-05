@@ -64,20 +64,30 @@ export function JobPresetPicker() {
             {PRESET_CATEGORIES.map((cat) => {
               const inCat = JOB_BOARD_PRESETS.filter((p) => p.category === cat.id)
               if (inCat.length === 0) return null
+              const featured = Boolean(cat.featured)
               return (
-                <div key={cat.id}>
-                  <div className="mb-2">
+                <div key={cat.id} className={featured ? 'rounded-xl border border-primary/30 bg-primary/5 p-3' : ''}>
+                  <div className="mb-2 flex items-center gap-2">
                     <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
                       {cat.label}
                     </div>
-                    <div className="text-[11px] text-muted-foreground/80">{cat.blurb}</div>
+                    {featured ? (
+                      <span className="inline-flex items-center rounded-full bg-primary px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-primary-foreground">
+                        Recommended
+                      </span>
+                    ) : null}
+                    <span className="text-[11px] text-muted-foreground/70">{inCat.length} {inCat.length === 1 ? 'board' : 'boards'}</span>
                   </div>
+                  <div className="mb-2 text-[11px] text-muted-foreground/80">{cat.blurb}</div>
                   <div className="grid gap-2 sm:grid-cols-2">
                     {inCat.map((p) => (
                       <button
                         key={p.id} type="button"
                         onClick={() => setPicked(p)}
-                        className="flex items-start gap-3 rounded-lg border bg-card p-3 text-left ea-transition hover:border-primary/40 hover:bg-accent/30"
+                        className={cn(
+                          'flex items-start gap-3 rounded-lg border p-3 text-left ea-transition hover:border-primary/40 hover:bg-accent/30',
+                          featured ? 'bg-background border-primary/20' : 'bg-card',
+                        )}
                       >
                         <span className="text-2xl" aria-hidden>{p.icon}</span>
                         <div className="min-w-0">

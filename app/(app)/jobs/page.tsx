@@ -9,6 +9,15 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { JobsClient } from './jobs-client'
 import type { JobSource, JobLead } from '@/server/db/schema'
 
+// Shared shape mapper so /jobs and JobsClient agree on which lead
+// fields ride along to the client component. Keeps the page tidy.
+function mapLeads(rows: JobLead[]) {
+  return rows.map((l) => ({
+    id: l.id, title: l.title, company: l.company, link: l.link, location: l.location,
+    status: l.status, sourceId: l.sourceId, seenAt: l.seenAt,
+  }))
+}
+
 export default async function JobsPage() {
   const u = await requireUser()
   // Defensive on both reads — migration 0008 may not be applied to
@@ -17,20 +26,24 @@ export default async function JobsPage() {
   // Track whether any underlying read failed because the migration
   // isn't applied yet — drives the banner below. We catch errors here
   // and inspect them with isSchemaMissingError instead of letting the
-  // defensive .catch silently mask the operator footgun.
-  let schemaMissing = false
+  // defensive .catch silently mask the operator footgun. Property
+  // mutation (not variable reassignment) keeps the react-hooks
+  // linter happy without losing the closure-capture pattern.
+  const tracker = { schemaMissing: false }
   function trackSchema<T>(promise: Promise<T>, fallback: T, label: string): Promise<T> {
     return promise.catch((e) => {
-      if (isSchemaMissingError(e)) schemaMissing = true
+      if (isSchemaMissingError(e)) tracker.schemaMissing = true
       console.error(`[jobs] ${label} failed:`, e)
       return fallback
     })
   }
-  const [sources, leadsNew, leadsSaved, leadCounts] = await Promise.all([
-    trackSchema(listSources(u.id),        [] as JobSource[], 'listSources'),
-    trackSchema(listLeads(u.id, 'new'),   [] as JobLead[],   'listLeads(new)'),
-    trackSchema(listLeads(u.id, 'saved'), [] as JobLead[],   'listLeads(saved)'),
-    trackSchema(leadCountsBySource(u.id), new Map<number, number>(), 'leadCountsBySource'),
+  const [sources, leadsNew, leadsSaved, leadsApplied, leadsIgnored, leadCounts] = await Promise.all([
+    trackSchema(listSources(u.id),          [] as JobSource[], 'listSources'),
+    trackSchema(listLeads(u.id, 'new'),     [] as JobLead[],   'listLeads(new)'),
+    trackSchema(listLeads(u.id, 'saved'),   [] as JobLead[],   'listLeads(saved)'),
+    trackSchema(listLeads(u.id, 'applied'), [] as JobLead[],   'listLeads(applied)'),
+    trackSchema(listLeads(u.id, 'ignored'), [] as JobLead[],   'listLeads(ignored)'),
+    trackSchema(leadCountsBySource(u.id),   new Map<number, number>(), 'leadCountsBySource'),
   ])
   const activeSources = sources.filter((s) => s.active).length
   return (
@@ -63,7 +76,7 @@ export default async function JobsPage() {
         }
       />
 
-      {schemaMissing ? (
+      {tracker.schemaMissing ? (
         <div className="flex items-start gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-amber-900 dark:text-amber-200 ea-fade-in">
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
           <div className="space-y-1 text-sm">
@@ -101,14 +114,11 @@ npm run db:migrate`}
           lastStatus: s.lastStatus, lastError: s.lastError,
           leadCount: leadCounts.get(s.id) ?? 0,
         }))}
-        leadsNew={leadsNew.map((l) => ({
-          id: l.id, title: l.title, company: l.company, link: l.link, location: l.location,
-          status: l.status, sourceId: l.sourceId, seenAt: l.seenAt,
-        }))}
-        leadsSaved={leadsSaved.map((l) => ({
-          id: l.id, title: l.title, company: l.company, link: l.link, location: l.location,
-          status: l.status, sourceId: l.sourceId, seenAt: l.seenAt,
-        }))}
+        leadsNew={mapLeads(leadsNew)}
+        leadsSaved={mapLeads(leadsSaved)}
+        leadsArchive={mapLeads([...leadsApplied, ...leadsIgnored].sort((a, b) =>
+          new Date(b.seenAt).getTime() - new Date(a.seenAt).getTime(),
+        ))}
       />
     </div>
   )

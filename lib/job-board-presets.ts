@@ -200,6 +200,61 @@ export const JOB_BOARD_PRESETS: JobBoardPreset[] = [
     category: 'india',
     bestFor: 'IN startups',
   },
+  {
+    id: 'instahyre',
+    name: 'Instahyre',
+    description: 'AI-matched tech board. Heavily-curated; product / engineering / data roles.',
+    template: 'https://www.instahyre.com/search-jobs/?q={role}&l={location}',
+    needs: { role: true, location: true },
+    suggestedKeywords: '{role}',
+    icon: '🤖',
+    category: 'india',
+    bestFor: 'Curated tech IN',
+  },
+  {
+    id: 'iimjobs',
+    name: 'iimjobs',
+    description: 'Premium roles for MBA / senior management. Strategy, BD, growth leadership.',
+    template: 'https://www.iimjobs.com/search?searchTerm={role}&loc={location}',
+    needs: { role: true, location: true },
+    suggestedKeywords: '{role}',
+    icon: '🎓',
+    category: 'india',
+    bestFor: 'MBA / leadership IN',
+  },
+  {
+    id: 'indeed-in',
+    name: 'Indeed India',
+    description: 'Indian variant of Indeed. Volume-heavy, broad role coverage.',
+    template: 'https://in.indeed.com/jobs?q={role}&l={location}',
+    needs: { role: true, location: true },
+    suggestedKeywords: '{role}',
+    icon: '🔵',
+    category: 'india',
+    bestFor: 'Maximum IN volume',
+  },
+  {
+    id: 'apna',
+    name: 'Apna',
+    description: 'Mobile-first, fastest-growing. Broad — entry to mid-level, blue + white collar.',
+    template: 'https://apna.co/jobs?q={role}&l={location}',
+    needs: { role: true, location: true },
+    suggestedKeywords: '{role}',
+    icon: '📱',
+    category: 'india',
+    bestFor: 'Entry / mid-level IN',
+  },
+  {
+    id: 'glassdoor-in',
+    name: 'Glassdoor India',
+    description: 'India-specific Glassdoor with salary + review filters.',
+    template: 'https://www.glassdoor.co.in/Job/jobs.htm?sc.keyword={role}&locKeyword={location}',
+    needs: { role: true, location: true },
+    suggestedKeywords: '{role}',
+    icon: '🟢',
+    category: 'india',
+    bestFor: 'IN salary visibility',
+  },
 
   // ── Remote-first ───────────────────────────────────────────────
   {
@@ -299,9 +354,12 @@ export const JOB_BOARD_PRESETS: JobBoardPreset[] = [
 // Category display order + labels for the picker. Marketing sits near
 // the top because that's the recent user request; keep the rest in
 // logical-discovery order.
-export const PRESET_CATEGORIES: Array<{ id: PresetCategory; label: string; blurb: string }> = [
+export const PRESET_CATEGORIES: Array<{ id: PresetCategory; label: string; blurb: string; featured?: boolean }> = [
+  // India sits first — most of our active users are India-based, so
+  // surface the IN boards by default. The `featured` flag drives the
+  // visual "primary" treatment in the picker.
+  { id: 'india',      label: '🇮🇳 India',                    blurb: 'India-focused job boards — broad coverage across Naukri, Foundit, Shine, TimesJobs + tech (Hirist, Instahyre), startups (Cutshort), MBA (iimjobs), mobile-first (Apna), and Indeed/Glassdoor IN.', featured: true },
   { id: 'marketing',  label: 'Marketing / SEO / Paid Media', blurb: 'Domain-specific boards for SEO, digital, performance, and paid-media roles.' },
-  { id: 'india',      label: 'India',                        blurb: 'India-focused job boards — Naukri, Foundit, Shine, TimesJobs, Hirist, Cutshort.' },
   { id: 'aggregator', label: 'General aggregators',          blurb: 'Cross-industry boards with broad coverage and search filters.' },
   { id: 'remote',     label: 'Remote-first',                 blurb: 'Boards that screen for fully-remote / flexible roles.' },
   { id: 'startup',    label: 'Startup-focused',              blurb: 'Early-stage and growth-stage company listings.' },

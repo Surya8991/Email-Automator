@@ -1,10 +1,10 @@
 'use client'
-import { useMemo, useState, useTransition } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import {
   Plus, RefreshCw, Trash2, ExternalLink, Bookmark, Briefcase, CheckCircle2, XCircle, Building2,
-  Search, Download, MailPlus, Pause, Play, Pencil, RefreshCcw,
+  Search, Download, MailPlus, Pause, Play, Pencil, RefreshCcw, Archive, Clock,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -31,24 +31,25 @@ interface LeadRow {
 }
 
 export function JobsClient({
-  sources, leadsNew, leadsSaved,
+  sources, leadsNew, leadsSaved, leadsArchive,
 }: {
-  sources: SourceRow[]; leadsNew: LeadRow[]; leadsSaved: LeadRow[]
+  sources: SourceRow[]; leadsNew: LeadRow[]; leadsSaved: LeadRow[]; leadsArchive: LeadRow[]
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
-  const [tab, setTab] = useState<'new' | 'saved' | 'sources'>(sources.length === 0 ? 'sources' : 'new')
+  const [tab, setTab] = useState<'new' | 'saved' | 'archive' | 'sources'>(sources.length === 0 ? 'sources' : 'new')
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <Segmented<'new' | 'saved' | 'sources'>
+        <Segmented<'new' | 'saved' | 'archive' | 'sources'>
           value={tab} onChange={setTab}
           ariaLabel="Jobs view"
           options={[
-            { value: 'new',     label: `New (${leadsNew.length})`,    icon: Briefcase },
-            { value: 'saved',   label: `Saved (${leadsSaved.length})`, icon: Bookmark },
-            { value: 'sources', label: `Sources (${sources.length})`,   icon: Building2 },
+            { value: 'new',     label: `New (${leadsNew.length})`,         icon: Briefcase },
+            { value: 'saved',   label: `Saved (${leadsSaved.length})`,     icon: Bookmark },
+            { value: 'archive', label: `Archive (${leadsArchive.length})`, icon: Archive },
+            { value: 'sources', label: `Sources (${sources.length})`,       icon: Building2 },
           ]}
         />
         <div className="flex items-center gap-2">
@@ -75,14 +76,32 @@ export function JobsClient({
         <SourcesTable sources={sources} pending={pending} router={router} start={start} />
       ) : (
         <LeadsTable
-          leads={tab === 'new' ? leadsNew : leadsSaved}
+          leads={tab === 'new' ? leadsNew : tab === 'saved' ? leadsSaved : leadsArchive}
+          sources={sources}
           pending={pending}
           showSaveButton={tab === 'new'}
-          status={tab}
+          status={tab === 'archive' ? 'applied' : tab}
         />
       )}
     </div>
   )
+}
+
+/**
+ * "X minutes ago" / "X hours ago" / "X days ago" for the per-source
+ * last-fetched display. Coarse on purpose — surface-level signal of
+ * how stale a source is.
+ */
+function timeAgo(ms: number | null): string {
+  if (!ms) return 'never'
+  const diff = Math.max(0, Date.now() - ms)
+  const m = Math.round(diff / 60_000)
+  if (m < 1) return 'just now'
+  if (m < 60) return `${m}m ago`
+  const h = Math.round(m / 60)
+  if (h < 24) return `${h}h ago`
+  const d = Math.round(h / 24)
+  return `${d}d ago`
 }
 
 function AddSourceDialog() {
@@ -187,6 +206,9 @@ function SourcesTable({
                       {s.lastStatus}
                     </span>
                   ) : <span className="text-muted-foreground italic">never run</span>}
+                  <div className="mt-0.5 inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                    <Clock className="h-2.5 w-2.5" /> {timeAgo(s.lastFetchedAt)}
+                  </div>
                   {s.lastError ? <div className="mt-0.5 text-[11px] text-amber-600 dark:text-amber-400">{s.lastError}</div> : null}
                 </td>
                 <td>
@@ -239,8 +261,13 @@ function EditSourceDialog({ source, onClose }: { source: SourceRow | null; onClo
   const [url, setUrl] = useState(source?.url ?? '')
   const [keywords, setKeywords] = useState(source?.keywords ?? '')
   const [pending, start] = useTransition()
-  // Reseed local state when the dialog opens on a new source.
-  useState(() => { if (source) { setLabel(source.label); setUrl(source.url); setKeywords(source.keywords) } })
+  // Re-seed local state every time the dialog mounts with a different
+  // source row. The previous version used a useState lazy initializer
+  // here, which only fires once — opening the dialog on row B after
+  // editing row A showed row A's stale values.
+  useEffect(() => {
+    if (source) { setLabel(source.label); setUrl(source.url); setKeywords(source.keywords) }
+  }, [source])
   if (!source) return null
   function submit() {
     if (!source) return
@@ -285,28 +312,36 @@ function EditSourceDialog({ source, onClose }: { source: SourceRow | null; onClo
 }
 
 function LeadsTable({
-  leads, pending, showSaveButton, status,
+  leads, sources, pending, showSaveButton, status,
 }: {
-  leads: LeadRow[]; pending: boolean; showSaveButton: boolean; status: 'new' | 'saved'
+  leads: LeadRow[]; sources: SourceRow[]; pending: boolean; showSaveButton: boolean
+  status: 'new' | 'saved' | 'applied'
 }) {
   const router = useRouter()
   const [busy, start] = useTransition()
   const [q, setQ] = useState('')
+  // Per-source filter — null = all sources. Lets the user drill into
+  // leads from one board without leaving the page.
+  const [sourceFilter, setSourceFilter] = useState<number | null>(null)
   // Per-row selection for bulk triage. Cleared whenever the source
   // list changes (router.refresh after a status change re-mounts the
   // table because the `leads` prop changes).
   const [selected, setSelected] = useState<Set<number>>(new Set())
   // Client-side filter — cheap because we already cap server-side at
-  // 200. Matches title + company + location with a substring search.
+  // 200. Matches title + company + location with a substring search,
+  // then optionally narrows by source.
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase()
-    if (!needle) return leads
-    return leads.filter((l) => (
+    let out = leads
+    if (sourceFilter != null) out = out.filter((l) => l.sourceId === sourceFilter)
+    if (!needle) return out
+    return out.filter((l) => (
       l.title.toLowerCase().includes(needle) ||
       l.company.toLowerCase().includes(needle) ||
       l.location.toLowerCase().includes(needle)
     ))
-  }, [leads, q])
+  }, [leads, q, sourceFilter])
+  const sourceById = useMemo(() => new Map(sources.map((s) => [s.id, s])), [sources])
   const allSelected = filtered.length > 0 && filtered.every((l) => selected.has(l.id))
   function bulk(next: 'saved' | 'ignored' | 'applied') {
     const ids = Array.from(selected)
@@ -344,6 +379,17 @@ function LeadsTable({
           <Search className="pointer-events-none absolute left-2 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search title / company / location…" className="pl-8 h-9 text-sm" />
         </div>
+        {sources.length > 1 ? (
+          <select
+            value={sourceFilter ?? ''}
+            onChange={(e) => setSourceFilter(e.target.value === '' ? null : Number(e.target.value))}
+            className="h-9 rounded-md border bg-background px-2 text-xs"
+            aria-label="Filter by source"
+          >
+            <option value="">All sources</option>
+            {sources.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+          </select>
+        ) : null}
         <div className="text-xs text-muted-foreground">{filtered.length} of {leads.length} {leads.length === 1 ? 'lead' : 'leads'}</div>
         <Button variant="outline" size="sm" asChild className="ml-auto">
           <a href={`/api/jobs/export?status=${status}`} download>
@@ -395,7 +441,9 @@ function LeadsTable({
               <th className="w-64 text-right">Actions</th>
             </tr></thead>
             <tbody>
-              {filtered.map((l) => (
+              {filtered.map((l) => {
+                const src = sourceById.get(l.sourceId)
+                return (
                 <tr key={l.id}>
                   <td>
                     <input
@@ -414,6 +462,9 @@ function LeadsTable({
                         {l.title} <ExternalLink className="h-3 w-3" />
                       </a>
                     ) : <span className="font-medium">{l.title}</span>}
+                    {src ? (
+                      <div className="text-[10px] text-muted-foreground">via {src.label}</div>
+                    ) : null}
                   </td>
                   <td className="text-xs text-muted-foreground">{l.company || '—'}</td>
                   <td className="text-xs text-muted-foreground">{l.location || '—'}</td>
@@ -441,7 +492,8 @@ function LeadsTable({
                     </div>
                   </td>
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </table>
         </div>
