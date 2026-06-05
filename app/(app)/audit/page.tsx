@@ -21,7 +21,11 @@ export default async function AuditPage(props: { searchParams: Promise<{ scope?:
 
   // Single query, conditionally scoped. When adminAll, drop the userId
   // filter and LEFT JOIN users to surface the actor's email per row.
-  const impersonatorFilter = sql`${auditLog.detail} LIKE '%impersonator=%'`
+  // Anchored marker — only match rows whose detail starts with
+  // `impersonator=` OR has ` | impersonator=` as a literal join. Matches
+  // the exact format logAdmin emits and skips broadcast / user-typed
+  // free-form text that happens to mention "impersonator=".
+  const impersonatorFilter = sql`(${auditLog.detail} LIKE 'impersonator=%' OR ${auditLog.detail} LIKE '% | impersonator=%')`
   const baseQuery = adminAll
     ? db.select({
         id: auditLog.id, action: auditLog.action, detail: auditLog.detail,

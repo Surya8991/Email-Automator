@@ -174,21 +174,25 @@ export async function breakdownByTag(userId: string, days = 30): Promise<Breakdo
 
 // B6 — Follow-up reminders. Buckets active contacts (not Replied/Bounced/
 // Blocked) by days-since-last-send. Surfaces an at-a-glance "who needs
-// a nudge" widget on /contacts: Overdue >14d, Soon 7-13d, On track <7d,
-// Never sent. Sent-but-no-reply is the implicit target — these are
-// contacts you've already started a conversation with but the thread has
-// gone quiet.
+// a nudge" widget on /contacts. Sent-but-no-reply is the implicit target.
+//
+// Bucket boundaries (inclusive of the older end so day-14-exact lands in
+// 'overdue', not 'soon' — matches what the user sees on the widget label):
+//   overdue  : last <= now - 14d         ("Overdue (14+ days)")
+//   soon     : now - 14d < last <= now - 7d   ("Soon (7–13 days)")
+//   onTrack  : last > now - 7d           ("On track (<7 days)")
+//   neverSent: no sent-event for this contact yet
 export interface FollowUpBuckets {
-  overdue: number      // last sent > 14 days ago
+  overdue: number      // last sent ≥14 days ago
   soon: number         // last sent 7-13 days ago
-  onTrack: number      // last sent < 7 days ago
+  onTrack: number      // last sent <7 days ago
   neverSent: number    // active contact, no send recorded
 }
 
 export async function followUpBuckets(userId: string): Promise<FollowUpBuckets> {
   const now = Date.now()
-  const overdueCut = now - 14 * DAY_MS
-  const soonCut = now - 7 * DAY_MS
+  const overdueCut = now - 14 * DAY_MS   // last <= overdueCut → overdue
+  const soonCut = now - 7 * DAY_MS       // last <= soonCut → soon (or overdue)
   // Active contacts: not in BLOCKED / BOUNCED / Replied states. We treat
   // any emailStatus starting with "Replied" as resolved (no further nudge).
   const activeRows = await db.select({ id: contacts.id, emailStatus: contacts.emailStatus })
@@ -215,8 +219,8 @@ export async function followUpBuckets(userId: string): Promise<FollowUpBuckets> 
   for (const id of activeIds) {
     const last = lastByContact.get(id)
     if (!last) { buckets.neverSent++; continue }
-    if (last < overdueCut) buckets.overdue++
-    else if (last < soonCut) buckets.soon++
+    if (last <= overdueCut) buckets.overdue++
+    else if (last <= soonCut) buckets.soon++
     else buckets.onTrack++
   }
   return buckets

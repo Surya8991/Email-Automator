@@ -198,6 +198,17 @@ export const apiKeys = sqliteTable('api_keys', {
   byHash: uniqueIndex('api_keys_hash_idx').on(t.keyHash),
 }))
 
+// One row per user holding the most recent SSE/poll progress event.
+// Sits in its own table (not `settings`) so high-frequency emit() writes
+// during a bulk import don't contend with config reads. PRIMARY KEY on
+// userId means emit() can do a clean upsert without coordinating
+// queue chains in app code. See migration 0005_progress_events.
+export const progressEvents = sqliteTable('progress_events', {
+  userId: text('user_id').primaryKey().notNull().references(() => users.id, { onDelete: 'cascade' }),
+  at: integer('at').notNull(),
+  payload: text('payload').notNull(),
+})
+
 // Outbound webhooks. `events` is a comma-separated kind list ("sent,open,click,…").
 export const webhooks = sqliteTable('webhooks', {
   id: integer('id').primaryKey({ autoIncrement: true }),

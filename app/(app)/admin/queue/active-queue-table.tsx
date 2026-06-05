@@ -67,7 +67,8 @@ export function ActiveQueueTable({ rows }: { rows: Row[] }) {
           <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>Clear</Button>
         </div>
       ) : null}
-      <table className="w-full text-sm">
+      <div className="overflow-x-auto">
+      <table className="w-full min-w-[640px] text-sm">
         <thead className="bg-muted/40 text-left text-xs uppercase text-muted-foreground">
           <tr>
             <th className="w-8 px-3 py-2">
@@ -102,6 +103,7 @@ export function ActiveQueueTable({ rows }: { rows: Row[] }) {
           ))}
         </tbody>
       </table>
+      </div>
     </>
   )
 }

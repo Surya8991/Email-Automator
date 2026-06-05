@@ -30,11 +30,20 @@ const nextConfig = {
       : "script-src 'self' 'unsafe-inline'"
     // Dev also needs connect-src 'self' + the HMR websocket; Next handles
     // both with 'self' since the WS is on the same origin.
+    // HSTS — only fire the strong form when the operator explicitly opts in
+    // with HSTS_APEX=true. Otherwise we use the conservative form (host-only,
+    // no includeSubDomains, no preload). Reason: on shared hosts like
+    // `*.vercel.app`, includeSubDomains would force HSTS for every other
+    // app on the platform's preview URLs, and a preload submission from a
+    // non-apex eTLD+1 is invalid + permanent. Apex deploys (your-app.com)
+    // opt in via env to get the full strong policy.
     const prodOnly = isDev ? [] : [
-      // HSTS — force HTTPS for 1 year. The preload directive is the strong
-      // form (eligible for the browser-baked preload list at hstspreload.org).
-      // Only set in prod because local dev runs over http://localhost.
-      { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains; preload' },
+      {
+        key: 'Strict-Transport-Security',
+        value: process.env.HSTS_APEX === 'true'
+          ? 'max-age=31536000; includeSubDomains; preload'
+          : 'max-age=15552000', // ~6 months, host-only
+      },
     ]
     return [
       {

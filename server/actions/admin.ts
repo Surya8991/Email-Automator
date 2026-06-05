@@ -418,30 +418,35 @@ export async function broadcastAction(message: string) {
 
 // ── Admin queue bulk cancel — flip selected Scheduled/Retrying rows to
 // Cancelled. Idempotent on Sent/Failed/Cancelled rows (the status filter
-// in the UPDATE WHERE means they're untouched). Returns rows-affected
-// count from a second SELECT so the toast can show "Cancelled N of M".
+// in the UPDATE WHERE means they're untouched). Per-call sentinel in
+// lastResult ensures the returned count matches THIS invocation only,
+// not previous bulk-cancels of the same row ids.
 export async function bulkCancelQueueAction(emailLogIds: number[]) {
   const me = await requireAdmin()
   if (!adminLimit(me.id, 'bulk_cancel_queue')) return { error: 'Too many admin actions — slow down' }
   if (!emailLogIds || emailLogIds.length === 0) return { error: 'No rows selected' }
   if (emailLogIds.length > 500) return { error: 'Too many rows — max 500 per call' }
   const { emailLog } = await import('@/server/db/schema')
+  // Per-call sentinel: a row already cancelled by a prior bulk_cancel
+  // carries `lastResult='Cancelled by admin'`; THIS call writes a
+  // millisecond-tagged variant so the post-UPDATE SELECT only counts
+  // rows flipped by us, not rows the operator cancelled minutes ago.
+  const sentinel = `Cancelled by admin @ ${Date.now()}`
   // Only cancel rows still in a cancellable state. Sending rows are NOT
   // cancelled — they're mid-flight; let them complete or fail naturally.
   await db.update(emailLog).set({
     status: 'Cancelled',
-    lastResult: 'Cancelled by admin',
+    lastResult: sentinel,
   }).where(and(
     inArray(emailLog.id, emailLogIds),
     inArray(emailLog.status, ['Scheduled', 'Retrying']),
   ))
-  // Count what actually flipped — the UI may have shown rows that have
-  // since been picked up by the scheduler.
+  // Count exactly what THIS call flipped (sentinel match).
   const flipped = await db.select({ id: emailLog.id }).from(emailLog)
     .where(and(
       inArray(emailLog.id, emailLogIds),
       eq(emailLog.status, 'Cancelled'),
-      eq(emailLog.lastResult, 'Cancelled by admin'),
+      eq(emailLog.lastResult, sentinel),
     ))
   await logAdmin(me.id, 'admin.bulk_cancel_queue', `selected=${emailLogIds.length} cancelled=${flipped.length}`)
   revalidatePath('/admin/queue')

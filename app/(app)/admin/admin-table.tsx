@@ -141,7 +141,89 @@ export function AdminTable({ rows }: { rows: Row[] }) {
           <Button size="sm" variant="ghost" onClick={clearSelection}>Clear</Button>
         </div>
       ) : null}
-      <table className="w-full text-sm">
+      {/* Mobile: card layout. Same data, stacked + actions in a single
+          row. Triggers under md; the desktop table below is hidden under md. */}
+      <ul className="divide-y md:hidden">
+        {visible.length === 0 ? (
+          <li className="px-4 py-8 text-center text-sm text-muted-foreground">No users match.</li>
+        ) : null}
+        {visible.map((r) => (
+          <li key={r.id} className="space-y-2 p-3">
+            <div className="flex items-start gap-2">
+              <input type="checkbox" aria-label={`Select ${r.email}`}
+                checked={selected.has(r.id)} onChange={() => toggleOne(r.id)}
+                disabled={!isSelectable(r)} className="mt-1.5" />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5 truncate font-mono text-xs">
+                  {r.isAdmin ? <Shield className="h-3 w-3 shrink-0 text-amber-500" /> : <User className="h-3 w-3 shrink-0 text-muted-foreground" />}
+                  <span className="truncate">{r.email}</span>
+                  {r.isMe ? <span className="shrink-0 rounded bg-primary/10 px-1.5 text-[10px] text-primary">you</span> : null}
+                  {r.suspended ? <span className="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] text-amber-600">suspended</span> : null}
+                </div>
+                <div className="text-xs text-muted-foreground">{r.name || '—'} · joined {formatDate(r.createdAt)}</div>
+              </div>
+            </div>
+            <div className="grid grid-cols-4 gap-2 text-center text-xs">
+              <div className="rounded bg-muted/30 py-1">
+                <div className="text-[10px] uppercase text-muted-foreground">Contacts</div>
+                <div className="font-medium tabular-nums">{r.contacts}</div>
+              </div>
+              <div className="rounded bg-muted/30 py-1">
+                <div className="text-[10px] uppercase text-muted-foreground">Drafts</div>
+                <div className="font-medium tabular-nums">{r.drafts}</div>
+              </div>
+              <div className="rounded bg-muted/30 py-1">
+                <div className="text-[10px] uppercase text-muted-foreground">Events</div>
+                <div className="font-medium tabular-nums">{r.events}</div>
+              </div>
+              <div className="rounded bg-muted/30 py-1">
+                <div className="text-[10px] uppercase text-muted-foreground">Quota</div>
+                <div className="font-medium tabular-nums">
+                  {r.quotaOverride > 0 ? r.quotaOverride : <span className="text-muted-foreground">env</span>}
+                </div>
+              </div>
+            </div>
+            <div className="-mx-1 flex flex-wrap items-center gap-0.5">
+              <Button variant="ghost" size="icon" aria-label="View details" onClick={() => setDrawerUserId(r.id)}>
+                <Eye className="h-4 w-4" />
+              </Button>
+              {!r.isMe && !r.isAdmin && (
+                <>
+                  <Button variant="ghost" size="icon" aria-label="Set quota" disabled={pending} onClick={() => openQuotaDialog(r)}>
+                    <KeyRound className="h-4 w-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" aria-label="Impersonate" disabled={pending} onClick={() => impersonate(r)}>
+                    <UserCog className="h-4 w-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" aria-label={r.suspended ? 'Resume sends' : 'Suspend sends'}
+                    disabled={pending}
+                    onClick={() => start(async () => {
+                      setErr(null)
+                      const res = await suspendUserAction(r.id, !r.suspended)
+                      if ('error' in res && res.error) setErr(res.error)
+                      router.refresh()
+                    })}>
+                    {r.suspended ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
+                  </Button>
+                  <Button variant="ghost" size="icon" aria-label="Delete user" disabled={pending}
+                    onClick={() => {
+                      if (!confirm(`Delete ${r.email}? Their contacts/templates/drafts/sessions/events all go too.`)) return
+                      start(async () => {
+                        setErr(null)
+                        const res = await deleteUserAction(r.id)
+                        if ('error' in res && res.error) setErr(res.error)
+                        router.refresh()
+                      })
+                    }}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+      <table className="hidden w-full text-sm md:table">
         <thead className="bg-muted/40 text-left text-xs uppercase text-muted-foreground">
           <tr>
             <th className="w-8 px-3 py-2">
