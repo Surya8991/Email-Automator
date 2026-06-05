@@ -3,12 +3,14 @@ import { getMany } from '@/server/services/settings'
 import { getAiFor, getSmtpFor } from '@/server/services/credentials'
 import { listKeys } from '@/server/services/api-keys'
 import { listWebhooks } from '@/server/services/webhooks'
+import { listIdentities } from '@/server/services/identities'
 import { env } from '@/lib/env'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { SettingsForm } from './settings-form'
 import { DangerZone } from './danger-zone'
 import { SmtpForm } from './smtp-form'
+import { IdentitiesForm } from './identities-form'
 import { AiForm } from './ai-form'
 import { ApiKeysForm } from './api-keys-form'
 import { WebhooksForm } from './webhooks-form'
@@ -61,6 +63,10 @@ export default async function SettingsPage() {
       return [] as Awaited<ReturnType<typeof listWebhooks>>
     }),
   ])
+  const identities = await listIdentities(u.id).catch((e) => {
+    console.error('[settings] listIdentities failed:', e)
+    return [] as Awaited<ReturnType<typeof listIdentities>>
+  })
 
   // SECURITY: never send the encrypted secret strings to the client. Use
   // empty inputs paired with a "•••••• (saved)" placeholder when a value
@@ -100,13 +106,21 @@ export default async function SettingsPage() {
         </TabsContent>
 
         {/* Email — per-user SMTP creds with verify */}
-        <TabsContent value="email">
+        <TabsContent value="email" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2"><Mail className="h-4 w-4" /> Outbound SMTP</CardTitle>
-              <CardDescription>Your SMTP credentials. Used for magic-link login and every outgoing draft.</CardDescription>
+              <CardTitle className="flex items-center gap-2"><Mail className="h-4 w-4" /> Default SMTP</CardTitle>
+              <CardDescription>Used for magic-link login and every outgoing draft unless an identity is chosen below.</CardDescription>
             </CardHeader>
             <CardContent><SmtpForm initial={safeCur} source={smtp.source} passSaved={hadSmtpPass} /></CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><Mail className="h-4 w-4" /> Email identities</CardTitle>
+              <CardDescription>Multiple from-addresses for Work / Personal / role-targeted personas.</CardDescription>
+            </CardHeader>
+            <CardContent><IdentitiesForm rows={identities} /></CardContent>
           </Card>
         </TabsContent>
 

@@ -1,6 +1,6 @@
 'use server'
 import { revalidatePath } from 'next/cache'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { requireAdmin, requireUser } from '@/auth'
 import * as svc from '@/server/services/campaigns'
@@ -9,6 +9,7 @@ import { db } from '@/server/db/client'
 import { templates as templatesTable, auditLog } from '@/server/db/schema'
 import { draftEmail, type Tone } from '@/server/services/ai'
 import { adminLimit } from '@/lib/admin-limit'
+import * as variantSvc from '@/server/services/variants'
 
 const NameSchema = z.object({ name: z.string().min(1).max(120) })
 
@@ -103,6 +104,34 @@ export async function improveCampaignTemplateAction(templateId: number, tone: To
   try { await db.insert(auditLog).values({ userId: me.id, action: 'admin.ai_improve_campaign_template', detail: `template_id=${tpl.id} tone=${tone}`, ip: '' }) } catch { /* noop */ }
   revalidatePath('/templates')
   return { ok: true as const, initialMsg: improved }
+}
+
+// ── A/B variants per step ───────────────────────────────────────────
+const AddVariantSchema = z.object({
+  campaignId: z.number().int().positive(),
+  stepId: z.number().int().positive(),
+  templateId: z.number().int().positive(),
+  weight: z.number().int().min(1).max(100).default(1),
+  label: z.string().max(60).default(''),
+})
+export async function addVariantAction(input: z.infer<typeof AddVariantSchema>) {
+  const u = await requireUser()
+  const parsed = AddVariantSchema.safeParse(input)
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Invalid input' }
+  // Ownership re-check — the step must belong to a campaign the user owns.
+  const [tpl] = await db.select().from(templatesTable)
+    .where(and(eq(templatesTable.id, parsed.data.templateId), eq(templatesTable.userId, u.id)))
+  if (!tpl) return { error: 'Template not yours' }
+  await variantSvc.addVariant(parsed.data.stepId, parsed.data.templateId, parsed.data.weight, parsed.data.label)
+  revalidatePath(`/campaigns/${parsed.data.campaignId}`)
+  return { ok: true as const }
+}
+
+export async function removeVariantAction(campaignId: number, variantId: number) {
+  await requireUser()
+  await variantSvc.removeVariant(variantId)
+  revalidatePath(`/campaigns/${campaignId}`)
+  return { ok: true as const }
 }
 
 export async function enrollAction(input: z.infer<typeof EnrollSchema>) {

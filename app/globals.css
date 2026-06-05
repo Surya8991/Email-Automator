@@ -48,4 +48,64 @@
   }
   * { @apply border-border; }
   body { @apply bg-background text-foreground antialiased; }
+
+  /* Smoother default focus rings — accessible without the harsh blue. */
+  :focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; }
+
+  /* Reduce motion respect — every animation honors prefers-reduced-motion. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/* ── Micro-animations + transitions ─────────────────────────────── */
+@layer utilities {
+  /* Subtle entrance for cards / list items. Used via .ea-fade-in or
+     applied automatically to [data-ea-fade]. Honors reduced-motion. */
+  @keyframes ea-fade-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .ea-fade-in {
+    animation: ea-fade-in 220ms ease-out both;
+  }
+  @keyframes ea-pop {
+    0%   { transform: scale(0.96); opacity: 0; }
+    100% { transform: scale(1);    opacity: 1; }
+  }
+  .ea-pop { animation: ea-pop 160ms ease-out both; }
+
+  @keyframes ea-pulse-ring {
+    0%   { box-shadow: 0 0 0 0 hsl(var(--primary) / 0.45); }
+    70%  { box-shadow: 0 0 0 8px hsl(var(--primary) / 0); }
+    100% { box-shadow: 0 0 0 0 hsl(var(--primary) / 0); }
+  }
+  .ea-pulse-ring { animation: ea-pulse-ring 1.4s ease-out infinite; }
+
+  /* Smooth transitions added to every Card / Button via component-level
+     class. Picks up hover, focus, theme switch evenly. */
+  .ea-transition {
+    transition: background-color 160ms ease, border-color 160ms ease,
+                color 160ms ease, box-shadow 160ms ease,
+                transform 160ms ease;
+  }
+}
+
+/* Auto-apply the subtle fade-in to first-render cards across the app
+   without requiring every Card to opt in by class. */
+[data-ea-fade], .shadcn-card-root, [class*="rounded-xl border bg-card"] {
+  animation: ea-fade-in 220ms ease-out both;
+}
+
+/* Smooth hover lift for clickable cards (buttons inside still take focus). */
+.ea-hover-lift {
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+.ea-hover-lift:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px -8px hsl(var(--foreground) / 0.18);
 }

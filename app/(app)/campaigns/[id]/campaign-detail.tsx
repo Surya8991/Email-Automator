@@ -11,6 +11,7 @@ import {
   addStepAction, deleteCampaignAction, enrollAction,
   moveStepAction, removeStepAction, setStatusAction,
   improveCampaignTemplateAction,
+  addVariantAction, removeVariantAction,
 } from '@/server/actions/campaigns'
 import { useFormatDate } from '@/components/timezone-provider'
 
@@ -22,6 +23,7 @@ interface StepStat {
   stepOrder: number; templateId: number | null
   sent: number; opened: number; clicked: number; replied: number; advanced: number
 }
+interface Variant { id: number; templateId: number | null; weight: number; label: string }
 interface Props {
   campaign: { id: number; name: string; status: string }
   steps: Step[]
@@ -29,10 +31,11 @@ interface Props {
   templates: Array<{ id: number; label: string; initialMsg: string }>
   tags: string[]
   stepStats: StepStat[]
+  variantsByStep?: Record<number, Variant[]>
   isAdmin?: boolean
 }
 
-export function CampaignDetail({ campaign, steps, enrollments, templates, tags, stepStats, isAdmin = false }: Props) {
+export function CampaignDetail({ campaign, steps, enrollments, templates, tags, stepStats, variantsByStep = {}, isAdmin = false }: Props) {
   const formatDate = useFormatDate()
   const router = useRouter()
   const [pending, start] = useTransition()
@@ -179,6 +182,17 @@ export function CampaignDetail({ campaign, steps, enrollments, templates, tags, 
                         dangerouslySetInnerHTML={{ __html: liveBody || '<em class="text-muted-foreground">empty</em>' }} />
                     </div>
                   ) : null}
+
+                  {/* A/B variants strip — when any rows exist, scheduler
+                      hash-splits enrollments across them. Empty list ⇒
+                      step.templateId is the only path. */}
+                  <VariantsStrip
+                    stepId={s.id}
+                    campaignId={campaign.id}
+                    primaryTemplateName={tplName(s.templateId)}
+                    variants={variantsByStep[s.id] ?? []}
+                    templates={templates}
+                  />
                 </li>
               )})}
             </ol>
@@ -325,5 +339,112 @@ export function CampaignDetail({ campaign, steps, enrollments, templates, tags, 
         </CardContent>
       </Card>
     </>
+  )
+}
+
+// ── A/B variants strip ────────────────────────────────────────────
+// Shows the list of variants for a step, lets the user add another with
+// a template + weight, and remove individual variants. Scheduler-tick's
+// pickVariantTemplateId() handles the rest — hash-stable per contact.
+function VariantsStrip({
+  stepId, campaignId, primaryTemplateName, variants, templates,
+}: {
+  stepId: number
+  campaignId: number
+  primaryTemplateName: string
+  variants: Variant[]
+  templates: Array<{ id: number; label: string; initialMsg: string }>
+}) {
+  const router = useRouter()
+  const [pending, start] = useTransition()
+  const [open, setOpen] = useState(false)
+  const [pickTplId, setPickTplId] = useState<number | ''>(templates[0]?.id ?? '')
+  const [weight, setWeight] = useState(1)
+  const [label, setLabel] = useState('')
+
+  const totalWeight = variants.reduce((s, v) => s + Math.max(1, v.weight), 0)
+  const hasSplit = variants.length > 0
+
+  function pctFor(v: Variant): string {
+    if (!hasSplit) return ''
+    return `${Math.round((Math.max(1, v.weight) / totalWeight) * 100)}%`
+  }
+
+  function add() {
+    if (typeof pickTplId !== 'number') { toast.error('Pick a template'); return }
+    start(async () => {
+      const r = await addVariantAction({ campaignId, stepId, templateId: pickTplId, weight, label })
+      if ('error' in r) { toast.error(r.error ?? 'Failed'); return }
+      toast.success('Variant added')
+      setOpen(false); setWeight(1); setLabel('')
+      router.refresh()
+    })
+  }
+
+  function remove(id: number) {
+    if (!confirm('Remove this variant? Future sends for this step revert to the primary template (or remaining variants).')) return
+    start(async () => {
+      await removeVariantAction(campaignId, id)
+      toast.success('Removed')
+      router.refresh()
+    })
+  }
+
+  return (
+    <div className="border-t bg-muted/10 p-3 text-xs">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-medium text-muted-foreground">A/B variants:</span>
+        {hasSplit ? (
+          <>
+            <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-emerald-700 dark:text-emerald-400">
+              Primary ({primaryTemplateName}) gets ~{Math.round((100 - variants.reduce((s, v) => s + Math.max(1, v.weight), 0) / (totalWeight + 1) * 100))}% ⚠
+            </span>
+            {variants.map((v) => {
+              const tname = templates.find((t) => t.id === v.templateId)?.label ?? '— deleted —'
+              return (
+                <span key={v.id} className="inline-flex items-center gap-1 rounded-full border bg-background px-2 py-0.5">
+                  {v.label ? <span className="font-semibold">{v.label}:</span> : null}
+                  <span>{tname}</span>
+                  <span className="text-muted-foreground">· {pctFor(v)}</span>
+                  <button type="button" className="ml-1 text-destructive hover:underline" onClick={() => remove(v.id)} disabled={pending}>×</button>
+                </span>
+              )
+            })}
+          </>
+        ) : (
+          <span className="text-muted-foreground">none — all enrollments use the step's template</span>
+        )}
+        <button type="button" className="ml-auto rounded-md border bg-background px-2 py-0.5 hover:bg-muted"
+          onClick={() => setOpen((o) => !o)}>
+          {open ? 'Close' : '+ Add variant'}
+        </button>
+      </div>
+      {open ? (
+        <div className="mt-2 grid items-end gap-2 sm:grid-cols-[1fr_100px_120px_auto]">
+          <div className="grid gap-1">
+            <Label className="text-[10px]">Template</Label>
+            <select className="h-8 rounded-md border bg-background px-2 text-xs"
+              value={pickTplId} onChange={(e) => setPickTplId(Number(e.target.value))}>
+              {templates.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+            </select>
+          </div>
+          <div className="grid gap-1">
+            <Label className="text-[10px]">Weight</Label>
+            <Input type="number" min={1} max={100} value={weight}
+              onChange={(e) => setWeight(Math.max(1, Number(e.target.value) || 1))}
+              className="h-8 text-xs" />
+          </div>
+          <div className="grid gap-1">
+            <Label className="text-[10px]">Label (optional)</Label>
+            <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="B / Subject test" className="h-8 text-xs" />
+          </div>
+          <Button size="sm" disabled={pending} onClick={add}>Add</Button>
+        </div>
+      ) : null}
+      <p className="mt-2 text-[10px] text-muted-foreground">
+        Scheduler hash-splits enrollments deterministically: same contact always sees the same variant.
+        Primary picks up everything not assigned by weight.
+      </p>
+    </div>
   )
 }

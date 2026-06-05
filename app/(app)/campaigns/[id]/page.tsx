@@ -4,6 +4,7 @@ import { requireUser } from '@/auth'
 import { getCampaign, getStepStats } from '@/server/services/campaigns'
 import { listTemplates } from '@/server/services/templates'
 import { listTags } from '@/server/services/contacts'
+import { listVariants } from '@/server/services/variants'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { CampaignDetail } from './campaign-detail'
 
@@ -17,6 +18,14 @@ export default async function CampaignDetailPage(props: { params: Promise<{ id: 
   const [tpls, tags, stepStats] = await Promise.all([
     listTemplates(u.id), listTags(u.id), getStepStats(u.id, cid),
   ])
+  // A/B variants per step. Fetch each in parallel; empty arrays for steps
+  // that haven't been split yet (the scheduler falls back to step.templateId).
+  const variantsByStep = Object.fromEntries(
+    await Promise.all(
+      data.steps.map(async (s) => [s.id, await listVariants(s.id)] as const),
+    ),
+  ) as Record<number, Array<{ id: number; templateId: number | null; weight: number; label: string }>>
+
 
   return (
     <div className="space-y-6">
@@ -44,6 +53,7 @@ export default async function CampaignDetailPage(props: { params: Promise<{ id: 
         templates={tpls.map((t) => ({ id: t.id, label: t.label || t.key, initialMsg: t.initialMsg }))}
         tags={tags}
         stepStats={stepStats}
+        variantsByStep={variantsByStep}
         isAdmin={u.isAdmin}
       />
     </div>

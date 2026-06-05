@@ -1,126 +1,198 @@
-// Public landing page that renders the project README as styled HTML.
-// Lives in the (no-layout) root so it's accessible without authentication,
-// useful for sharing the deployed URL with a collaborator before they sign in.
 import Link from 'next/link'
-import { Workflow, ExternalLink } from 'lucide-react'
+import {
+  Send, Workflow, Sparkles, BarChart3, FileText, ShieldCheck, Building2,
+  MailPlus, Github, FlaskConical, Eye, Bot, Lock, ScrollText,
+  Wand2, Zap,
+} from 'lucide-react'
 
-export const metadata = { title: 'Email Automator — README' }
+export const metadata = {
+  title: 'Email Automator — outreach at scale, on autopilot',
+  description: 'Self-hosted email outreach. Templates, campaigns with A/B testing, AI-assisted writing, company research, multiple identities, audit log, JSON API.',
+}
+
+const FEATURES = [
+  { icon: Send,         title: 'Bulk drafts + send',     blurb: 'Personalize with your variables. Stagger sends in batches with per-domain caps.' },
+  { icon: Workflow,     title: 'Multi-step campaigns',   blurb: 'Sequences with delays + stop-on-reply + per-step performance + A/B testing.' },
+  { icon: BarChart3,    title: 'Tracking + analytics',   blurb: '1×1 pixel + link rewriting. Send-time heatmap, breakdowns by template / tag / platform.' },
+  { icon: Sparkles,     title: 'AI assist (Groq)',       blurb: 'Llama 3.3 rewrites bodies, suggests subjects, enriches companies, generates openers.' },
+  { icon: FileText,     title: 'Starter templates',      blurb: '5 public + 23 admin-overlay templates. Variables with fallbacks. Clickable insertion palette.' },
+  { icon: Building2,    title: 'Company research',       blurb: 'Industry, HQ, size, tech stack, salary range. Auto-fills via AI; surfaces on contact detail.' },
+  { icon: MailPlus,     title: 'Multiple identities',    blurb: 'Personal / Work / role personas — each with its own from-address + encrypted SMTP.' },
+  { icon: ShieldCheck,  title: 'Hardened defaults',      blurb: 'CSP, HSTS, encrypted creds at rest, HMAC-signed admin cookies, multi-tenant isolation.' },
+  { icon: Bot,          title: 'JSON API + webhooks',    blurb: 'Bearer auth with per-key scopes (read/write contacts). HMAC-signed outbound webhooks.' },
+  { icon: Eye,          title: 'Dry-run preview',        blurb: 'See exactly what each contact would get before you send anything.' },
+  { icon: Lock,         title: 'Admin dashboard',        blurb: '6 tabs: overview, users, queue, webhooks, system, broadcast. Impersonation. Audit log.' },
+  { icon: ScrollText,   title: 'Audit log',              blurb: 'Every admin write logged. Per-user view + admin cross-user view with impersonation filter.' },
+] as const
+
+const STATS = [
+  { v: '6', l: 'admin tabs' },
+  { v: '100%', l: 'self-hosted' },
+  { v: '$0', l: '/mo to operate' },
+  { v: '5 min', l: 'to first send' },
+] as const
 
 export default function ReadmePage() {
   return (
-    <div className="min-h-dvh bg-gradient-to-br from-background to-muted/30">
-      <header className="border-b bg-card/40 backdrop-blur">
-        <div className="mx-auto flex max-w-3xl items-center justify-between p-4">
-          <Link href="/" className="flex items-center gap-2 text-lg font-semibold">
-            <Workflow className="h-5 w-5 text-primary" /> Email Automator
+    <div className="min-h-dvh bg-background text-foreground">
+      {/* ── Animated background blobs ─────────────────────────────── */}
+      <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+        <div className="absolute -top-32 -left-24 h-96 w-96 rounded-full bg-primary/15 blur-3xl ea-fade-in" />
+        <div className="absolute -bottom-32 -right-24 h-96 w-96 rounded-full bg-emerald-500/15 blur-3xl ea-fade-in" style={{ animationDelay: '120ms' }} />
+        <div className="absolute top-1/3 right-1/4 h-72 w-72 rounded-full bg-purple-500/10 blur-3xl ea-fade-in" style={{ animationDelay: '240ms' }} />
+      </div>
+
+      {/* ── Nav ────────────────────────────────────────────────────── */}
+      <nav className="sticky top-0 z-10 border-b bg-background/70 backdrop-blur">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-6 py-4">
+          <Link href="/readme" className="flex items-center gap-2 text-lg font-semibold">
+            <Workflow className="h-5 w-5 text-primary" />
+            Email Automator
           </Link>
-          <Link href="/login" className="text-sm underline">Sign in →</Link>
+          <div className="flex items-center gap-2">
+            <a href="https://github.com/Surya8991/Email-Automator" target="_blank" rel="noreferrer"
+              className="hidden sm:inline-flex items-center gap-1.5 rounded-md border bg-background px-3 py-1.5 text-sm hover:bg-muted ea-transition">
+              <Github className="h-4 w-4" /> Source
+            </a>
+            <Link href="/login"
+              className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90 ea-transition">
+              Sign in <Zap className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+        </div>
+      </nav>
+
+      {/* ── Hero ───────────────────────────────────────────────────── */}
+      <header className="mx-auto max-w-6xl px-6 py-20 sm:py-28">
+        <div className="ea-fade-in space-y-6 text-center">
+          <span className="inline-flex items-center gap-1.5 rounded-full border bg-card/50 px-3 py-1 text-xs text-muted-foreground backdrop-blur">
+            <span className="ea-pulse-ring inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            Self-hosted · No subscription · Your data, your inbox
+          </span>
+          <h1 className="bg-gradient-to-br from-foreground via-primary to-emerald-500 bg-clip-text text-5xl font-bold leading-tight tracking-tight text-transparent sm:text-6xl lg:text-7xl">
+            Personalized outreach<br />at scale, on autopilot.
+          </h1>
+          <p className="mx-auto max-w-2xl text-base text-muted-foreground sm:text-lg">
+            Templates with variables. Multi-step campaigns with A/B testing. AI-assisted writing.
+            Open / click tracking. Company research. Multiple from-identities. One workspace, zero recurring fees.
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+            <Link href="/login"
+              className="inline-flex items-center gap-1.5 rounded-md bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90 ea-transition">
+              Get started <Zap className="h-3.5 w-3.5" />
+            </Link>
+            <a href="https://github.com/Surya8991/Email-Automator" target="_blank" rel="noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-md border bg-background px-5 py-2.5 text-sm font-semibold hover:bg-muted ea-transition">
+              <Github className="h-4 w-4" /> Star on GitHub
+            </a>
+          </div>
+        </div>
+
+        {/* Stats strip */}
+        <div className="mx-auto mt-16 grid max-w-3xl grid-cols-2 gap-4 sm:grid-cols-4">
+          {STATS.map((s, i) => (
+            <div key={s.l} className="ea-pop rounded-lg border bg-card/40 p-4 text-center backdrop-blur ea-hover-lift"
+              style={{ animationDelay: `${i * 70}ms` }}>
+              <div className="text-2xl font-bold tabular-nums sm:text-3xl">{s.v}</div>
+              <div className="text-xs text-muted-foreground">{s.l}</div>
+            </div>
+          ))}
         </div>
       </header>
 
-      <main className="mx-auto max-w-3xl px-4 py-10 prose prose-sm dark:prose-invert
-        prose-headings:tracking-tight prose-h1:text-4xl prose-h2:mt-10 prose-h2:border-b prose-h2:pb-1
-        prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:before:content-none prose-code:after:content-none
-        prose-pre:bg-muted prose-pre:text-foreground prose-pre:rounded-md prose-a:text-primary">
+      {/* ── Feature grid ──────────────────────────────────────────── */}
+      <section className="mx-auto max-w-6xl px-6 py-16">
+        <div className="mb-10 text-center">
+          <h2 className="text-3xl font-bold tracking-tight">Everything you need to run outreach</h2>
+          <p className="mt-2 text-sm text-muted-foreground">12 modules. One self-hosted workspace.</p>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {FEATURES.map(({ icon: Icon, title, blurb }, i) => (
+            <div key={title}
+              className="ea-fade-in ea-hover-lift rounded-xl border bg-card/40 p-5 backdrop-blur"
+              style={{ animationDelay: `${(i % 6) * 50}ms` }}>
+              <Icon className="h-7 w-7 text-primary" />
+              <h3 className="mt-3 text-base font-semibold">{title}</h3>
+              <p className="mt-1 text-sm text-muted-foreground">{blurb}</p>
+            </div>
+          ))}
+        </div>
+      </section>
 
-        <h1>Email Automator</h1>
-        <p className="lead">
-          Self-hosted email outreach. Templates with variables, multi-step campaigns,
-          open/click tracking, AI-assisted writing (Groq), per-user multi-tenant
-          isolation, full audit log.
-        </p>
+      {/* ── How it works ──────────────────────────────────────────── */}
+      <section className="mx-auto max-w-6xl px-6 py-16">
+        <div className="mb-10 text-center">
+          <h2 className="text-3xl font-bold tracking-tight">5 minutes to your first send</h2>
+        </div>
+        <ol className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            { n: 1, title: 'Set your profile', blurb: 'Name, role, portfolio link, signature. Drives every {{variable}}.' },
+            { n: 2, title: 'Pick a template', blurb: '5 public + 23 admin starters. Activate one, AI-improve if needed.' },
+            { n: 3, title: 'Import contacts', blurb: 'CSV / XLSX up to 100k rows. Dedupe + per-row error report.' },
+            { n: 4, title: 'Schedule or campaign', blurb: 'One-off staggered blast or multi-step sequence with A/B variants.' },
+          ].map((s, i) => (
+            <li key={s.n}
+              className="ea-fade-in relative rounded-xl border bg-card/40 p-5 backdrop-blur ea-hover-lift"
+              style={{ animationDelay: `${i * 80}ms` }}>
+              <div className="absolute -top-3 left-5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
+                {s.n}
+              </div>
+              <h3 className="text-base font-semibold">{s.title}</h3>
+              <p className="mt-1 text-sm text-muted-foreground">{s.blurb}</p>
+            </li>
+          ))}
+        </ol>
+      </section>
 
-        <p>
-          <Link href="/login" className="inline-flex items-center gap-1 no-underline rounded-md bg-primary px-4 py-2 text-primary-foreground hover:opacity-90">
-            Try the live app <ExternalLink className="h-3 w-3" />
-          </Link>
-          {' '}
-          <Link href="/guide" className="inline-flex items-center gap-1 no-underline rounded-md border px-4 py-2 hover:bg-accent">
-            Read the user guide
-          </Link>
-        </p>
+      {/* ── AI block ──────────────────────────────────────────────── */}
+      <section className="mx-auto max-w-6xl px-6 py-16">
+        <div className="rounded-2xl border bg-gradient-to-br from-primary/5 to-emerald-500/5 p-8 backdrop-blur ea-fade-in">
+          <div className="flex flex-wrap items-start gap-6">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+              <Wand2 className="h-7 w-7 text-primary" />
+            </div>
+            <div className="flex-1">
+              <h2 className="text-2xl font-bold tracking-tight">AI on every surface that matters</h2>
+              <p className="mt-1 text-sm text-muted-foreground">All running on your own Groq API key (free tier covers a lot). Rate-limited 20/min/user.</p>
+              <ul className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
+                <li className="flex items-start gap-2"><span className="mt-0.5 text-primary">●</span><span><strong>AI Improve</strong> in drafts / schedule / campaigns — pick a tone, rewrite the body, 1-hour Undo.</span></li>
+                <li className="flex items-start gap-2"><span className="mt-0.5 text-primary">●</span><span><strong>AI subject suggester</strong> in templates — 5 variants from the body, click to swap.</span></li>
+                <li className="flex items-start gap-2"><span className="mt-0.5 text-primary">●</span><span><strong>AI company fill</strong> in /companies — auto-completes industry, HQ, tech stack, salary range.</span></li>
+                <li className="flex items-start gap-2"><span className="mt-0.5 text-primary">●</span><span><strong>AI opener</strong> — personalized first sentence per contact (server action ready).</span></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
 
-        <h2 id="run">Run in 60 seconds</h2>
-        <pre>{`cd web
-cp .env.example .env             # edit AUTH_SECRET, SMTP_*, (optionally GROQ_API_KEY)
-npm install --legacy-peer-deps
-npm run db:migrate
-npm run dev                      # http://localhost:3000
-# in another shell:
-npm run worker                   # background scheduler / campaign advancer`}</pre>
+      {/* ── Final CTA ─────────────────────────────────────────────── */}
+      <section className="mx-auto max-w-6xl px-6 py-20 text-center">
+        <div className="ea-fade-in space-y-4">
+          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Stop paying $99/mo for a CRM you don&apos;t use.</h2>
+          <p className="text-base text-muted-foreground">One sign-in, one workspace, one inbox. Run it on your laptop or deploy to Vercel for free.</p>
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+            <Link href="/login"
+              className="inline-flex items-center gap-1.5 rounded-md bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90 ea-transition">
+              Sign in to your workspace
+            </Link>
+            <Link href="/guide"
+              className="inline-flex items-center gap-1.5 rounded-md border bg-background px-6 py-3 text-sm font-semibold hover:bg-muted ea-transition">
+              <FlaskConical className="h-4 w-4" /> Read the guide
+            </Link>
+          </div>
+        </div>
+      </section>
 
-        <h2 id="features">What it does</h2>
-        <table>
-          <thead><tr><th>Feature</th><th>Where</th></tr></thead>
-          <tbody>
-            <tr><td>Contacts (CSV/XLSX import + export, tags, timeline)</td><td><code>/contacts</code></td></tr>
-            <tr><td>Templates (editor + live preview + A/B subject + AI rewrite)</td><td><code>/templates</code></td></tr>
-            <tr><td>Drafts (bulk with SSE progress, individual send)</td><td><code>/drafts</code></td></tr>
-            <tr><td>Dry-run preview (first 100 × active template)</td><td><code>/dry-run</code></td></tr>
-            <tr><td>Schedule (date/time, preview, queue, cancel)</td><td><code>/schedule</code></td></tr>
-            <tr><td>Campaigns (multi-step sequences with delays)</td><td><code>/campaigns</code></td></tr>
-            <tr><td>Analytics (opens + clicks + replies)</td><td><code>/analytics</code></td></tr>
-            <tr><td>Blocklist (per-user + global; unsubscribe auto-adds)</td><td><code>/blocklist</code></td></tr>
-            <tr><td>Audit log (last 500 actions)</td><td><code>/audit</code></td></tr>
-            <tr><td>Profile + Settings (tabbed)</td><td><code>/profile</code>, <code>/settings</code></td></tr>
-            <tr><td>Diagnostic (SMTP / DNS / SPF / DMARC)</td><td><code>/diagnostic</code></td></tr>
-            <tr><td>Admin (per-user stats, delete user, DB backup)</td><td><code>/admin</code></td></tr>
-            <tr><td>Command palette (⌘K)</td><td>global</td></tr>
-            <tr><td>User guide (the whole manual)</td><td><Link href="/guide"><code>/guide</code></Link></td></tr>
-          </tbody>
-        </table>
-
-        <h2 id="stack">Stack</h2>
-        <ul>
-          <li><strong>Next.js 16</strong> App Router (Turbopack) + TypeScript strict (<code>noUncheckedIndexedAccess</code>)</li>
-          <li><strong>Tailwind</strong> + shadcn-style components</li>
-          <li><strong>Drizzle ORM</strong> on <strong>better-sqlite3</strong> (WAL, foreign keys on)</li>
-          <li><strong>Auth.js v5</strong> — Email (magic link) + Google providers, DB-backed sessions</li>
-          <li><strong>Groq</strong> (Llama 3.3 70B) for AI-assist writes</li>
-          <li><strong>Vitest</strong> + <strong>Playwright</strong> for tests</li>
-          <li><strong>Nodemailer</strong> for outbound</li>
-        </ul>
-
-        <h2 id="tests">Tests</h2>
-        <pre>{`npm run typecheck && npm test && npm run e2e`}</pre>
-        <ul>
-          <li>Web Vitest (unit + integration + worst-case): <strong>35/35</strong></li>
-          <li><code>tsc --noEmit</code> strict: <strong>clean</strong></li>
-          <li>Playwright (chromium): <strong>3/3</strong></li>
-          <li>Standalone (legacy v1) Vitest: <strong>29/29</strong></li>
-        </ul>
-
-        <h2 id="security">Security model</h2>
-        <ul>
-          <li>Every Server Action and protected page calls <code>requireUser()</code></li>
-          <li>HTML-escape body / CRLF-strip subject / <code>assertNoCrlf</code> on every header</li>
-          <li>HMAC-SHA256 signed tracking and unsubscribe tokens (keyed by <code>AUTH_SECRET</code>)</li>
-          <li>Dev sign-in disabled in production unless <code>ALLOW_DEV_SIGNIN=true</code></li>
-          <li>DB backup endpoint is admin-only</li>
-          <li>Atomic template activation; unique <code>(campaign, contact)</code> enrollment</li>
-          <li>100k row hard cap on CSV/XLSX imports</li>
-          <li>Strict CSP headers</li>
-        </ul>
-
-        <h2 id="deploy">Deployment</h2>
-        <p>Full details in <Link href="/guide#deploy">/guide → 15. Deployment options</Link>. Short version:</p>
-        <ul>
-          <li><strong>Self-hosted Linux:</strong> <code>pm2</code> + the SQLite file in <code>./data/</code>.</li>
-          <li><strong>Vercel:</strong> swap SQLite → Turso/Postgres; worker → Vercel Cron.</li>
-          <li><strong>Docker:</strong> mount <code>./data</code> as a volume.</li>
-        </ul>
-
-        <h2 id="links">Links</h2>
-        <ul>
-          <li><Link href="/login">Sign in</Link></li>
-          <li><Link href="/guide">User guide (in-app)</Link></li>
-        </ul>
-
-        <hr />
-        <p className="text-xs text-muted-foreground">
-          Email Automator v2 · Next 16 · React 19 · Drizzle · Auth.js v5 · Groq · 100% self-hosted
-        </p>
-      </main>
+      <footer className="border-t bg-card/30 backdrop-blur">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-6 py-6 text-xs text-muted-foreground">
+          <span>v2 · Next 16 · Drizzle · Auth.js · Groq</span>
+          <div className="flex items-center gap-4">
+            <Link href="/guide" className="hover:text-foreground">Guide</Link>
+            <Link href="/login" className="hover:text-foreground">Sign in</Link>
+            <a href="https://github.com/Surya8991/Email-Automator" target="_blank" rel="noreferrer" className="hover:text-foreground">GitHub</a>
+          </div>
+        </div>
+      </footer>
     </div>
   )
 }
