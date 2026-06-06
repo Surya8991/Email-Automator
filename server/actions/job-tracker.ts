@@ -432,6 +432,7 @@ export async function pruneLeadsByAgeAction(days: number) {
  */
 export async function countLeadsByAgeAction(days: number) {
   const u = await requireUser()
+  if (!rateLimit(`count-age:${u.id}`, 10, 60_000)) return { count: 0 }
   const validDays = [7, 14, 30, 60]
   if (!validDays.includes(days)) return { count: 0 }
   const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1_000)

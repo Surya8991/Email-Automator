@@ -67,6 +67,7 @@ The job tracker is **adapter-first**: dedicated per-vendor fetchers in `server/s
 3. If no adapter (or the adapter returned 0, and it's NOT an RSS-like adapter that legitimately returns 0), fetch the URL via `fetchForAi()` (SSRF-defended) and try **JSON-LD** (`schema.org/JobPosting`) — most modern boards embed Google-Jobs markup. Zero AI cost.
 4. If still empty, fall back to **Groq AI extraction** (`aiExtractJobs`). 8000-char window, strict JSON schema, `llama-3.1-8b-instant` pinned with 1b-preview fallback on 429.
 5. For each `RawJob`:
+   - **15-day age gate** — if `j.postedAt` is older than 15 days, skip. Constant `FIFTEEN_DAYS_AGO = Date.now() - 15 * 24 * 60 * 60 * 1_000`. Matches the `pruneOldLeads()` cutoff so no stale roles accumulate.
    - Compute `fingerprintOf(title, company)` for source-scoped dedup.
    - Compute normalized fields via `server/services/normalize.ts`: `normalizeSalary`, `normalizeLocation`, `crossKey(company, title, locationNorm)`.
    - Cross-board dedup: look up by `(userId, crossKey)` index. If an existing row came from an aggregator (`AGGREGATOR_ADAPTERS` set: `rss`, `remote-ok`, `remotive`, `adzuna`, `jooble`) and the current source is canonical (ATS / company page), the existing row's `sourceId` is rewritten to point at the canonical source and empties are filled — canonical wins. Otherwise skip the insert.

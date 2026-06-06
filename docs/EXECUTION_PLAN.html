@@ -76,14 +76,14 @@
         <td><strong>Source filter shows "0 of 422"</strong> — selecting a source with 0 leads shows confusing empty state instead of helpful message</td>
         <td><span class="file">jobs-client.tsx</span></td>
         <td>Better empty state: "This source has no leads yet — try Fetch new"</td>
-        <td class="status-todo">☐ TODO</td>
+        <td class="status-done">✅ DONE</td>
       </tr>
       <tr>
         <td>B4</td>
         <td><strong>Full refresh blocks; no "cancel" option</strong></td>
         <td><span class="file">jobs-client.tsx + server actions</span></td>
-        <td>Add cancel/abort signal, or at least a dismiss on the progress bar</td>
-        <td class="status-todo">☐ TODO</td>
+        <td>Cancel button on progress bar via cancelledRef = useRef(false); loop checks on each iteration</td>
+        <td class="status-done">✅ DONE</td>
       </tr>
       <tr>
         <td>B5</td>
@@ -159,7 +159,7 @@
   <details>
     <summary>Archive Tab improvements</summary>
     <div class="item"><input type="checkbox" class="cb"><div>Split Applied / Ignored sub-tabs with counts</div></div>
-    <div class="item"><input type="checkbox" class="cb"><div>Restore to New / Saved buttons</div></div>
+    <div class="item"><input type="checkbox" class="cb" checked><div>✅ Restore to New / Saved buttons (two explicit buttons)</div></div>
     <div class="item"><input type="checkbox" class="cb"><div>Show days-since-applied counter</div></div>
     <div class="item"><input type="checkbox" class="cb"><div>Follow-up reminder: amber flag when applied >14 days ago with no update</div></div>
   </details>
@@ -180,8 +180,8 @@
   <h3>U1: Lead Card UI Improvements</h3>
   <span class="badge medium">MEDIUM</span>
   <div class="item"><input type="checkbox" class="cb"><div>Company logo via Clearbit CDN: <code>https://logo.clearbit.com/{domain}</code> — fallback to initials avatar</div></div>
-  <div class="item"><input type="checkbox" class="cb"><div>Color-coded seniority badge (Intern=gray, Junior=blue, Mid=green, Senior=amber, Lead+=red)</div></div>
-  <div class="item"><input type="checkbox" class="cb"><div>Posted-ago relative time: "2 days ago" instead of raw date</div></div>
+  <div class="item"><input type="checkbox" class="cb" checked><div>✅ Color-coded seniority badge (Intern=slate, Junior=blue, Senior+=amber, Exec=emerald)</div></div>
+  <div class="item"><input type="checkbox" class="cb" checked><div>✅ Posted-ago relative time: "today", "yesterday", "3d ago", "2w ago" with full date tooltip</div></div>
   <div class="item"><input type="checkbox" class="cb"><div>Show salary in ₹ equivalent when USD/EUR/GBP (with flag)</div></div>
   <div class="item"><input type="checkbox" class="cb"><div>Cross-board "Seen on N sources" chip on card (already computed, ensure visible)</div></div>
   <div class="item"><input type="checkbox" class="cb"><div>Keyboard shortcut: J/K to navigate leads, Enter to open detail, S to save, I to ignore</div></div>
@@ -215,7 +215,7 @@
       <tr><td>S2</td><td>Rate limits on server actions are in-memory (lost on cold start/scale-out)</td><td><span class="badge medium">MEDIUM</span></td><td>Move rate limit counters to KV (Vercel KV or upstash) or use edge middleware</td></tr>
       <tr><td>S3</td><td>Admin migrate endpoint could be triggered by any admin — no idempotency check</td><td><span class="badge low">LOW</span></td><td>Check migration journal state before running; return "already up-to-date" clearly</td></tr>
       <tr><td>S4</td><td>Description field renders user-supplied HTML via dangerouslySetInnerHTML risk (currently uses text, but ensure no future regression)</td><td><span class="badge medium">MEDIUM</span></td><td>Enforce plaintext-only in stripHtml; add DOMPurify for any future rich-text feature</td></tr>
-      <tr><td>S5</td><td>Job links in detail dialog use target="_blank" without rel="noopener noreferrer"</td><td><span class="badge low">LOW</span></td><td>Add rel="noopener noreferrer" to all external links</td></tr>
+      <tr><td>S5</td><td>Job links in detail dialog use target="_blank" without rel="noopener noreferrer"</td><td><span class="badge low">LOW</span></td><td>✅ DONE — 6 occurrences fixed in jobs-client.tsx</td></tr>
       <tr><td>S6</td><td>Turso auth token visible in .claude/launch.json — should be in .env only</td><td><span class="badge high">HIGH</span></td><td>Remove token from launch.json; use env var reference instead</td></tr>
     </tbody>
   </table>
@@ -228,12 +228,12 @@
   <table>
     <thead><tr><th>File</th><th>What to update</th><th>Status</th></tr></thead>
     <tbody>
-      <tr><td><span class="file">README.md</span></td><td>261 sources, new filter features, delete-by-age, smart fetch, dedup</td><td class="status-todo">☐</td></tr>
-      <tr><td><span class="file">AGENTS.md</span></td><td>New source groups [India]/[Remote], add-more-sources.ts script, backfill-normalize.ts</td><td class="status-todo">☐</td></tr>
-      <tr><td><span class="file">FEATURES.md</span></td><td>Mark new shipped features; add role-category tabs, salary presets, posted-within filter</td><td class="status-todo">☐</td></tr>
-      <tr><td><span class="file">DEPLOYMENT.md</span></td><td>Note that listLeads limit raised; new npm scripts (add-more-sources, backfill-normalize)</td><td class="status-todo">☐</td></tr>
-      <tr><td><span class="file">FUTURE_FEATURES.html</span></td><td>Mark shipped items; add fuzzy dedup, smart fetch, delete-by-age to roadmap</td><td class="status-todo">☐</td></tr>
-      <tr><td><span class="file">OPERATOR_TODO.html</span></td><td>New scripts for adding sources, 261 sources note, Vercel env vars check</td><td class="status-todo">☐</td></tr>
+      <tr><td><span class="file">README.md</span></td><td>261 sources, 15-day filter, 2000 limit, marketing-first sort, seniority badges, delete-by-age</td><td class="status-done">✅ DONE</td></tr>
+      <tr><td><span class="file">AGENTS.md</span></td><td>15-day age gate note in tickSource pipeline steps</td><td class="status-done">✅ DONE</td></tr>
+      <tr><td><span class="file">FEATURES.md</span></td><td>Eighth batch section: 15d filter, 2000 limit, marketing sort, seniority, relative date, delete-by-age, cancel button, restore, security, empty states</td><td class="status-done">✅ DONE</td></tr>
+      <tr><td><span class="file">DEPLOYMENT.md</span></td><td>Job tracker tuning comment block (15-day filter, 2000 limit)</td><td class="status-done">✅ DONE</td></tr>
+      <tr><td><span class="file">FUTURE_FEATURES.html</span></td><td>Added §10 Job Tracker roadmap: kanban, match score, browser extension, CSV import, sparkline, telemetry</td><td class="status-done">✅ DONE</td></tr>
+      <tr><td><span class="file">OPERATOR_TODO.html</span></td><td>§3 fully rewritten: adapters list, 15-day filter, 2000 limit, triage features, Adzuna/Jooble keys</td><td class="status-done">✅ DONE</td></tr>
       <tr><td><span class="file">docs/todo.md</span></td><td>Move completed items to Done; add new pending items from this plan</td><td class="status-todo">☐</td></tr>
     </tbody>
   </table>

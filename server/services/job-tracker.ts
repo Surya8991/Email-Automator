@@ -199,11 +199,12 @@ export async function tickSource(source: JobSource): Promise<{ added: number; st
     const currentAdapterName = adapter?.name ?? ''
     const currentIsAggregator = isAggregator(currentAdapterName)
     let added = 0
-    const TWO_MONTHS_AGO = Date.now() - 60 * 24 * 60 * 60 * 1_000
+    // Only ingest leads posted within 15 days — older listings are stale.
+    const FIFTEEN_DAYS_AGO = Date.now() - 15 * 24 * 60 * 60 * 1_000
     for (const j of jobs.slice(0, batchCap)) {
       if (!skipKwFilter && !keywordsMatch(j.title, j.company ?? '', source.keywords)) continue
       // Skip jobs posted more than 2 months ago — stale and unlikely to be accepting.
-      if (j.postedAt && j.postedAt.getTime() < TWO_MONTHS_AGO) continue
+      if (j.postedAt && j.postedAt.getTime() < FIFTEEN_DAYS_AGO) continue
       const fp = fingerprintOf(j.title, j.company ?? '')
       // Sanitise the link once — strips tracking params, rejects same-as-source
       // and non-http URLs, resolves relative URLs against the source URL.
@@ -316,10 +317,11 @@ export async function tickSource(source: JobSource): Promise<{ added: number; st
   }
 }
 
-/** Delete new/ignored leads older than 30 days. Called by tickAll on every
- *  cron tick. Saved + applied leads are kept forever. */
+/** Delete new/ignored leads older than 15 days. Called by tickAll on every
+ *  cron tick. Saved + applied leads are kept forever. Matches the 15-day
+ *  ingest filter so no stale leads accumulate in the new/ignored piles. */
 export async function pruneOldLeads(): Promise<number> {
-  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+  const cutoff = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000)
   const result = await db.delete(jobLeads)
     .where(and(
       inArray(jobLeads.status, ['new', 'ignored']),

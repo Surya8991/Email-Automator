@@ -133,6 +133,11 @@ DAILY_SEND_LIMIT=50
 ADZUNA_APP_ID=                          # free dev key at developer.adzuna.com
 ADZUNA_APP_KEY=
 JOOBLE_API_KEY=                         # free at jooble.org/api/about
+
+# Job tracker tuning
+# Ingest age filter: only listings posted within 15 days are stored.
+# pruneOldLeads() cron uses the same 15-day cutoff; no extra config needed.
+# Lead list limit: 2000 per status bucket (New / Saved / Applied / Ignored).
 ```
 
 Do **not** set `ALLOW_DEV_SIGNIN=true` in a hosted environment. If you do anyway,

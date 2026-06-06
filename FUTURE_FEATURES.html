@@ -58,6 +58,7 @@
     <li><a href="#growth">Growth &amp; collaboration</a></li>
     <li><a href="#observability">Observability &amp; quality</a></li>
     <li><a href="#commerce">Commerce / billing (if multi-tenant SaaS)</a></li>
+    <li><a href="#jobtracker-roadmap">Job Tracker — next phase</a></li>
   </ol>
 </div>
 
@@ -398,6 +399,81 @@
     <span class="tag low">Low</span><span class="tag size-l">L</span>
     <h3>Marketplace for templates / sequences</h3>
     <p>If multi-tenant, paid template packs. Revenue share to creator. Heavy lift — only justified if the product takes off as SaaS.</p>
+  </div>
+</div>
+
+<!-- ── 10. Job Tracker roadmap ────────────────────────────────────── -->
+<h2 id="jobtracker-roadmap">10. Job Tracker — next phase</h2>
+<p class="muted">Shipped (2026-06-06): 14 adapters · normalization · cross-board dedup · marketing-first sort ·
+  seniority badges · 15-day ingest window · 2 000-lead limit · delete-by-age · cancel button ·
+  restore to New/Saved · <code>rel=noopener noreferrer</code> security fix.</p>
+<div class="grid cols-2">
+
+  <div class="item">
+    <span class="tag high">High</span><span class="tag size-l">L</span>
+    <h3>Pipeline kanban (Huntr-style)</h3>
+    <p>Horizontal columns: New → Saved → Applied → Screen → Interview → Offer → Rejected. Drag-to-move via
+      <code>@dnd-kit/core</code> or a CSS-only "Move to →" dropdown for v1. Per-card: title chip, company,
+      salary chip, follow-up countdown, last-action date.</p>
+    <p class="muted">Requires <code>status</code> enum expansion in the DB schema.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag high">High</span><span class="tag size-m">M</span>
+    <h3>Resume ↔ JD match score (Jobscan-style %)</h3>
+    <p>Tier 1: pure-JS TF-IDF overlap between your resume text and the JD → color-coded chip
+      (green ≥75 / amber 50–74 / red &lt;50). Free, no tokens.
+      Tier 2 (opt-in): Groq <code>llama-3.1-8b-instant</code> returns <code>{score, matchedSkills, missingSkills}</code>
+      cached per <code>(resumeHash, leadId)</code>.</p>
+    <p class="muted">New <code>user_resumes</code> table + <code>/profile</code> upload card.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag high">High</span><span class="tag size-m">M</span>
+    <h3>Follow-up date + overdue pill</h3>
+    <p>New <code>nextFollowUpAt</code> column. When a lead enters Saved, default to <code>seenAt + 3 days</code>.
+      Amber pill when due, red when overdue. Click → date picker. Cron writes one <code>events</code> row
+      per user per day so the topbar bell can surface overdues.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag high">High</span><span class="tag size-m">M</span>
+    <h3>Notes on lead detail dialog</h3>
+    <p>Inline <code>&lt;textarea&gt;</code> auto-saved on blur. Backed by a <code>notes</code> column
+      + <code>setJobLeadNotesAction</code> rate-limited 60/min. Makes Saved leads actually useful as a
+      personal CRM without leaving the app.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag med">Med</span><span class="tag size-l">L</span>
+    <h3>Browser extension — "Save to Tracker" (Simplify-style)</h3>
+    <p>Manifest V3 extension. Content script detects <code>&lt;script type="application/ld+json"&gt;</code>
+      on any JD page, surfaces a floating "Save to Job Tracker" button. Hits new
+      <code>/api/jobs/capture</code> route (auth via API key with scope <code>jobs:write</code>).
+      Fallback: select JD text → Groq extractor.</p>
+    <p class="muted">Works on LinkedIn / Indeed / Glassdoor JD pages without any server-side scraping.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag med">Med</span><span class="tag size-s">S</span>
+    <h3>CSV import of leads</h3>
+    <p>Mirror the contacts import pattern. Route <code>/api/jobs/import</code> with SSE progress. Accepts
+      the same columns the CSV export already emits — migration path for Huntr / Teal / Simplify users.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag med">Med</span><span class="tag size-s">S</span>
+    <h3>Source-yield sparkline on Sources tab</h3>
+    <p>Tiny inline SVG (no charting library) showing leads-per-day over the last 7 days per source.
+      Lets you spot which boards are pulling weight vs going dry.</p>
+  </div>
+
+  <div class="item">
+    <span class="tag low">Low</span><span class="tag size-s">S</span>
+    <h3>JSON-LD extraction-path telemetry</h3>
+    <p>New <code>extractionPath</code> enum column (<code>adapter | jsonld | groq</code>). Widget on
+      <code>/admin → System</code>: 7-day breakdown per host. Target: adapter+jsonld >80% so the Groq
+      bill stays cheap.</p>
   </div>
 </div>
 

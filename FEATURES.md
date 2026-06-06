@@ -3,6 +3,51 @@
 Everything Email Automator currently does, grouped by section.
 Last refreshed: 2026-06-06.
 
+## 🆕 What's new (2026-06-06, eighth batch — Job tracker code review + UX polish)
+
+Full code-review pass on the job tracker: security hardening, UX polish, ingest-age tightening, and new
+delete-by-age + priority-role features.
+
+**15-day ingest filter (was 60 days)**
+- `tickSource` skips any listing whose `postedAt` is older than 15 days — stale roles no longer accumulate.
+- `pruneOldLeads()` cron cutoff reduced from 30 → 15 days to match the ingest window.
+- CLI pull script (`scripts/pull-jobs-now.ts`) uses the same `FIFTEEN_DAYS_AGO` constant.
+
+**Lead limit raised to 2 000 (was 500)**
+- All four `listLeads` calls in `app/(app)/jobs/page.tsx` use `limit=2000`.
+- `listLeads` service-function default bumped accordingly so a future caller without an explicit limit benefits automatically.
+
+**Marketing & DM priority**
+- New tab defaults to `marketing-first` sort — Digital Marketing / Performance / SEO / Paid Media leads pin to the top; newest within each group.
+- 📣 DM badge rendered next to the job title on matching cards via `isMarketingRole(title)`.
+- Role filter tabs show `All / 📣 Marketing (N) / Other (N)` counts computed via `useMemo`.
+
+**Seniority badges on every lead card**
+- `getSeniority(title)` classifies titles into `intern | junior | senior | exec | ''` via a small regex set.
+- Colored inline chip: Intern (slate) / Jr (blue) / Senior+ (amber) / Exec (emerald).
+
+**Relative posted-date on cards**
+- `relativePostedDate(d)` renders "today", "yesterday", "3d ago", "2w ago", "3mo ago" with full date as tooltip `title`.
+
+**Delete-by-age dropdown**
+- New "Delete older than" menu: 7 days / 2 weeks / 1 month / 2 months.
+- Shows lead count per threshold before confirming; closes on outside click.
+- Backed by rate-limited `pruneLeadsByAgeAction(days)` + `countLeadsByAgeAction(days)` server actions (valid days: 7, 14, 30, 60).
+
+**Cancel button for long-running fetches**
+- Progress bar now has a ✕ Cancel button. Uses `cancelledRef = useRef(false)` (no re-render cost) to break mid-loop at each source iteration.
+
+**Restore to New + Restore to Saved (Archive tab)**
+- Split the old single "Restore" into two explicit buttons: "→ New" and "→ Saved".
+- Server action already accepted `'new'` as a valid status — no schema change required.
+
+**Security fixes**
+- All 6 external `<a>` tags changed from `rel="noreferrer"` → `rel="noopener noreferrer"`.
+- Removed unused `RefreshCcw` import (dead-code cleanup).
+
+**Better empty states**
+- Three distinct messages: no-sources-yet / source-fetched-but-no-leads / filter-matches-nothing.
+
 ## 🆕 What's new (2026-06-06, seventh batch — Job tracker adapter rewrite + normalization)
 
 The job tracker stopped paying Groq tokens for adapter-served boards and learned how to dedup the same role across multiple boards.

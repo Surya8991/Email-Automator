@@ -1,10 +1,10 @@
 'use client'
-import { useEffect, useMemo, useState, useTransition } from 'react'
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import {
   Plus, RefreshCw, Trash2, ExternalLink, Bookmark, Briefcase, CheckCircle2, XCircle, Building2,
-  Search, Download, MailPlus, Pause, Play, Pencil, RefreshCcw, Archive, Clock,
+  Search, Download, MailPlus, Pause, Play, Pencil, Archive, Clock,
   MapPin, IndianRupee, CalendarDays, Tag, Eye, AlertTriangle, Zap, RotateCcw, ChevronDown,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -71,6 +71,7 @@ export function JobsClient({
   // outreach analytics stays separate from "I'm not interested" piles.
   const [archiveSub, setArchiveSub] = useState<'applied' | 'ignored'>('applied')
   const [progress, setProgress] = useState<RunProgress | null>(null)
+  const cancelledRef = useRef(false)
   const running = progress !== null
 
   // ── Orchestrated actions ─────────────────────────────────────────────────
@@ -78,9 +79,11 @@ export function JobsClient({
     const { sources: srcs } = await getActiveSourcesAction()
     if (!srcs.length) { toast.info('No active sources'); return }
     let added = 0, failed = 0
+    cancelledRef.current = false
     setProgress({ label: 'Fetch new', phase: 'Starting…', total: srcs.length, done: 0, stat: '+0 new' })
     try {
       for (const s of srcs) {
+        if (cancelledRef.current) break
         setProgress((p) => p && { ...p, phase: `Fetching "${s.label}"…` })
         const r = await tickSingleSourceAction(s.id, false)
         added += r.added ?? 0
@@ -88,7 +91,8 @@ export function JobsClient({
         setProgress((p) => p && { ...p, done: p.done + 1, stat: `+${added} new${failed ? ` · ${failed} failed` : ''}` })
       }
       const msg = `+${added} new lead${added === 1 ? '' : 's'} from ${srcs.length} source${srcs.length === 1 ? '' : 's'}`
-      if (failed) toast.warning(`${msg} · ${failed} failed`)
+      if (cancelledRef.current) toast.info(`Cancelled — ${msg} so far`)
+      else if (failed) toast.warning(`${msg} · ${failed} failed`)
       else toast.success(msg)
       router.refresh()
     } finally {
@@ -100,9 +104,11 @@ export function JobsClient({
     const { sources: srcs } = await getActiveSourcesAction()
     if (!srcs.length) { toast.info('No active sources'); return }
     let added = 0, failed = 0
+    cancelledRef.current = false
     setProgress({ label: 'Full refresh', phase: 'Starting…', total: srcs.length, done: 0, stat: '+0 new' })
     try {
       for (const s of srcs) {
+        if (cancelledRef.current) break
         setProgress((p) => p && { ...p, phase: `Refreshing "${s.label}"…` })
         const r = await tickSingleSourceAction(s.id, true)
         added += r.added ?? 0
@@ -110,7 +116,8 @@ export function JobsClient({
         setProgress((p) => p && { ...p, done: p.done + 1, stat: `+${added} new${failed ? ` · ${failed} failed` : ' · enriching…'}` })
       }
       const msg = `Full refresh done · ${srcs.length} sources · +${added} new leads`
-      if (failed) toast.warning(`${msg} · ${failed} failed`)
+      if (cancelledRef.current) toast.info(`Cancelled — ${msg} so far`)
+      else if (failed) toast.warning(`${msg} · ${failed} failed`)
       else toast.success(`${msg} · existing leads enriched`)
       router.refresh()
     } finally {
@@ -123,9 +130,11 @@ export function JobsClient({
     if (!leads.length) { toast.info('No leads with links to check'); return }
     const BATCH = 20
     let dead = 0
+    cancelledRef.current = false
     setProgress({ label: 'Fix 404s', phase: 'Checking links…', total: leads.length, done: 0, stat: '0 expired' })
     try {
       for (let i = 0; i < leads.length; i += BATCH) {
+        if (cancelledRef.current) break
         const batch = leads.slice(i, i + BATCH).map((l) => l.id)
         const r = await checkLinksBatchAction(batch)
         dead += r.dead ?? 0
@@ -194,9 +203,17 @@ export function JobsClient({
         <div className="rounded-lg border bg-card px-4 py-3 space-y-2 shadow-sm">
           <div className="flex items-center justify-between">
             <span className="text-sm font-semibold">{progress.label}</span>
-            <span className="text-xs font-medium tabular-nums text-muted-foreground">
-              {progress.done} / {progress.total} &nbsp;·&nbsp; {progress.stat}
-            </span>
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-medium tabular-nums text-muted-foreground">
+                {progress.done} / {progress.total} &nbsp;·&nbsp; {progress.stat}
+              </span>
+              <button
+                type="button"
+                onClick={() => { cancelledRef.current = true }}
+                className="text-xs text-muted-foreground hover:text-destructive ea-transition"
+                title="Cancel — stops after the current source finishes"
+              >✕ Cancel</button>
+            </div>
           </div>
           <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
             <div
@@ -620,7 +637,7 @@ function SourcesTable({
                       </span>
                     )}
                   </div>
-                  <a href={s.url} target="_blank" rel="noreferrer"
+                  <a href={s.url} target="_blank" rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary">
                     <span className="truncate max-w-[22rem]">{s.url}</span>
                     <ExternalLink className="h-3 w-3 shrink-0" />
@@ -801,7 +818,7 @@ function JobDetailDialog({
             ) : (
               <div className="rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground">
                 No description extracted.{lead.link ? (
-                  <> <a href={lead.link} target="_blank" rel="noreferrer" className="ml-1 text-primary underline underline-offset-2">Open the original listing</a> for the full JD.</>
+                  <> <a href={lead.link} target="_blank" rel="noopener noreferrer" className="ml-1 text-primary underline underline-offset-2">Open the original listing</a> for the full JD.</>
                 ) : ' Open the original listing for the full JD.'}
               </div>
             )}
@@ -841,7 +858,7 @@ function JobDetailDialog({
               <div>
                 <dt className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Source</dt>
                 <dd>
-                  <a href={src.url} target="_blank" rel="noreferrer"
+                  <a href={src.url} target="_blank" rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-primary hover:underline">
                     {src.label} <ExternalLink className="h-3 w-3" />
                   </a>
@@ -852,7 +869,7 @@ function JobDetailDialog({
               <div className="col-span-2 sm:col-span-1">
                 <dt className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Original listing</dt>
                 <dd>
-                  <a href={lead.link} target="_blank" rel="noreferrer"
+                  <a href={lead.link} target="_blank" rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-primary hover:underline text-xs">
                     View full JD <ExternalLink className="h-3 w-3 shrink-0" />
                   </a>
@@ -865,7 +882,7 @@ function JobDetailDialog({
         <DialogFooter className="shrink-0 flex-wrap gap-2 border-t pt-4">
           {lead.link ? (
             <Button variant="outline" asChild className="mr-auto">
-              <a href={lead.link} target="_blank" rel="noreferrer">
+              <a href={lead.link} target="_blank" rel="noopener noreferrer">
                 <ExternalLink className="mr-1.5 h-4 w-4" /> View job posting
               </a>
             </Button>
@@ -919,6 +936,44 @@ function decodeEntities(s: string): string {
     .replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&#39;/g, "'")
     .replace(/&nbsp;/g, ' ').replace(/&apos;/g, "'")
     .replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
+// ── Seniority classifier ──────────────────────────────────────────────────────
+// Returns a label + color for seniority chips on lead cards. Derived from
+// title only (no DB column needed). Empty string = no badge (mid-level).
+const SENIOR_RE  = /\b(senior|sr\.?|lead|staff|principal|head of|director|vp |vice president|chief|founder)/i
+const JUNIOR_RE  = /\b(junior|jr\.?|associate|grad(uate)?|entry.?level|fresher|trainee)/i
+const INTERN_RE  = /\b(intern|internship)/i
+const EXEC_RE    = /\b(manager|executive|specialist|analyst|strategist)/i
+
+type SeniorityLevel = 'intern' | 'junior' | 'senior' | 'exec' | ''
+function getSeniority(title: string): SeniorityLevel {
+  if (INTERN_RE.test(title))  return 'intern'
+  if (JUNIOR_RE.test(title))  return 'junior'
+  if (SENIOR_RE.test(title))  return 'senior'
+  if (EXEC_RE.test(title))    return 'exec'
+  return ''
+}
+
+const SENIORITY_STYLE: Record<SeniorityLevel, { label: string; cls: string }> = {
+  intern: { label: 'Intern',  cls: 'bg-slate-500/10 text-slate-600 dark:text-slate-400' },
+  junior: { label: 'Jr',      cls: 'bg-blue-500/10 text-blue-600 dark:text-blue-400' },
+  senior: { label: 'Senior+', cls: 'bg-amber-500/10 text-amber-600 dark:text-amber-400' },
+  exec:   { label: 'Exec',    cls: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' },
+  '':     { label: '',        cls: '' },
+}
+
+// ── Relative time for posted date on lead cards ───────────────────────────────
+function relativePostedDate(d: Date | null): string {
+  if (!d) return ''
+  const diffMs  = Date.now() - new Date(d).getTime()
+  const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1_000))
+  if (diffDays === 0) return 'today'
+  if (diffDays === 1) return 'yesterday'
+  if (diffDays < 7)   return `${diffDays}d ago`
+  if (diffDays < 30)  return `${Math.round(diffDays / 7)}w ago`
+  if (diffDays < 365) return `${Math.round(diffDays / 30)}mo ago`
+  return `${Math.round(diffDays / 365)}y ago`
 }
 
 // ── Leads Table ──────────────────────────────────────────────────────────────
@@ -1061,6 +1116,13 @@ function LeadsTable({
     return m
   }, [leads])
 
+  // Memoized role counts for the tab badges — avoids triple .filter() each render.
+  const roleCounts = useMemo(() => ({
+    all:       leads.length,
+    marketing: leads.filter((l) => isMarketingRole(l.title)).length,
+    other:     leads.filter((l) => !isMarketingRole(l.title)).length,
+  }), [leads])
+
   const pageCount = Math.ceil(filtered.length / PAGE_SIZE)
   const visible = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
   const sourceById = useMemo(() => new Map(sources.map((s) => [s.id, s])), [sources])
@@ -1078,10 +1140,10 @@ function LeadsTable({
     })
   }
 
-  function setStatus(id: number, next: 'saved' | 'ignored' | 'applied') {
+  function setStatus(id: number, next: 'new' | 'saved' | 'ignored' | 'applied') {
     start(async () => {
       await setJobLeadStatusAction(id, next)
-      toast.success(`Marked ${next}`)
+      toast.success(`Moved to ${next}`)
       router.refresh()
     })
   }
@@ -1125,9 +1187,9 @@ function LeadsTable({
       {/* ── Role-category tabs: Marketing / All / Others ── */}
       <div className="flex items-center gap-1 border-b pb-2">
         {([
-          ['all',       'All roles',                leads.length],
-          ['marketing', '📣 Marketing / DM',        leads.filter(l => isMarketingRole(l.title)).length],
-          ['other',     'Others',                   leads.filter(l => !isMarketingRole(l.title)).length],
+          ['all',       'All roles',       roleCounts.all],
+          ['marketing', '📣 Marketing / DM', roleCounts.marketing],
+          ['other',     'Others',           roleCounts.other],
         ] as const).map(([key, lbl, cnt]) => (
           <button key={key} type="button"
             onClick={() => setRoleFilter(key)}
@@ -1374,10 +1436,14 @@ function LeadsTable({
       {filtered.length === 0 ? (
         <div className="rounded-md border bg-card p-10 text-center text-sm text-muted-foreground">
           {leads.length === 0
-            ? 'No leads here yet. Refresh a source to pull listings.'
-            : (q || sourceFilter != null || companyFilter || normLocFilter || activeFilterCount > 0)
-              ? 'No leads match the current filters.'
-              : 'No leads found.'}
+            ? (status === 'new'
+                ? 'No new leads yet — click Fetch new or add a source to get started.'
+                : 'No leads here yet.')
+            : sourceFilter != null && !q && !companyFilter && !normLocFilter && activeFilterCount <= 1
+              ? 'This source has no leads yet — try Fetch new or Full refresh on it.'
+              : (q || sourceFilter != null || companyFilter || normLocFilter || activeFilterCount > 0)
+                ? 'No leads match the current filters — try clearing some.'
+                : 'No leads found.'}
         </div>
       ) : (
         <div className="rounded-md border overflow-hidden">
@@ -1427,13 +1493,18 @@ function LeadsTable({
                     className="min-w-0 flex-1 text-left"
                     onClick={() => setDetailLead(l)}
                   >
-                    {/* Title + role badge + cross-board duplicate badge */}
+                    {/* Title + role badge + seniority badge + cross-board duplicate badge */}
                     <div className="font-semibold text-sm leading-snug group-hover:text-primary ea-transition">
                       {isMarketingRole(l.title) ? (
-                        <span className="mr-1.5 inline-flex items-center rounded-full bg-fuchsia-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-fuchsia-600 dark:text-fuchsia-400">
+                        <span className="mr-1 inline-flex items-center rounded-full bg-fuchsia-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-fuchsia-600 dark:text-fuchsia-400">
                           📣 DM
                         </span>
                       ) : null}
+                      {(() => { const sv = getSeniority(l.title); return sv ? (
+                        <span className={`mr-1 inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${SENIORITY_STYLE[sv].cls}`}>
+                          {SENIORITY_STYLE[sv].label}
+                        </span>
+                      ) : null })()}
                       {l.title}
                       {l.description ? null : (
                         <span className="ml-2 text-[10px] font-normal text-muted-foreground italic">no JD</span>
@@ -1471,9 +1542,9 @@ function LeadsTable({
                         </span>
                       ) : null}
                       {l.postedAt ? (
-                        <span className="inline-flex items-center gap-1">
+                        <span className="inline-flex items-center gap-1" title={new Date(l.postedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}>
                           <CalendarDays className="h-3 w-3 shrink-0" />
-                          {new Date(l.postedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                          {relativePostedDate(l.postedAt)}
                         </span>
                       ) : null}
                       {src ? (
@@ -1507,9 +1578,12 @@ function LeadsTable({
                     {isArchived ? (
                       <>
                         <Button size="sm" variant="outline" disabled={busy || pending}
-                          title="Restore to Saved tab"
-                          onClick={() => setStatus(l.id, 'saved')}>
-                          <RotateCcw className="h-3.5 w-3.5 mr-1" /> Restore
+                          title="Restore to New tab" onClick={() => setStatus(l.id, 'new')}>
+                          <RotateCcw className="h-3 w-3 mr-1" /> New
+                        </Button>
+                        <Button size="sm" variant="outline" disabled={busy || pending}
+                          title="Restore to Saved tab" onClick={() => setStatus(l.id, 'saved')}>
+                          <Bookmark className="h-3 w-3 mr-1" /> Saved
                         </Button>
                       </>
                     ) : (
@@ -1528,7 +1602,7 @@ function LeadsTable({
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                     {l.link ? (
-                      <a href={l.link} target="_blank" rel="noreferrer"
+                      <a href={l.link} target="_blank" rel="noopener noreferrer"
                         className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground ea-transition"
                         title="Open original listing">
                         <ExternalLink className="h-3.5 w-3.5" />

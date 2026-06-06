@@ -175,6 +175,13 @@ DATABASE_URL='libsql://YOUR-DB.turso.io' TURSO_AUTH_TOKEN='eyJ...' npm run db:mi
   fresh listings, and surfaces them in <code>/jobs</code> for triage. Once the migration in section
   1 is applied, here is the operator-side checklist to make it useful:</p>
 
+<div class="ok-box">
+  <strong>Adapters (no AI cost for supported boards):</strong> Greenhouse · Lever · Ashby · Workable ·
+  SmartRecruiters · BreezyHR · Recruitee · Personio · Teamtailor · Workday · Naukri · Foundit ·
+  Internshala · Remote OK · Remotive · Adzuna · Jooble · RSS. These hit a structured JSON API directly
+  — zero Groq tokens. Only boards without an adapter fall through to the AI extractor.
+</div>
+
 <h3>3.1 &mdash; Wire the cron tick</h3>
 <p>The endpoint is <code>GET /api/cron/job-tracker?secret=$CRON_SECRET</code>. Add it to your
   Vercel <code>vercel.json</code> alongside the existing scheduler tick. Recommended cadence: hourly.
@@ -196,48 +203,69 @@ DATABASE_URL='libsql://YOUR-DB.turso.io' TURSO_AUTH_TOKEN='eyJ...' npm run db:mi
 <p>The <em>Add from preset</em> button in <code>/jobs</code> ships with 30+ curated boards across
   seven categories:</p>
 <ul>
-  <li><strong>India</strong> (12 boards, featured) &mdash; Naukri, Foundit, Shine, TimesJobs, Hirist,
-    Cutshort, Instahyre, iimjobs, Apna, Indeed IN, Glassdoor IN, plus the LinkedIn IN search.</li>
-  <li><strong>Marketing / SEO / Paid Media</strong> (10 boards) &mdash; Built In, MarTech Jobs, The Drum,
-    MarketerHire, Workable, Mediabistro, MarketingHire, Powderkeg, Talent.com, GrowthHackers.</li>
+  <li><strong>Public APIs (no AI cost)</strong> (featured, first) &mdash; Greenhouse / Lever / Ashby /
+    Workable / SmartRecruiters / BreezyHR / Adzuna / Jooble / Remote OK / Remotive boards backed by
+    real structured JSON APIs. No Groq tokens consumed.</li>
+  <li><strong>India</strong> (featured) &mdash; Naukri, Foundit, Shine, TimesJobs, Cutshort,
+    Instahyre, iimjobs, Internshala, Indeed IN, NaukriGulf.</li>
+  <li><strong>Marketing / SEO / Paid Media</strong> &mdash; Built In, The Drum, MarketingHire,
+    Workable (keyword), Mediabistro, Powderkeg.</li>
   <li><strong>General aggregators</strong>, <strong>Remote-first</strong>, <strong>Startup-focused</strong>,
-    plus Greenhouse / Lever / careers-page pass-throughs.</li>
+    plus paste-a-company-URL / paste-a-careers-page pass-throughs.</li>
 </ul>
 
-<h3>3.4 &mdash; Multi-role batch add (new)</h3>
+<h3>3.4 &mdash; Multi-role batch add</h3>
 <p>The preset picker accepts a comma-separated role list. Typing
   <code>SEO, Performance Marketing, Paid Media</code> in the Role field creates three sources in one
-  click, all sharing the same location + keyword line. Max 10 per batch to keep the SSRF fetcher
-  honest. Single-role usage is unchanged.</p>
+  click, all sharing the same location + keyword line. Max 10 per batch. Single-role usage unchanged.</p>
 
 <h3>3.5 &mdash; Keyword filter is optional and additive</h3>
 <p>The Keywords field on every source is a comma-separated allow-list. A listing is kept only if its
-  title or company contains <em>at least one</em> of the keywords. Leave the field empty to capture
-  everything the board returns. The picker pre-populates a sensible default per board (the role plus
-  domain-specific synonyms) so you usually don't need to change it.</p>
+  title or company contains <em>at least one</em> of the keywords. Leave empty to capture everything
+  the board returns. The picker pre-populates sensible defaults per board.</p>
 
-<h3>3.6 &mdash; Triage flow</h3>
-<p>New listings land in the <strong>New</strong> tab. Three per-row actions:</p>
+<h3>3.6 &mdash; 15-day ingest window</h3>
+<p>The tracker only stores listings posted <em>within the last 15 days</em>. Older postings are silently
+  skipped at ingest time. The nightly <code>pruneOldLeads()</code> cron also deletes New/Ignored leads
+  older than 15 days so your pipeline stays clean automatically. No operator action needed.</p>
+
+<h3>3.7 &mdash; Triage flow &amp; new features</h3>
+<p>New listings land in the <strong>New</strong> tab sorted <em>Marketing-first</em> (📣 DM badge on matching titles)
+  then newest. Per-row actions:</p>
 <ul>
   <li><strong>Save</strong> &mdash; move to the <em>Saved</em> tray to revisit later.</li>
-  <li><strong>Applied</strong> &mdash; mark as applied; leaves the New tray, shows up in <em>Archive</em>.</li>
-  <li><strong>Ignore</strong> &mdash; dismiss; same destination as Applied.</li>
+  <li><strong>Applied</strong> &mdash; mark as applied; shows up in <em>Archive → Applied</em>.</li>
+  <li><strong>Ignore</strong> &mdash; dismiss; shows up in <em>Archive → Ignored</em>.</li>
+  <li><strong>→ New / → Saved</strong> (Archive tab) &mdash; restore an archived lead back to New or Saved.</li>
 </ul>
-<p>Bulk-select via the checkbox column to triage in batches. Use the <em>Source</em> dropdown to
-  filter by which board a lead came from.</p>
+<p>Bulk-select via the checkbox column. Use the <em>Source</em> dropdown to filter by board.
+  Seniority chips (Intern / Jr / Senior+ / Exec) and relative posted date appear on every card.</p>
 
-<h3>3.7 &mdash; Verifying a preset actually works</h3>
+<p><strong>Delete-by-age:</strong> the <em>Delete older than</em> dropdown (7 d / 2 w / 1 m / 2 m)
+  in the toolbar previews how many New + Ignored leads will be removed before confirming.</p>
+
+<h3>3.8 &mdash; Verifying a preset actually works</h3>
 <p>After adding a source, click the <em>Refresh now</em> (↻) button on its row. Three outcomes:</p>
 <ol>
   <li><strong>+N new leads</strong> toast &mdash; preset and extractor both work.</li>
-  <li><strong>No new leads</strong> toast &mdash; the fetch succeeded but the AI didn't find listings.
+  <li><strong>No new leads</strong> toast &mdash; the fetch succeeded but found nothing posted in the last 15 days.
     Check the URL in a browser; if it shows jobs to a logged-out user, retry once more.</li>
   <li><strong>Toast with error message</strong> &mdash; the fetch failed (auth-walled, 4xx/5xx, SSRF reject).
     The error string is stored on the source row's <em>Last error</em> column.</li>
 </ol>
-<p class="muted">LinkedIn / Glassdoor search results are heavily login-walled in production. Prefer
-  public anonymous URLs (e.g. <code>linkedin.com/jobs/search/?keywords=PM</code> without a session) or
-  use a company's own careers page for the highest hit rate.</p>
+<p class="muted">LinkedIn / Glassdoor search results are heavily login-walled. Prefer public anonymous
+  URLs or a company's own ATS careers page (Greenhouse / Lever / Ashby) for the highest hit rate.</p>
+
+<h3>3.9 &mdash; Optional: Adzuna + Jooble meta-aggregators</h3>
+<p>Two additional meta-aggregator presets are available if you register free API keys:</p>
+<ul>
+  <li><strong>Adzuna</strong> &mdash; free dev key at <a href="https://developer.adzuna.com" target="_blank" rel="noopener noreferrer">developer.adzuna.com</a> (250 req/day).
+    Set <code>ADZUNA_APP_ID</code> + <code>ADZUNA_APP_KEY</code> in Vercel env.</li>
+  <li><strong>Jooble</strong> &mdash; free at <a href="https://jooble.org/api/about" target="_blank" rel="noopener noreferrer">jooble.org/api/about</a> (~500 req/day).
+    Set <code>JOOBLE_API_KEY</code> in Vercel env.</li>
+</ul>
+<p class="muted">Both adapters log a one-shot warning and return zero results when their keys are missing —
+  the rest of the tracker keeps working normally.</p>
 
 <!-- HARDENING -->
 <h2 id="hardening"><span class="step-num">4</span> Recommended hardening <span class="pill recommended">soon</span></h2>

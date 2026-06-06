@@ -16,7 +16,7 @@ Drizzle ORM on SQLite (better-sqlite3 local / Turso on Vercel) · Auth.js v5
 
 ## Highlights
 
-- 💼 **AI Job Tracker** — 14 dedicated adapters (Greenhouse, Lever, Ashby, Workable, SmartRecruiters, Breezy HR, Recruitee, Personio, Teamtailor, Workday, Naukri, Foundit, Internshala, Remote OK, Remotive, Adzuna, Jooble) + JSON-LD + AI fallback. Salary / location / remote-scope normalization at ingest. Cross-board dedup (canonical adapters win over aggregators). New → Saved → Applied / Ignored triage with Restore.
+- 💼 **AI Job Tracker** — 14 dedicated adapters (Greenhouse, Lever, Ashby, Workable, SmartRecruiters, Breezy HR, Recruitee, Personio, Teamtailor, Workday, Naukri, Foundit, Internshala, Remote OK, Remotive, Adzuna, Jooble) + JSON-LD + AI fallback. Salary / location / remote-scope normalization at ingest. Cross-board dedup (canonical adapters win over aggregators). **15-day ingest window** keeps only fresh roles. **2 000-lead limit** per status bucket. Marketing-first sort with 📣 DM badge + seniority chips (Intern / Jr / Senior+ / Exec). Relative posted date. Delete-by-age (7 d / 2 w / 1 m / 2 m). Cancel button for mid-run fetches. New → Saved → Applied / Ignored triage with Restore to New or Saved.
 - 🎨 **Polished UI** — consistent `PageHeader` + `EmptyState` everywhere, 5-color accent picker, dark/light themes, PWA-installable.
 - ⚡ **Smart draft creation** — pick template + filters (platform, job title, location, skip-recently-contacted), live eligible counter + sample preview.
 - 📅 **Schedule from drafts** — convert selected drafts straight into staggered scheduled sends.

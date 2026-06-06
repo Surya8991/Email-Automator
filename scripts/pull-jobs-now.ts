@@ -26,7 +26,8 @@ function fingerprint(title: string, company: string) { return `${norm(title)}|${
 
 const TRACKING_PARAMS = /^(utm_|fbclid$|gclid$|mc_eid$|mc_cid$|src$|ref$|source$|lever-source$|gh_src$|origin$|trk$)/i
 
-const TWO_MONTHS_AGO = Date.now() - 60 * 24 * 60 * 60 * 1_000
+// Only ingest leads posted within the last 15 days.
+const FIFTEEN_DAYS_AGO = Date.now() - 15 * 24 * 60 * 60 * 1_000
 
 function sanitiseLink(raw: string, sourceUrl: string): string {
   if (!raw) return ''
@@ -345,7 +346,7 @@ async function pullSource(src: Source): Promise<{ added: number; status: string 
         if (!kws.some(kw => hay.includes(kw))) continue
       }
       // Skip jobs posted more than 2 months ago — stale.
-      if (j.postedAt && j.postedAt.getTime() < TWO_MONTHS_AGO) continue
+      if (j.postedAt && j.postedAt.getTime() < FIFTEEN_DAYS_AGO) continue
       const fp = fingerprint(j.title, j.company ?? '')
       const cleanLink = sanitiseLink(j.link ?? '', url)
       const cleanDesc = stripHtml(j.description ?? '')
