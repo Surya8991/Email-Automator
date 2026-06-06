@@ -4,7 +4,7 @@ import { and, eq, inArray, ne } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { requireUser } from '@/auth'
 import { db } from '@/server/db/client'
-import { jobLeads, contacts as contactsTbl, drafts as draftsTbl } from '@/server/db/schema'
+import { jobLeads, jobSources, contacts as contactsTbl, drafts as draftsTbl } from '@/server/db/schema'
 import * as svc from '@/server/services/job-tracker'
 import { validateUrlForFetch, fetchForAi } from '@/server/services/ai-generate'
 import { aiExtractJobsPublic, fetchNaukriApiPublic } from '@/server/services/job-tracker'
@@ -343,6 +343,102 @@ export async function checkDeadLinksAction() {
 
   revalidatePath('/jobs')
   return { ok: true as const, dead: deadIds.length, checked: leads.length }
+}
+
+// ── Per-step actions used by client-side progress orchestration ──────────────
+// Breaking the monolithic refresh/check into small callables keeps each
+// server-action under Vercel's function timeout, and lets the client report
+// real per-source / per-batch progress.
+
+/** Return the list of active sources for the current user (id + label only). */
+export async function getActiveSourcesAction() {
+  const u = await requireUser()
+  const sources = await db.select({ id: jobSources.id, label: jobSources.label })
+    .from(jobSources)
+    .where(and(eq(jobSources.userId, u.id), eq(jobSources.active, true)))
+  return { sources }
+}
+
+/**
+ * Tick a single source. When fullMode=true the source's lastFetchedAt is
+ * reset to null before fetching so tickSource uses the first-fetch page
+ * budget (500 Naukri results) and enriches existing leads on conflict.
+ */
+export async function tickSingleSourceAction(sourceId: number, fullMode = false) {
+  const u = await requireUser()
+  if (fullMode) {
+    await db.update(jobSources)
+      .set({ lastFetchedAt: null })
+      .where(and(eq(jobSources.id, sourceId), eq(jobSources.userId, u.id)))
+  }
+  const [source] = await db.select().from(jobSources)
+    .where(and(eq(jobSources.id, sourceId), eq(jobSources.userId, u.id)))
+  if (!source) return { added: 0, status: 'not-found' as const }
+  try {
+    const r = await svc.tickSource(source)
+    revalidatePath('/jobs')
+    return { added: r.added, status: r.status }
+  } catch (e) {
+    return { added: 0, status: 'error' as const, error: e instanceof Error ? e.message : 'failed' }
+  }
+}
+
+/** Return all new/saved leads that have a link (for client-side 404 checks). */
+export async function getLeadsWithLinksAction() {
+  const u = await requireUser()
+  const leads = await db.select({ id: jobLeads.id, link: jobLeads.link })
+    .from(jobLeads)
+    .where(and(
+      eq(jobLeads.userId, u.id),
+      inArray(jobLeads.status, ['new', 'saved']),
+      ne(jobLeads.link, ''),
+    ))
+  return { leads }
+}
+
+/**
+ * Check a batch of lead IDs for dead links and ignore them.
+ * Called repeatedly by the client in batches of ~20 to show progress.
+ */
+export async function checkLinksBatchAction(leadIds: number[]) {
+  const u = await requireUser()
+  if (!leadIds.length) return { dead: 0 }
+
+  const leads = await db.select({ id: jobLeads.id, link: jobLeads.link })
+    .from(jobLeads)
+    .where(and(eq(jobLeads.userId, u.id), inArray(jobLeads.id, leadIds)))
+
+  const DEAD_STATUS  = new Set([404, 410, 400])
+  const DEAD_PATTERN = /(\/404|not.found|job.not.available|position.closed|listing.expired|no.longer.available|job.filled|job.closed)/i
+  const CHECK_UA     = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36'
+
+  async function isDead(url: string): Promise<boolean> {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 6_000)
+    try {
+      const r = await fetch(url, {
+        method: 'HEAD', signal: ctrl.signal,
+        headers: { 'User-Agent': CHECK_UA }, redirect: 'follow',
+      }).catch(() => null)
+      if (r && (DEAD_STATUS.has(r.status) || DEAD_PATTERN.test(r.url))) return true
+      return false
+    } catch { return false }
+    finally { clearTimeout(timer) }
+  }
+
+  const deadIds: number[] = []
+  await Promise.all(leads.map(async (l) => {
+    if (await isDead(l.link)) deadIds.push(l.id)
+  }))
+
+  if (deadIds.length > 0) {
+    await db.update(jobLeads)
+      .set({ status: 'ignored' })
+      .where(and(eq(jobLeads.userId, u.id), inArray(jobLeads.id, deadIds)))
+    revalidatePath('/jobs')
+  }
+
+  return { dead: deadIds.length }
 }
 
 export async function validateJobSourceAction(url: string, keywords: string) {

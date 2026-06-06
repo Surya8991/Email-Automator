@@ -19,8 +19,9 @@ import {
   bulkDeleteJobSourcesAction, bulkToggleSourceActiveAction,
   refreshJobSourceAction, setJobLeadStatusAction,
   leadToDraftAction, bulkSetJobLeadStatusAction, toggleJobSourceActiveAction,
-  editJobSourceAction, refreshAllForUserAction, fullRefreshAllAction,
-  checkDeadLinksAction, validateJobSourceAction,
+  editJobSourceAction, validateJobSourceAction,
+  getActiveSourcesAction, tickSingleSourceAction,
+  getLeadsWithLinksAction, checkLinksBatchAction,
 } from '@/server/actions/job-tracker'
 import { JobPresetPicker } from './preset-picker'
 
@@ -35,6 +36,14 @@ interface LeadRow {
   postedAt: Date | null; salary: string; description: string
 }
 
+interface RunProgress {
+  label: string    // "Fetch new" | "Full refresh" | "Fix 404s"
+  phase: string    // current step description shown under the bar
+  total: number
+  done: number
+  stat: string     // "+12 new" | "8 expired found"
+}
+
 export function JobsClient({
   sources, leadsNew, leadsSaved, leadsArchive,
 }: {
@@ -43,6 +52,59 @@ export function JobsClient({
   const router = useRouter()
   const [pending, start] = useTransition()
   const [tab, setTab] = useState<'new' | 'saved' | 'archive' | 'sources'>(sources.length === 0 ? 'sources' : 'new')
+  const [progress, setProgress] = useState<RunProgress | null>(null)
+  const running = progress !== null
+
+  // ── Orchestrated actions ─────────────────────────────────────────────────
+  async function runFetchNew() {
+    const { sources: srcs } = await getActiveSourcesAction()
+    if (!srcs.length) { toast.info('No active sources'); return }
+    let added = 0
+    setProgress({ label: 'Fetch new', phase: 'Starting…', total: srcs.length, done: 0, stat: '+0 new' })
+    for (const s of srcs) {
+      setProgress((p) => p && { ...p, phase: `Fetching "${s.label}"…` })
+      const r = await tickSingleSourceAction(s.id, false)
+      added += r.added ?? 0
+      setProgress((p) => p && { ...p, done: p.done + 1, stat: `+${added} new` })
+    }
+    setProgress(null)
+    toast.success(`+${added} new lead${added === 1 ? '' : 's'} from ${srcs.length} source${srcs.length === 1 ? '' : 's'}`)
+    router.refresh()
+  }
+
+  async function runFullRefresh() {
+    const { sources: srcs } = await getActiveSourcesAction()
+    if (!srcs.length) { toast.info('No active sources'); return }
+    let added = 0
+    setProgress({ label: 'Full refresh', phase: 'Starting…', total: srcs.length, done: 0, stat: '+0 new' })
+    for (const s of srcs) {
+      setProgress((p) => p && { ...p, phase: `Refreshing "${s.label}"…` })
+      const r = await tickSingleSourceAction(s.id, true)
+      added += r.added ?? 0
+      setProgress((p) => p && { ...p, done: p.done + 1, stat: `+${added} new · enriching…` })
+    }
+    setProgress(null)
+    toast.success(`Full refresh done · ${srcs.length} sources · +${added} new leads · existing leads enriched`)
+    router.refresh()
+  }
+
+  async function runFix404s() {
+    const { leads } = await getLeadsWithLinksAction()
+    if (!leads.length) { toast.info('No leads with links to check'); return }
+    const BATCH = 20
+    let dead = 0
+    setProgress({ label: 'Fix 404s', phase: 'Checking links…', total: leads.length, done: 0, stat: '0 expired' })
+    for (let i = 0; i < leads.length; i += BATCH) {
+      const batch = leads.slice(i, i + BATCH).map((l) => l.id)
+      const r = await checkLinksBatchAction(batch)
+      dead += r.dead
+      setProgress((p) => p && { ...p, done: Math.min(i + BATCH, leads.length), stat: `${dead} expired` })
+    }
+    setProgress(null)
+    if (dead === 0) toast.success(`All ${leads.length} links alive`)
+    else toast.warning(`Removed ${dead} expired listing${dead === 1 ? '' : 's'} · ${leads.length} checked`)
+    router.refresh()
+  }
 
   return (
     <div className="space-y-4">
@@ -60,54 +122,31 @@ export function JobsClient({
         <div className="flex items-center gap-2">
           {sources.length > 0 ? (
             <div className="flex items-center divide-x rounded-md border bg-background overflow-hidden">
-              {/* Fetch new — quick pull, ongoing batch cap (50–100 per source) */}
               <button
-                disabled={pending}
-                onClick={() => start(async () => {
-                  const r = await refreshAllForUserAction()
-                  if ('error' in r && r.error) { toast.error(r.error); return }
-                  if ('addedTotal' in r) toast.success(`+${r.addedTotal} new lead${r.addedTotal === 1 ? '' : 's'} from ${r.scanned} source${r.scanned === 1 ? '' : 's'}`)
-                  router.refresh()
-                })}
-                title="Quick pull — fetches only new listings (up to 100 per source). Fast, runs in seconds."
+                disabled={running || pending}
+                onClick={runFetchNew}
+                title="Quick pull — fetches only new listings (up to 100 per source). Fast."
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium hover:bg-muted ea-transition disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                <Zap className={`h-3.5 w-3.5 text-primary ${pending ? 'animate-pulse' : ''}`} />
+                <Zap className={`h-3.5 w-3.5 text-primary ${running && progress?.label === 'Fetch new' ? 'animate-pulse' : ''}`} />
                 Fetch new
               </button>
-              {/* Full refresh — resets timestamps to first-fetch, 500 results, enriches existing */}
               <button
-                disabled={pending}
-                onClick={() => start(async () => {
-                  toast.info('Full refresh started — fetching up to 500 results per source…')
-                  const r = await fullRefreshAllAction()
-                  if ('error' in r && r.error) { toast.error(r.error); return }
-                  if ('addedTotal' in r) toast.success(`Full refresh done · ${r.scanned} sources · +${r.addedTotal} new · existing leads enriched`)
-                  router.refresh()
-                })}
-                title="Full refresh — resets page budget to 500 results (Naukri), re-fetches every source, and fills in missing descriptions / salary / links on existing leads."
+                disabled={running || pending}
+                onClick={runFullRefresh}
+                title="Full refresh — resets page budget to 500 results, re-fetches every source, enriches existing leads."
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium hover:bg-muted ea-transition disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                <RotateCcw className={`h-3.5 w-3.5 ${pending ? 'animate-spin' : ''}`} />
+                <RotateCcw className={`h-3.5 w-3.5 ${running && progress?.label === 'Full refresh' ? 'animate-spin' : ''}`} />
                 Full refresh
               </button>
-              {/* Fix 404s — HEAD-check all links, auto-ignore expired listings */}
               <button
-                disabled={pending}
-                onClick={() => start(async () => {
-                  toast.info('Checking links for 404s…')
-                  const r = await checkDeadLinksAction()
-                  if ('error' in r && r.error) { toast.error(r.error); return }
-                  if ('dead' in r) {
-                    if (r.dead === 0) toast.success(`All ${r.checked} links are alive`)
-                    else toast.warning(`Removed ${r.dead} expired listing${r.dead === 1 ? '' : 's'} — ${r.checked} checked`)
-                  }
-                  router.refresh()
-                })}
-                title="Fix 404s — checks every new/saved lead link and auto-ignores listings that have expired or been removed."
+                disabled={running || pending}
+                onClick={runFix404s}
+                title="Fix 404s — checks every new/saved lead link and auto-ignores expired listings."
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 ea-transition disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                <AlertTriangle className="h-3.5 w-3.5" />
+                <AlertTriangle className={`h-3.5 w-3.5 ${running && progress?.label === 'Fix 404s' ? 'animate-pulse' : ''}`} />
                 Fix 404s
               </button>
             </div>
@@ -116,6 +155,25 @@ export function JobsClient({
           <AddSourceDialog />
         </div>
       </div>
+
+      {/* ── Live progress bar ── */}
+      {progress ? (
+        <div className="rounded-lg border bg-card px-4 py-3 space-y-2 shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-semibold">{progress.label}</span>
+            <span className="text-xs font-medium tabular-nums text-muted-foreground">
+              {progress.done} / {progress.total} &nbsp;·&nbsp; {progress.stat}
+            </span>
+          </div>
+          <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-primary transition-all duration-300 ease-out"
+              style={{ width: `${progress.total > 0 ? (progress.done / progress.total) * 100 : 0}%` }}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground truncate">{progress.phase}</p>
+        </div>
+      ) : null}
 
       {tab === 'sources' ? (
         <SourcesTable sources={sources} pending={pending} router={router} start={start} />
