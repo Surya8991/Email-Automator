@@ -164,9 +164,9 @@ const JOB_EXTRACT_MODEL = 'llama-3.1-8b-instant'
 // almost always in the first 8k chars of a page.
 const JOB_EXTRACT_CHARS = 8_000
 // Fallback model if the primary hits a rate limit (different quota bucket).
-// gemma2-9b-it was decommissioned by Groq in June 2026 — replaced with
-// llama3-8b-8192 which sits in a separate quota bucket from 8b-instant.
-const JOB_EXTRACT_FALLBACK = 'llama3-8b-8192'
+// gemma2-9b-it decommissioned June 2026; llama3-8b-8192 also decommissioned.
+// llama-3.2-1b-preview is Groq's smallest live model — separate quota bucket.
+const JOB_EXTRACT_FALLBACK = 'llama-3.2-1b-preview'
 
 async function aiExtractJobs(userId: string, sourceText: string): Promise<ExtractedJob[]> {
   const creds = await getAiFor(userId)
@@ -203,6 +203,12 @@ async function aiExtractJobs(userId: string, sourceText: string): Promise<Extrac
         const wait = Math.min(Number(res.headers.get('retry-after') || 20) * 1000, 30_000)
         if (attempt < 2) { await new Promise((r) => setTimeout(r, wait)); continue }
         // Second attempt also 429 → try next model in the list
+        break
+      }
+
+      if (res.status === 400) {
+        // 400 usually means the model is decommissioned or invalid.
+        // Skip to next model rather than aborting the whole fetch.
         break
       }
 
