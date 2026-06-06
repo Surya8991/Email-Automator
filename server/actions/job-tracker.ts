@@ -115,6 +115,37 @@ export async function bulkSetJobLeadStatusAction(ids: number[], status: 'new' | 
   return { ok: true as const, ...r }
 }
 
+/**
+ * Permanently delete a lead. Hard delete (matches pruneOldLeads semantics).
+ * `Ignore` keeps the row for analytics; this removes it.
+ *
+ * Drafts and contacts created from this lead via leadToDraftAction are NOT
+ * affected — they live in their own tables and are managed separately.
+ */
+export async function deleteJobLeadAction(id: number) {
+  const u = await requireUser()
+  if (!rateLimit(`lead-delete:${u.id}`, 60, 60_000)) return { error: 'Slow down' }
+  await db.delete(jobLeads)
+    .where(and(eq(jobLeads.id, id), eq(jobLeads.userId, u.id)))
+  revalidatePath('/jobs')
+  return { ok: true as const }
+}
+
+/**
+ * Bulk hard-delete leads. Cap of 500 per call mirrors bulkSetJobLeadStatusAction.
+ */
+export async function bulkDeleteJobLeadsAction(ids: number[]) {
+  const u = await requireUser()
+  if (!ids?.length) return { error: 'No leads selected' }
+  if (ids.length > 500) return { error: 'Pick at most 500 leads at a time' }
+  if (!rateLimit(`lead-bulk-delete:${u.id}`, 6, 60_000)) return { error: 'Too many bulk deletes — slow down' }
+  const result = await db.delete(jobLeads)
+    .where(and(inArray(jobLeads.id, ids), eq(jobLeads.userId, u.id)))
+  const deleted = (result as unknown as { rowsAffected?: number }).rowsAffected ?? ids.length
+  revalidatePath('/jobs')
+  return { ok: true as const, deleted }
+}
+
 /** Pause / resume a source. Paused = skipped by the cron tickAll. */
 export async function toggleJobSourceActiveAction(id: number, active: boolean) {
   const u = await requireUser()

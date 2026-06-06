@@ -337,24 +337,46 @@ Bob Smith,Globex,CTO,bob@globex.com,,,,
       </Section>
 
       <Section id="jobs" title="8b. Job tracker (board / careers scanning)">
-        <p className="text-sm">Tracks user-supplied job-board / company-careers URLs and tells you when new listings appear. Lives at <Link href="/jobs" className="underline">/jobs</Link>. <strong>No external API keys</strong> beyond the AI key you already use for templates, every source is fetched server-side via the same SSRF-defended fetcher the AI uses.</p>
-        <p className="text-sm font-semibold">How it works</p>
-        <ol className="list-decimal pl-6 text-sm space-y-1">
-          <li>You add a <em>source</em>, either through the <strong>Add from preset</strong> picker (LinkedIn / Wellfound / Naukri / Indeed / Remote OK / We Work Remotely / Y Combinator / Greenhouse / Lever / company careers) or paste any URL via <strong>Add source</strong>.</li>
-          <li>An hourly cron tick at <Code>/api/cron/job-tracker</Code> (gated by <Code>CRON_SECRET</Code>, same secret as the schedule cron) walks each source, fetches it via the SSRF guard (HTTPS-only in prod, private IPs / loopback / link-local blocked, 1 MB cap, 5 s timeout, content-type whitelist).</li>
-          <li>The page text is stripped of HTML and passed to your Groq model with a JSON-only prompt to extract <Code>title / company / link / location</Code>. Capped at 30 listings per tick.</li>
-          <li>Each listing's fingerprint is <Code>title|company</Code> lowercased + whitespace-collapsed. A <Code>(source_id, fingerprint)</Code> unique index dedupes, re-running a tick never produces dupes.</li>
-          <li>Per-source comma-separated keywords narrow what's kept ("PM, Product Manager, Growth"). Empty = capture all.</li>
-          <li>If you've configured a Slack/Discord webhook in <Link href="/profile" className="underline">/profile</Link>, you get a ping with each batch of new leads.</li>
-        </ol>
-        <p className="text-sm font-semibold">Triage a lead</p>
+        <p className="text-sm">Polls job-board search URLs and company careers pages on a cron tick, structured-extracts new listings via 14 dedicated adapters (or AI fallback), and surfaces them at <Link href="/jobs" className="underline">/jobs</Link> for triage. Lead → outreach draft in one click. No LinkedIn or Indeed scraping; no auto-apply.</p>
+        <p className="text-sm font-semibold">Adapter coverage (zero AI cost)</p>
         <ul className="list-disc pl-6 text-sm space-y-1">
-          <li><strong>Draft</strong>, creates a placeholder contact (recruiter name / company / role / location / source link) plus a pre-filled outreach draft with <Code>{'{{name}}'}</Code> + <Code>{'{{company}}'}</Code> vars. Lead moves to <em>applied</em>.</li>
-          <li><strong>Save</strong>, moves to the Saved tab so it doesn't disappear when you refresh.</li>
-          <li><strong>Applied / Ignore</strong>, leave the New tray.</li>
+          <li><strong>ATS APIs</strong>: Greenhouse, Lever, Ashby, Workable, SmartRecruiters, Breezy HR, Personio, Recruitee, Teamtailor, Workday. Public JSON, no auth.</li>
+          <li><strong>India</strong>: Naukri, Foundit, Internshala. Native API where exposed; HTML otherwise.</li>
+          <li><strong>Remote aggregators</strong>: Remote OK, Remotive. Public JSON.</li>
+          <li><strong>Meta-aggregators</strong>: Adzuna (free key), Jooble (free key). Gated on env vars — no-op when unset.</li>
+          <li><strong>RSS feeds</strong>: Indeed RSS, TimesJobs RSS, generic.</li>
+          <li><strong>Fallback</strong>: JSON-LD <Code>schema.org/JobPosting</Code> (covers most Google-Jobs-indexed boards), then Groq AI extraction as the last resort.</li>
+        </ul>
+        <p className="text-sm font-semibold">Add a source</p>
+        <ol className="list-decimal pl-6 text-sm space-y-1">
+          <li>Click <strong>Add from preset</strong> — the <em>Public APIs</em> tab (featured first) groups ATS-backed presets that never pay Groq tokens. Enter a company slug like <Code>airbnb</Code> for Greenhouse, <Code>stripe</Code> for Lever, etc.</li>
+          <li>Or paste any URL via <strong>Add source</strong> — the adapter registry auto-detects host patterns. URLs that don&apos;t match any adapter fall through to JSON-LD + AI.</li>
+          <li>Multi-role batch: type a comma list in the role field — <Code>SEO, Performance Marketing, Paid Media</Code> creates three sources in one click.</li>
+          <li>Optional keyword filter (comma list). Empty = capture everything the board returns.</li>
+        </ol>
+        <p className="text-sm font-semibold">Normalization at insert</p>
+        <ul className="list-disc pl-6 text-sm space-y-1">
+          <li><strong>Salary</strong>: <Code>6-9 LPA</Code>, <Code>$80k-$120k</Code>, <Code>₹50k/month</Code> all parse to <Code>salary_min/max/ccy/period</Code>. Filter by min-INR-equivalent on the toolbar.</li>
+          <li><strong>Location</strong>: <Code>Bengaluru</Code> + <Code>Bangalore</Code> collapse to <Code>bangalore</Code>. <Code>Remote (India)</Code> → <Code>remote-in</Code>, <Code>Anywhere</Code> → <Code>remote-global</Code>. Remote / Hybrid / Office chips on the toolbar.</li>
+          <li><strong>Cross-board dedup</strong>: SHA-1 of (companyNorm, titleNorm, locationNorm). When the same role appears on multiple boards, only the canonical row shows (aggregators yield to direct ATSes); the card flags <Code>↻ N sources</Code>.</li>
+        </ul>
+        <p className="text-sm font-semibold">Triage flow</p>
+        <ul className="list-disc pl-6 text-sm space-y-1">
+          <li><strong>New</strong> tab — incoming leads, filter by salary / remote / source / company / location / search.</li>
+          <li><strong>Saved</strong> tab — bookmarked for follow-up.</li>
+          <li><strong>Archive</strong> — split into <em>Applied</em> and <em>Ignored</em> sub-tabs. Click <strong>Restore</strong> on any row to bounce it back to Saved.</li>
+          <li><strong>Sources</strong> — adapter badge per row (green = zero AI cost; amber = AI fallback). Pause / refresh / edit per source.</li>
+          <li><strong>Draft outreach</strong> — one click creates a contact + pre-filled HTML draft with metadata block, marks the lead as applied.</li>
           <li>CSV export per tab via the <strong>CSV</strong> button (<Code>/api/jobs/export?status=…</Code>).</li>
         </ul>
-        <p className="text-sm text-muted-foreground"><strong>Gotchas:</strong> LinkedIn search behind an auth wall returns very few listings, try a logged-out public URL or a company careers page. Cron schedule is global to the instance; if you self-host without Vercel cron, hit <Code>/api/cron/job-tracker?secret=$CRON_SECRET</Code> from any scheduler (system cron, GitHub Actions, etc).</p>
+        <p className="text-sm font-semibold">Cron + limits</p>
+        <ul className="list-disc pl-6 text-sm space-y-1">
+          <li><Code>/api/cron/job-tracker?secret=$CRON_SECRET</Code> — hourly recommended. Vercel cron config in <Code>vercel.json</Code>.</li>
+          <li>40 sources scanned per cron tick (LRU oldest-fetched first). 50 new leads per source per tick.</li>
+          <li>Non-admin users: 3-source cap (<Code>NON_ADMIN_SOURCE_CAP</Code>) to bound Groq fan-out.</li>
+          <li>Pruning: <Code>new</Code> + <Code>ignored</Code> leads older than 30 days are deleted; <Code>saved</Code> + <Code>applied</Code> are kept indefinitely.</li>
+        </ul>
+        <p className="text-sm text-muted-foreground"><strong>Gotchas:</strong> the LinkedIn / Glassdoor / Indeed HTML presets were removed in the 2026-06-06 prune — their unauthenticated pages return login walls that the AI extractor would hallucinate against. Paste a specific JD URL via the <em>Paste a company URL</em> category if you need to ingest a particular listing. For Indeed, the RSS preset still works.</p>
       </Section>
 
       <Section id="blocklist" title="9. Blocklist & unsubscribe">

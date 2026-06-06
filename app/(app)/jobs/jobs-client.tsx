@@ -22,6 +22,7 @@ import {
   editJobSourceAction, validateJobSourceAction,
   getActiveSourcesAction, tickSingleSourceAction,
   getLeadsWithLinksAction, checkLinksBatchAction,
+  deleteJobLeadAction, bulkDeleteJobLeadsAction,
 } from '@/server/actions/job-tracker'
 import { JobPresetPicker } from './preset-picker'
 
@@ -29,11 +30,20 @@ interface SourceRow {
   id: number; label: string; url: string; keywords: string; active: boolean
   lastFetchedAt: number | null; lastStatus: string; lastError: string
   leadCount: number
+  /** Adapter name from server (e.g. 'greenhouse', 'lever', 'ashby', 'naukri',
+   *  'remote-ok', 'adzuna'). Empty string means no dedicated adapter — the
+   *  source falls through to JSON-LD / AI extraction. */
+  adapter: string
 }
 interface LeadRow {
   id: number; title: string; company: string; link: string; location: string
   status: string; sourceId: number; seenAt: Date
   postedAt: Date | null; salary: string; description: string
+  // Normalized fields (populated by tickSource via normalize.ts).
+  salaryMin: number | null; salaryMax: number | null
+  salaryCcy: string; salaryPeriod: string
+  locationNorm: string; remoteScope: string
+  crossKey: string
 }
 
 interface RunProgress {
@@ -45,13 +55,20 @@ interface RunProgress {
 }
 
 export function JobsClient({
-  sources, leadsNew, leadsSaved, leadsArchive,
+  sources, leadsNew, leadsSaved, leadsApplied, leadsIgnored, leadsArchive,
 }: {
-  sources: SourceRow[]; leadsNew: LeadRow[]; leadsSaved: LeadRow[]; leadsArchive: LeadRow[]
+  sources: SourceRow[]; leadsNew: LeadRow[]; leadsSaved: LeadRow[]
+  leadsApplied: LeadRow[]; leadsIgnored: LeadRow[]
+  /** Kept for back-compat with any external embed; the in-component
+   *  archive view now uses leadsApplied + leadsIgnored independently. */
+  leadsArchive: LeadRow[]
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
   const [tab, setTab] = useState<'new' | 'saved' | 'archive' | 'sources'>(sources.length === 0 ? 'sources' : 'new')
+  // Sub-tab inside the Archive view — split Applied vs Ignored so
+  // outreach analytics stays separate from "I'm not interested" piles.
+  const [archiveSub, setArchiveSub] = useState<'applied' | 'ignored'>('applied')
   const [progress, setProgress] = useState<RunProgress | null>(null)
   const running = progress !== null
 
@@ -192,13 +209,40 @@ export function JobsClient({
 
       {tab === 'sources' ? (
         <SourcesTable sources={sources} pending={pending} router={router} start={start} />
+      ) : tab === 'archive' ? (
+        <div className="space-y-3">
+          {/* Applied vs Ignored sub-tabs — keep outreach analytics
+              separate from the "not interested" bucket so each can be
+              triaged + restored independently. */}
+          <div className="flex items-center gap-2">
+            <Segmented<'applied' | 'ignored'>
+              value={archiveSub}
+              onChange={setArchiveSub}
+              ariaLabel="Archive view"
+              options={[
+                { value: 'applied', label: `Applied (${leadsApplied.length})`, icon: CheckCircle2 },
+                { value: 'ignored', label: `Ignored (${leadsIgnored.length})`, icon: XCircle },
+              ]}
+            />
+            <span className="text-xs text-muted-foreground">
+              Use Restore on any row to move it back to New or Saved.
+            </span>
+          </div>
+          <LeadsTable
+            leads={archiveSub === 'applied' ? leadsApplied : leadsIgnored}
+            sources={sources}
+            pending={pending}
+            showSaveButton={false}
+            status={archiveSub}
+          />
+        </div>
       ) : (
         <LeadsTable
-          leads={tab === 'new' ? leadsNew : tab === 'saved' ? leadsSaved : leadsArchive}
+          leads={tab === 'new' ? leadsNew : leadsSaved}
           sources={sources}
           pending={pending}
           showSaveButton={tab === 'new'}
-          status={tab === 'archive' ? 'applied' : tab}
+          status={tab}
         />
       )}
     </div>
@@ -552,13 +596,28 @@ function SourcesTable({
                     checked={selected.has(s.id)} onChange={() => toggleSelect(s.id)} />
                 </td>
                 <td>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-medium">{s.label}</span>
                     {!s.active ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
                         <Pause className="h-2.5 w-2.5" /> paused
                       </span>
                     ) : null}
+                    {/* Adapter badge: which fetcher this source uses. Green for
+                        zero-AI-cost adapters; amber for AI-fallback sources so
+                        the operator sees at a glance which sources burn Groq
+                        tokens on every tick. */}
+                    {s.adapter ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-400"
+                            title={`Fetched via dedicated adapter — no AI extraction cost.`}>
+                        ⚡ {s.adapter}
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400"
+                            title="No dedicated adapter — falls through to JSON-LD then AI extraction. Costlier per tick.">
+                        AI fallback
+                      </span>
+                    )}
                   </div>
                   <a href={s.url} target="_blank" rel="noreferrer"
                     className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary">
@@ -834,8 +893,12 @@ function LeadsTable({
   leads, sources, pending, showSaveButton, status,
 }: {
   leads: LeadRow[]; sources: SourceRow[]; pending: boolean; showSaveButton: boolean
-  status: 'new' | 'saved' | 'applied'
+  status: 'new' | 'saved' | 'applied' | 'ignored'
 }) {
+  // Restore-available view = archived lead (applied or ignored) → user
+  // can bounce it back to New or Saved. Keeps the bulk + per-row toolbar
+  // unified regardless of which archive sub-tab we're in.
+  const isArchived = status === 'applied' || status === 'ignored'
   const router = useRouter()
   const [busy, start] = useTransition()
   const [q, setQ] = useState('')
@@ -843,9 +906,18 @@ function LeadsTable({
   const [companyFilter, setCompanyFilter] = useState('')
   const [locationFilter, setLocationFilter] = useState('')
   const [sort, setSort] = useState<'newest' | 'oldest' | 'company' | 'salary'>('newest')
+  // Remote-scope multi-select chip filter. Empty set = "any" (don't filter).
+  // Populated values come straight from the normalize.ts schema:
+  // 'office' | 'hybrid' | 'remote-in' | 'remote-global'.
+  const [remoteScopes, setRemoteScopes] = useState<Set<string>>(new Set())
+  // Min-salary filter in INR-equivalent (rough). 0 = no filter.
+  const [minSalary, setMinSalary] = useState<number>(0)
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [page, setPage] = useState(1)
   const PAGE_SIZE = 100
+  // Per-row + bulk delete confirmation state (no browser confirm()).
+  const [confirmDeleteLeadId, setConfirmDeleteLeadId] = useState<number | null>(null)
+  const [confirmDeleteBulk, setConfirmDeleteBulk] = useState(false)
 
   const companies = useMemo(() =>
     [...new Set(leads.map((l) => l.company).filter(Boolean))].sort(), [leads])
@@ -853,12 +925,24 @@ function LeadsTable({
     [...new Set(leads.map((l) => l.location).filter(Boolean))].sort(), [leads])
   const [detailLead, setDetailLead] = useState<LeadRow | null>(null)
 
+  // Rough currency → INR multipliers for the min-salary filter. Right
+  // ballpark, not market-accurate; the filter is for "show me roles
+  // above X" not for portfolio reporting.
+  const CCY_TO_INR: Record<string, number> = { INR: 1, USD: 84, EUR: 90, GBP: 105 }
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase()
     let out = leads
     if (sourceFilter != null) out = out.filter((l) => l.sourceId === sourceFilter)
     if (companyFilter) out = out.filter((l) => l.company === companyFilter)
     if (locationFilter) out = out.filter((l) => l.location === locationFilter)
+    if (remoteScopes.size > 0) out = out.filter((l) => remoteScopes.has(l.remoteScope))
+    if (minSalary > 0) out = out.filter((l) => {
+      if (l.salaryMin == null && l.salaryMax == null) return false
+      const periodMul = l.salaryPeriod === 'month' ? 12 : 1
+      const ccyMul = CCY_TO_INR[l.salaryCcy] ?? 1
+      const top = Math.max(l.salaryMin ?? 0, l.salaryMax ?? 0) * periodMul * ccyMul
+      return top >= minSalary
+    })
     if (needle) out = out.filter((l) => (
       l.title.toLowerCase().includes(needle) ||
       l.company.toLowerCase().includes(needle) ||
@@ -875,9 +959,22 @@ function LeadsTable({
       sorted.sort((a, b) => firstNum(b.salary) - firstNum(a.salary))
     }
     return sorted
-  }, [leads, q, sourceFilter, companyFilter, locationFilter, sort])
+  }, [leads, q, sourceFilter, companyFilter, locationFilter, sort, remoteScopes, minSalary])
 
-  useEffect(() => { setPage(1) }, [q, sourceFilter, companyFilter, locationFilter, sort])
+  useEffect(() => { setPage(1) }, [q, sourceFilter, companyFilter, locationFilter, sort, remoteScopes, minSalary])
+
+  // Per-crossKey occurrence count → drives the "Seen on N boards" chip.
+  // Only counts when crossKey is non-empty (titleless / companyless rows
+  // can't be cross-deduped). Computed against the FULL leads array (not
+  // the filtered slice) so the count is honest across hidden rows.
+  const crossKeyCounts = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const l of leads) {
+      if (!l.crossKey) continue
+      m.set(l.crossKey, (m.get(l.crossKey) ?? 0) + 1)
+    }
+    return m
+  }, [leads])
 
   const pageCount = Math.ceil(filtered.length / PAGE_SIZE)
   const visible = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
@@ -900,6 +997,31 @@ function LeadsTable({
     start(async () => {
       await setJobLeadStatusAction(id, next)
       toast.success(`Marked ${next}`)
+      router.refresh()
+    })
+  }
+
+  function deleteLead(id: number) {
+    start(async () => {
+      const r = await deleteJobLeadAction(id)
+      if ('error' in r && r.error) { toast.error(r.error); return }
+      toast.success('Lead deleted')
+      setConfirmDeleteLeadId(null)
+      router.refresh()
+    })
+  }
+
+  function deleteBulk() {
+    const ids = Array.from(selected)
+    if (ids.length === 0) return
+    start(async () => {
+      const r = await bulkDeleteJobLeadsAction(ids)
+      if ('error' in r && r.error) { toast.error(r.error); return }
+      const n = 'deleted' in r ? r.deleted : ids.length
+      toast.success(`Deleted ${n} lead${n === 1 ? '' : 's'}`)
+      setSelected(new Set())
+      setConfirmDeleteBulk(false)
+      setPage(1)
       router.refresh()
     })
   }
@@ -950,6 +1072,44 @@ function LeadsTable({
           <option value="company">Company A–Z</option>
           <option value="salary">Salary</option>
         </select>
+        {/* Remote-scope chip filter. Multi-select; clicking again toggles off. */}
+        <div className="flex items-center gap-1" role="group" aria-label="Filter by remote scope">
+          {([
+            ['office',        'Office'],
+            ['hybrid',        'Hybrid'],
+            ['remote-in',     'Remote IN'],
+            ['remote-global', 'Remote'],
+          ] as const).map(([k, label]) => {
+            const on = remoteScopes.has(k)
+            return (
+              <button key={k} type="button"
+                onClick={() => {
+                  const next = new Set(remoteScopes)
+                  if (next.has(k)) next.delete(k); else next.add(k)
+                  setRemoteScopes(next)
+                }}
+                className={`h-7 rounded-full border px-2.5 text-[11px] font-medium ea-transition ${on ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground hover:bg-muted'}`}
+                aria-pressed={on}>
+                {label}
+              </button>
+            )
+          })}
+        </div>
+        {/* Min-salary filter. Stays as a number input so the user can type
+            an exact threshold; converts the lead's salaryMin/Max to
+            INR-equivalent yearly before comparing. */}
+        <div className="flex items-center gap-1 text-xs">
+          <IndianRupee className="h-3.5 w-3.5 text-muted-foreground" />
+          <input
+            type="number" min={0} step={100_000}
+            value={minSalary || ''}
+            placeholder="Min /yr"
+            onChange={(e) => setMinSalary(Number(e.target.value) || 0)}
+            className="h-7 w-28 rounded-md border bg-background px-2 text-xs"
+            aria-label="Minimum yearly salary (INR-equivalent)"
+            title="Filter to roles whose top-of-range salary meets or exceeds this annual INR-equivalent threshold."
+          />
+        </div>
         <span className="text-xs text-muted-foreground">{filtered.length} of {leads.length} {leads.length === 1 ? 'lead' : 'leads'}</span>
         <Button variant="outline" size="sm" asChild className="ml-auto">
           <a href={`/api/jobs/export?status=${status}`} download>
@@ -969,7 +1129,25 @@ function LeadsTable({
           ) : null}
           <Button size="sm" variant="outline" disabled={busy || pending} onClick={() => bulk('applied')}>Mark all applied</Button>
           <Button size="sm" variant="ghost" disabled={busy || pending} onClick={() => bulk('ignored')}>Ignore all</Button>
+          <Button size="sm" variant="ghost" disabled={busy || pending}
+            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+            title="Permanently delete selected leads"
+            onClick={() => setConfirmDeleteBulk(true)}>
+            <Trash2 className="mr-1 h-3 w-3" /> Delete all
+          </Button>
           <Button size="sm" variant="ghost" disabled={busy || pending} onClick={() => setSelected(new Set())} className="ml-auto">Clear</Button>
+        </div>
+      ) : null}
+
+      {/* Bulk-delete confirmation banner — no browser confirm(). */}
+      {confirmDeleteBulk ? (
+        <div className="flex flex-wrap items-center gap-3 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-sm">
+          <span className="font-medium text-destructive">
+            Permanently delete {selected.size} selected lead{selected.size === 1 ? '' : 's'}? This cannot be undone.
+          </span>
+          <span className="text-[11px] text-muted-foreground">Drafts and contacts created from these leads are not affected.</span>
+          <Button size="sm" variant="destructive" disabled={busy || pending} onClick={deleteBulk}>Yes, delete all</Button>
+          <Button size="sm" variant="ghost" onClick={() => setConfirmDeleteBulk(false)}>Cancel</Button>
         </div>
       ) : null}
 
@@ -1001,6 +1179,18 @@ function LeadsTable({
           <ul className="divide-y">
             {visible.map((l) => {
               const src = sourceById.get(l.sourceId)
+              if (confirmDeleteLeadId === l.id) {
+                return (
+                  <li key={l.id} className="flex items-center gap-3 bg-destructive/5 px-4 py-3 border-l-4 border-destructive">
+                    <Trash2 className="h-4 w-4 shrink-0 text-destructive" />
+                    <span className="text-sm font-medium text-destructive">Delete this lead?</span>
+                    <span className="truncate text-xs text-muted-foreground">{l.title}{l.company ? ` — ${l.company}` : ''}</span>
+                    <Button size="sm" variant="destructive" disabled={busy || pending}
+                      onClick={() => deleteLead(l.id)} className="ml-auto">Yes</Button>
+                    <Button size="sm" variant="ghost" onClick={() => setConfirmDeleteLeadId(null)}>No</Button>
+                  </li>
+                )
+              }
               return (
                 <li key={l.id} className="group flex items-start gap-3 px-4 py-3 hover:bg-muted/20 ea-transition">
                   <input type="checkbox" aria-label={`Select ${l.title}`}
@@ -1017,12 +1207,26 @@ function LeadsTable({
                     className="min-w-0 flex-1 text-left"
                     onClick={() => setDetailLead(l)}
                   >
-                    {/* Title */}
+                    {/* Title + cross-board duplicate badge */}
                     <div className="font-semibold text-sm leading-snug group-hover:text-primary ea-transition">
                       {l.title}
                       {l.description ? null : (
                         <span className="ml-2 text-[10px] font-normal text-muted-foreground italic">no JD</span>
                       )}
+                      {l.crossKey && (crossKeyCounts.get(l.crossKey) ?? 0) > 1 ? (
+                        <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-violet-500/10 px-2 py-0.5 text-[10px] font-medium text-violet-700 dark:text-violet-400"
+                              title={`This role appears on ${crossKeyCounts.get(l.crossKey)} sources — canonical row shown.`}>
+                          ↻ {crossKeyCounts.get(l.crossKey)} sources
+                        </span>
+                      ) : null}
+                      {l.remoteScope && l.remoteScope !== 'office' ? (
+                        <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-sky-500/10 px-2 py-0.5 text-[10px] font-medium text-sky-700 dark:text-sky-400"
+                              title="Remote scope (from normalized location)">
+                          {l.remoteScope === 'hybrid' ? 'Hybrid' :
+                           l.remoteScope === 'remote-in' ? 'Remote IN' :
+                           l.remoteScope === 'remote-global' ? 'Remote' : l.remoteScope}
+                        </span>
+                      ) : null}
                     </div>
                     {/* Meta chips */}
                     <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
@@ -1075,10 +1279,29 @@ function LeadsTable({
                         <Bookmark className="h-3.5 w-3.5" />
                       </Button>
                     ) : null}
+                    {isArchived ? (
+                      <>
+                        <Button size="sm" variant="outline" disabled={busy || pending}
+                          title="Restore to Saved tab"
+                          onClick={() => setStatus(l.id, 'saved')}>
+                          <RotateCcw className="h-3.5 w-3.5 mr-1" /> Restore
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button size="sm" variant="ghost" disabled={busy || pending}
+                          onClick={() => setStatus(l.id, 'applied')}>Applied</Button>
+                        <Button size="sm" variant="ghost" disabled={busy || pending}
+                          onClick={() => setStatus(l.id, 'ignored')}>Ignore</Button>
+                      </>
+                    )}
                     <Button size="sm" variant="ghost" disabled={busy || pending}
-                      onClick={() => setStatus(l.id, 'applied')}>Applied</Button>
-                    <Button size="sm" variant="ghost" disabled={busy || pending}
-                      onClick={() => setStatus(l.id, 'ignored')}>Ignore</Button>
+                      title="Delete lead permanently"
+                      aria-label="Delete lead"
+                      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => setConfirmDeleteLeadId(l.id)}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
                     {l.link ? (
                       <a href={l.link} target="_blank" rel="noreferrer"
                         className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground ea-transition"

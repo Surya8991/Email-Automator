@@ -74,6 +74,11 @@ The single-page /admin grew past 500 lines and the cross-user observability gaps
 
 ## Workbook Phase B features (from the Universal Job Tracker xlsx)
 
+> **Update 2026-06-06**: the core Job Tracker module shipped (adapter
+> architecture + normalization + cross-board dedup + triage UI). The Phase B
+> items below are enrichment features that build on top of it; they remain
+> unimplemented but are no longer blocked.
+
 Each is admin-exclusive (gate on `adminEmails`). Source data lives in `Test Universal_Job_Tracker_FINAL.xlsx` in Downloads. None implemented yet.
 
 - **B1 Company Research panel** — 344 rows of per-company enrichment (industry, HQ, size, funding, Glassdoor, tech stack, salary range, hiring frequency). New `companies` table + sidebar on contact-detail page. Quick win.

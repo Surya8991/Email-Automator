@@ -8,7 +8,7 @@
 // done at substitute() time, not in the template, so the templates
 // stay human-readable.
 
-export type PresetCategory = 'general' | 'marketing' | 'remote' | 'aggregator' | 'company' | 'startup' | 'india'
+export type PresetCategory = 'general' | 'marketing' | 'remote' | 'aggregator' | 'company' | 'startup' | 'india' | 'api'
 
 export interface JobBoardPreset {
   id: string
@@ -40,50 +40,153 @@ export interface JobBoardPreset {
 export const NON_ADMIN_SOURCE_CAP = 3
 
 export const JOB_BOARD_PRESETS: JobBoardPreset[] = [
-  // ── General aggregators ─────────────────────────────────────────
+  // ── Public APIs (structured, no AI cost) ───────────────────────
+  // These resolve through dedicated adapters in
+  // server/services/job-adapters/* — adapter-first means the orchestrator
+  // never pays Groq tokens for these sources.
   {
-    id: 'linkedin',
-    name: 'LinkedIn Jobs',
-    description: 'Public LinkedIn job search. Best for senior and tech roles.',
-    template: 'https://www.linkedin.com/jobs/search/?keywords={role}&location={location}',
-    needs: { role: true, location: true },
-    suggestedKeywords: '{role}',
-    icon: '🟦',
-    category: 'aggregator',
-    bestFor: 'Senior IC and management',
+    id: 'greenhouse-board',
+    name: 'Greenhouse company board',
+    description: 'Public Greenhouse board for one company. Enter the company slug (e.g. "airbnb" for boards.greenhouse.io/airbnb). Uses the public JSON API — zero AI cost.',
+    template: 'https://boards.greenhouse.io/{role}',
+    needs: { role: true, location: false },
+    suggestedKeywords: '',
+    icon: '🟢',
+    category: 'api',
+    bestFor: 'Greenhouse-hosted ATS',
+    sample: true,
   },
   {
+    id: 'lever-board',
+    name: 'Lever company board',
+    description: 'Public Lever board for one company. Enter the company slug (e.g. "stripe" for jobs.lever.co/stripe). Uses the public JSON API.',
+    template: 'https://jobs.lever.co/{role}',
+    needs: { role: true, location: false },
+    suggestedKeywords: '',
+    icon: '🟣',
+    category: 'api',
+    bestFor: 'Lever-hosted ATS',
+    sample: true,
+  },
+  {
+    id: 'ashby-board',
+    name: 'Ashby company board',
+    description: 'Public Ashby board for one company. Enter the company slug (e.g. "linear" for jobs.ashbyhq.com/linear). Cleanest salary data of the ATSes.',
+    template: 'https://jobs.ashbyhq.com/{role}',
+    needs: { role: true, location: false },
+    suggestedKeywords: '',
+    icon: '🟦',
+    category: 'api',
+    bestFor: 'Ashby-hosted ATS',
+    sample: true,
+  },
+  {
+    id: 'workable-board',
+    name: 'Workable company board',
+    description: 'Public Workable board for one company. Enter the company slug (e.g. "company-name" for apply.workable.com/company-name).',
+    template: 'https://apply.workable.com/{role}',
+    needs: { role: true, location: false },
+    suggestedKeywords: '',
+    icon: '🟢',
+    category: 'api',
+    bestFor: 'Workable-hosted ATS',
+  },
+  {
+    id: 'smartrecruiters-board',
+    name: 'SmartRecruiters company board',
+    description: 'Public SmartRecruiters board for one company. Enter the company slug from careers.smartrecruiters.com/{slug}.',
+    template: 'https://careers.smartrecruiters.com/{role}',
+    needs: { role: true, location: false },
+    suggestedKeywords: '',
+    icon: '🟧',
+    category: 'api',
+    bestFor: 'SmartRecruiters ATS',
+  },
+  {
+    id: 'breezyhr-board',
+    name: 'Breezy HR company board',
+    description: 'Public Breezy HR board for one company. Enter the company slug from {slug}.breezy.hr.',
+    template: 'https://{role}.breezy.hr/',
+    needs: { role: true, location: false },
+    suggestedKeywords: '',
+    icon: '🟨',
+    category: 'api',
+    bestFor: 'Breezy HR ATS',
+  },
+  {
+    id: 'adzuna-search',
+    name: 'Adzuna — keyword search',
+    description: 'Adzuna meta-aggregator. Requires ADZUNA_APP_ID + ADZUNA_APP_KEY env vars (free dev key at developer.adzuna.com). Covers 12 countries with salary data.',
+    template: 'https://www.adzuna.com/search?q={role}&w={location}',
+    needs: { role: true, location: true },
+    suggestedKeywords: '{role}',
+    icon: '🔍',
+    category: 'api',
+    bestFor: 'Cross-country, salary data',
+  },
+  {
+    id: 'jooble-search',
+    name: 'Jooble — keyword search',
+    description: 'Jooble meta-aggregator. Requires JOOBLE_API_KEY env var (free at jooble.org/api/about, ~500 req/day).',
+    template: 'https://jooble.org/api/search?q={role}&l={location}',
+    needs: { role: true, location: true },
+    suggestedKeywords: '{role}',
+    icon: '🔎',
+    category: 'api',
+    bestFor: 'Cross-country aggregator',
+  },
+  {
+    id: 'remoteok-api',
+    name: 'Remote OK — JSON API',
+    description: 'Remote OK\'s public JSON feed. Filter by role tag. No AI cost.',
+    template: 'https://remoteok.com/api?tags={role}',
+    needs: { role: true, location: false },
+    suggestedKeywords: '{role}, remote',
+    icon: '🌐',
+    category: 'api',
+    bestFor: 'Tech-leaning remote',
+    sample: true,
+  },
+  {
+    id: 'remotive-api',
+    name: 'Remotive — JSON API',
+    description: 'Remotive\'s public job board API. Remote-only listings; no AI cost.',
+    template: 'https://remotive.com/api/remote-jobs?search={role}',
+    needs: { role: true, location: false },
+    suggestedKeywords: '{role}, remote',
+    icon: '🛰️',
+    category: 'api',
+    bestFor: 'Remote-only',
+    sample: true,
+  },
+
+  // ── General aggregators ─────────────────────────────────────────
+  // LinkedIn / Glassdoor presets were removed 2026-06-06: their
+  // unauthenticated HTML returns a login wall, so the AI extractor
+  // hallucinated leads from page chrome. Paste a company URL via the
+  // Company category if you need to fetch a specific JD.
+  {
     id: 'indeed',
-    name: 'Indeed',
-    description: 'Aggregator across many sources. Uses public RSS feed — no scraping needed.',
+    name: 'Indeed (RSS)',
+    description: 'Indeed\'s public RSS feed. Stable and structured — no scraping or AI fallback needed.',
     template: 'https://www.indeed.com/rss?q={role}&l={location}',
     needs: { role: true, location: true },
     suggestedKeywords: '{role}',
     icon: '🔵',
     category: 'aggregator',
-    bestFor: 'Maximum volume',
-  },
-  {
-    id: 'glassdoor',
-    name: 'Glassdoor',
-    description: 'Search across companies with salary and review filters.',
-    template: 'https://www.glassdoor.com/Job/jobs.htm?sc.keyword={role}&locKeyword={location}',
-    needs: { role: true, location: true },
-    suggestedKeywords: '{role}',
-    icon: '🟢',
-    category: 'aggregator',
-    bestFor: 'Salary visibility',
+    bestFor: 'Maximum volume via RSS',
+    sample: true,
   },
   {
     id: 'hn-hiring',
-    name: 'HN Who is hiring',
-    description: 'Monthly Hacker News thread. Filter by keyword on the page.',
+    name: 'HN Who is hiring (manual)',
+    description: 'Monthly Hacker News thread. WARNING: JDs live in comment bodies, so AI extraction is unreliable — use for manual triage only.',
     template: 'https://hn.algolia.com/?q={role}&type=comment&storyText=true&prefix=Ask+HN%3A+Who+is+hiring%3F',
     needs: { role: true, location: false },
     suggestedKeywords: '{role}',
     icon: '🟠',
     category: 'aggregator',
-    bestFor: 'Tech startups',
+    bestFor: 'Manual triage only',
   },
 
   // ── Marketing / SEO / Performance — added 2026-06-06 ───────────
@@ -98,10 +201,14 @@ export const JOB_BOARD_PRESETS: JobBoardPreset[] = [
     category: 'marketing',
     bestFor: 'Marketing at tech companies',
   },
+  // Pay-to-list boards have small inventory; admin-only (`sample:false`)
+  // so they don't show up by default for regular users. MarketerHire
+  // (talent supply, not job board) and GrowthHackers (host has been
+  // 521-down for ~12 months) were removed 2026-06-06.
   {
     id: 'martechjobs',
     name: 'MarTech Jobs',
-    description: 'Performance, lifecycle, and paid-media specialist roles.',
+    description: 'Performance, lifecycle, and paid-media specialist roles. Admin-only — small inventory.',
     template: 'https://martechjobs.com/?s={role}+{location}',
     needs: { role: true, location: true },
     suggestedKeywords: '{role}, performance, paid media',
@@ -112,7 +219,7 @@ export const JOB_BOARD_PRESETS: JobBoardPreset[] = [
   {
     id: 'thedrum',
     name: 'The Drum Jobs',
-    description: 'Marketing-industry publication job board. UK and EU heavy.',
+    description: 'Marketing-industry publication job board. UK and EU heavy. Admin-only.',
     template: 'https://www.thedrum.com/jobs?keywords={role}&location={location}',
     needs: { role: true, location: true },
     suggestedKeywords: '{role}',
@@ -121,31 +228,9 @@ export const JOB_BOARD_PRESETS: JobBoardPreset[] = [
     bestFor: 'Brand and agency-side',
   },
   {
-    id: 'marketerhire',
-    name: 'MarketerHire',
-    description: 'Vetted marketing talent. FT and freelance.',
-    template: 'https://marketerhire.com/talent?role={role}&location={location}',
-    needs: { role: true, location: true },
-    suggestedKeywords: '{role}, SEO, paid media, growth, performance, lifecycle',
-    icon: '💼',
-    category: 'marketing',
-    bestFor: 'Freelance and fractional',
-  },
-  {
-    id: 'workable-marketing',
-    name: 'Workable, Marketing',
-    description: 'ATS aggregator. Broad marketing keyword search.',
-    template: 'https://jobs.workable.com/search?query={role}&location={location}',
-    needs: { role: true, location: true },
-    suggestedKeywords: '{role}, digital marketing',
-    icon: '🟢',
-    category: 'marketing',
-    bestFor: 'Aggregated mid-market roles',
-  },
-  {
     id: 'mediabistro',
     name: 'Mediabistro',
-    description: 'Media, advertising, and marketing roles. Strong on brand and agency-side.',
+    description: 'Media, advertising, and marketing roles. Admin-only — pay-to-list, small inventory.',
     template: 'https://www.mediabistro.com/jobs?keywords={role}&location={location}',
     needs: { role: true, location: true },
     suggestedKeywords: '{role}, digital marketing, paid media',
@@ -156,7 +241,7 @@ export const JOB_BOARD_PRESETS: JobBoardPreset[] = [
   {
     id: 'marketinghire',
     name: 'MarketingHire.com',
-    description: 'Marketing-only board. SEO, performance, growth, lifecycle, content.',
+    description: 'Marketing-only board. Admin-only — pay-to-list.',
     template: 'https://www.marketinghire.com/jobs/search?keywords={role}&location={location}',
     needs: { role: true, location: true },
     suggestedKeywords: '{role}, SEO, performance, paid media',
@@ -167,7 +252,7 @@ export const JOB_BOARD_PRESETS: JobBoardPreset[] = [
   {
     id: 'powderkeg',
     name: 'Powderkeg',
-    description: 'Tech and marketing roles outside the coastal hubs. Good for performance and growth roles.',
+    description: 'Tech and marketing roles outside the coastal hubs. Admin-only.',
     template: 'https://powderkeg.com/jobs?search={role}&location={location}',
     needs: { role: true, location: true },
     suggestedKeywords: '{role}, growth, performance',
@@ -177,25 +262,15 @@ export const JOB_BOARD_PRESETS: JobBoardPreset[] = [
   },
   {
     id: 'talent-marketing',
-    name: 'Talent.com, Marketing',
-    description: 'Aggregator with strong filters. Use a marketing-specific keyword line to focus.',
+    name: 'Talent.com — keyword search',
+    description: 'Public aggregator with strong filters. Use a marketing-specific keyword line to focus results.',
     template: 'https://www.talent.com/jobs?k={role}&l={location}',
     needs: { role: true, location: true },
     suggestedKeywords: '{role}, digital marketing, SEO, paid media',
     icon: '🟧',
     category: 'marketing',
     bestFor: 'Volume across countries',
-  },
-  {
-    id: 'growthhackers',
-    name: 'GrowthHackers Jobs',
-    description: 'Growth, performance, and lifecycle marketing community board.',
-    template: 'https://growthhackers.com/jobs?q={role}&l={location}',
-    needs: { role: true, location: true },
-    suggestedKeywords: '{role}, growth, performance, lifecycle',
-    icon: '📊',
-    category: 'marketing',
-    bestFor: 'Growth and lifecycle',
+    sample: true,
   },
 
   // India boards (added 2026-06-06)
@@ -246,13 +321,13 @@ export const JOB_BOARD_PRESETS: JobBoardPreset[] = [
   {
     id: 'hirist',
     name: 'Hirist',
-    description: 'Tech-only India board. Note: site has been intermittently down — check results before relying on it.',
+    description: 'Tech-only India board. WARNING: intermittently down. Admin-only — check results before relying on it.',
     template: 'https://www.hirist.tech/s?q={role}&l={location}',
     needs: { role: true, location: true },
     suggestedKeywords: '{role}',
     icon: '🛠️',
     category: 'india',
-    bestFor: 'IN tech-only',
+    bestFor: 'IN tech-only (flaky)',
   },
   {
     id: 'cutshort',
@@ -298,28 +373,9 @@ export const JOB_BOARD_PRESETS: JobBoardPreset[] = [
     category: 'india',
     bestFor: 'Maximum IN volume',
   },
-  {
-    id: 'apna',
-    name: 'Apna',
-    description: 'Mobile-first, fastest growing. Broad coverage from entry to mid-level.',
-    template: 'https://apna.co/jobs?q={role}&l={location}',
-    needs: { role: true, location: true },
-    suggestedKeywords: '{role}',
-    icon: '📱',
-    category: 'india',
-    bestFor: 'Entry / mid-level IN',
-  },
-  {
-    id: 'glassdoor-in',
-    name: 'Glassdoor India',
-    description: 'India-specific Glassdoor with salary and review filters.',
-    template: 'https://www.glassdoor.co.in/Job/jobs.htm?sc.keyword={role}&locKeyword={location}',
-    needs: { role: true, location: true },
-    suggestedKeywords: '{role}',
-    icon: '🟢',
-    category: 'india',
-    bestFor: 'IN salary visibility',
-  },
+  // Removed 2026-06-06: apna + workindia (SPA-only — no JD markup in
+  // initial HTML, AI extractor returns junk). glassdoor-in + linkedin-in
+  // (login wall for bots). freshteam (template was wrong host).
   {
     id: 'internshala',
     name: 'Internshala Jobs',
@@ -330,39 +386,7 @@ export const JOB_BOARD_PRESETS: JobBoardPreset[] = [
     icon: '🎒',
     category: 'india',
     bestFor: 'Campus / fresher IN',
-  },
-  {
-    id: 'workindia',
-    name: 'WorkIndia',
-    description: 'Mobile-first, high-volume India board. Strong in entry-mid digital and field roles.',
-    template: 'https://www.workindia.in/search/job?title={role}&city={location}',
-    needs: { role: true, location: true },
-    suggestedKeywords: '{role}',
-    icon: '📲',
-    category: 'india',
-    bestFor: 'Entry / field IN',
-  },
-  {
-    id: 'linkedin-in',
-    name: 'LinkedIn — India',
-    description: 'LinkedIn Jobs scoped to India. Best for mid-senior corporate and startup roles.',
-    template: 'https://www.linkedin.com/jobs/search/?keywords={role}&location=India&geoId=102713980',
-    needs: { role: true, location: false },
-    suggestedKeywords: '{role}',
-    icon: '🟦',
-    category: 'india',
-    bestFor: 'Mid-senior IN corporate',
-  },
-  {
-    id: 'freshteam',
-    name: 'Freshteam / Freshworks ATS',
-    description: 'Freshworks\' ATS used by thousands of Indian companies. Broad across tech and ops.',
-    template: 'https://recruitcrm.io/apply/{role}',
-    needs: { role: false, location: false },
-    suggestedKeywords: '',
-    icon: '🟩',
-    category: 'india',
-    bestFor: 'Freshworks-hosted companies',
+    sample: true,
   },
   {
     id: 'naukrigulf',
@@ -377,17 +401,8 @@ export const JOB_BOARD_PRESETS: JobBoardPreset[] = [
   },
 
   // ── Remote-first ───────────────────────────────────────────────
-  {
-    id: 'remoteok',
-    name: 'Remote OK',
-    description: 'Remote-only listings. Uses their public JSON API — structured and fast.',
-    template: 'https://remoteok.com/api?tags={role}',
-    needs: { role: true, location: false },
-    suggestedKeywords: '{role}, remote',
-    icon: '🌐',
-    category: 'remote',
-    bestFor: 'Tech-leaning remote',
-  },
+  // Note: Remote OK + Remotive moved to the API category (they have
+  // dedicated adapters). FlexJobs removed — paywall blocks unauth GETs.
   {
     id: 'weworkremotely',
     name: 'We Work Remotely',
@@ -398,20 +413,13 @@ export const JOB_BOARD_PRESETS: JobBoardPreset[] = [
     icon: '🌍',
     category: 'remote',
     bestFor: 'Curated remote',
-  },
-  {
-    id: 'flexjobs',
-    name: 'FlexJobs',
-    description: 'Vetted remote and flexible roles across industries.',
-    template: 'https://www.flexjobs.com/search?searchkeyword={role}',
-    needs: { role: true, location: false },
-    suggestedKeywords: '{role}, remote, flexible',
-    icon: '🟦',
-    category: 'remote',
-    bestFor: 'Verified-only remote',
+    sample: true,
   },
 
   // ── Startup-focused ────────────────────────────────────────────
+  // Y Combinator preset removed — the /jobs/role/{role} URL pattern
+  // 404s for almost every role. Use the company-careers preset and
+  // paste a specific YC company's careers page instead.
   {
     id: 'wellfound',
     name: 'Wellfound (AngelList)',
@@ -422,17 +430,7 @@ export const JOB_BOARD_PRESETS: JobBoardPreset[] = [
     icon: '🚀',
     category: 'startup',
     bestFor: 'Early-stage equity roles',
-  },
-  {
-    id: 'ycombinator',
-    name: 'Y Combinator Work',
-    description: 'YC-backed startup roles. Senior IC and leadership weighted.',
-    template: 'https://www.ycombinator.com/jobs/role/{role}',
-    needs: { role: true, location: false },
-    suggestedKeywords: '{role}',
-    icon: '🟠',
-    category: 'startup',
-    bestFor: 'YC-backed only',
+    sample: true,
   },
 
   // ── Paste-a-URL company pages ──────────────────────────────────
@@ -475,12 +473,14 @@ export const JOB_BOARD_PRESETS: JobBoardPreset[] = [
 // the top because that's the recent user request; keep the rest in
 // logical-discovery order.
 export const PRESET_CATEGORIES: Array<{ id: PresetCategory; label: string; blurb: string; featured?: boolean }> = [
-  // India sits first — most of our active users are India-based, so
-  // surface the IN boards by default. The `featured` flag drives the
-  // visual "primary" treatment in the picker.
-  { id: 'india',      label: '🇮🇳 India',                    blurb: 'India-focused job boards: Naukri, Foundit, Shine, TimesJobs, Hirist, Cutshort, Instahyre, iimjobs, Indeed IN, Apna, Glassdoor IN, Internshala, WorkIndia, LinkedIn India, Naukri Gulf.', featured: true },
+  // API-backed first — these fire dedicated adapters (Greenhouse / Lever /
+  // Ashby / Workable / Adzuna / Remote OK / Remotive JSON APIs) and never
+  // pay Groq tokens. Prefer these whenever a target company is known.
+  { id: 'api',        label: '⚡ Public APIs',               blurb: 'ATS and aggregator JSON APIs. Greenhouse, Lever, Ashby, Workable, SmartRecruiters, Breezy HR, Adzuna, Jooble, Remote OK, Remotive. Zero AI cost — fastest + most accurate.', featured: true },
+  // India sits second — most of our active users are India-based.
+  { id: 'india',      label: '🇮🇳 India',                    blurb: 'India-focused job boards: Naukri, Foundit, Shine, TimesJobs, Cutshort, Instahyre, iimjobs, Indeed IN, Internshala, Naukri Gulf. (Hirist intermittent — admin-only.)', featured: true },
   { id: 'marketing',  label: 'Marketing, SEO, Paid Media',   blurb: 'Domain-specific boards for SEO, digital, performance, and paid-media roles.' },
-  { id: 'aggregator', label: 'General aggregators',          blurb: 'Cross-industry boards with broad coverage and search filters.' },
+  { id: 'aggregator', label: 'General aggregators',          blurb: 'Cross-industry boards with broad coverage. Indeed RSS is the most reliable here.' },
   { id: 'remote',     label: 'Remote-first',                 blurb: 'Boards that screen for fully-remote or flexible roles.' },
   { id: 'startup',    label: 'Startup-focused',              blurb: 'Early-stage and growth-stage company listings.' },
   { id: 'company',    label: 'Paste a company URL',          blurb: 'Greenhouse, Lever, or careers pages. Paste the URL and we fetch it like any other source.' },

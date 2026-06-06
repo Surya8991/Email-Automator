@@ -1,6 +1,6 @@
 import { Briefcase, AlertTriangle } from 'lucide-react'
 import { requireAdmin } from '@/auth'
-import { listSources, listLeads, leadCountsBySource } from '@/server/services/job-tracker'
+import { listSources, listLeads, leadCountsBySource, adapterFor } from '@/server/services/job-tracker'
 import { isSchemaMissingError } from '@/lib/action-error'
 import { Card, CardContent } from '@/components/ui/card'
 import { PageHeader } from '@/components/ui/page-header'
@@ -16,6 +16,12 @@ function mapLeads(rows: JobLead[]) {
     id: l.id, title: l.title, company: l.company, link: l.link, location: l.location,
     status: l.status, sourceId: l.sourceId, seenAt: l.seenAt,
     postedAt: l.postedAt ?? null, salary: l.salary ?? '', description: l.description ?? '',
+    // Normalized fields populated by 0012_lead_normalization migration —
+    // drive filtering, dedup, and the salary/remote chips in the UI.
+    salaryMin: l.salaryMin ?? null, salaryMax: l.salaryMax ?? null,
+    salaryCcy: l.salaryCcy ?? '', salaryPeriod: l.salaryPeriod ?? '',
+    locationNorm: l.locationNorm ?? '', remoteScope: l.remoteScope ?? '',
+    crossKey: l.crossKey ?? '',
   }))
 }
 
@@ -114,9 +120,16 @@ npm run db:migrate`}
           lastFetchedAt: s.lastFetchedAt ?? null,
           lastStatus: s.lastStatus, lastError: s.lastError,
           leadCount: leadCounts.get(s.id) ?? 0,
+          // Adapter name drives the "🟢 Greenhouse" / "🟣 Lever" / "AI fallback"
+          // badge in the Sources tab. '' = no dedicated adapter — JSON-LD or
+          // AI fallback path; the badge will read "AI fallback" so the user
+          // knows that source is paying Groq tokens.
+          adapter: adapterFor(s.url),
         }))}
         leadsNew={mapLeads(leadsNew)}
         leadsSaved={mapLeads(leadsSaved)}
+        leadsApplied={mapLeads(leadsApplied)}
+        leadsIgnored={mapLeads(leadsIgnored)}
         leadsArchive={mapLeads([...leadsApplied, ...leadsIgnored].sort((a, b) =>
           new Date(b.seenAt).getTime() - new Date(a.seenAt).getTime(),
         ))}

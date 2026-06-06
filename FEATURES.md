@@ -1,7 +1,54 @@
 # Features
 
 Everything Email Automator currently does, grouped by section.
-Last refreshed: 2026-06-05.
+Last refreshed: 2026-06-06.
+
+## 🆕 What's new (2026-06-06, seventh batch — Job tracker adapter rewrite + normalization)
+
+The job tracker stopped paying Groq tokens for adapter-served boards and learned how to dedup the same role across multiple boards.
+
+**Architecture: from one 1024-line file to per-vendor adapters**
+- New `server/services/job-adapters/` directory: 14 dedicated adapters + JSON-LD fallback + AI fallback + shared utils.
+- Adapter contract in `types.ts`: `name`, `matches(url)`, `fetch(source, opts)`, optional `skipKeywordFilter`. Registry in `registry.ts` is order-sensitive (more-specific patterns first).
+- Coverage: **ATS** Greenhouse / Lever / Ashby / SmartRecruiters / Breezy HR / Workable / Freshteam / Recruitee / Personio / Teamtailor / Workday. **India** Naukri / Foundit / Internshala. **Remote** Remote OK / Remotive. **Meta-aggregators** Adzuna / Jooble (env-key gated). **Feed** RSS.
+
+**Normalization at insert (`server/services/normalize.ts`)**
+- `normalizeSalary`: parses "6-9 LPA", "$80k-$120k", "₹50k/month", "Up to 12 LPA", "1.5 crore", €/£ ranges → `{min, max, ccy, period}`.
+- `normalizeLocation`: alias collapse (Bengaluru → bangalore, Gurugram → gurgaon, Delhi NCR → delhi) + remote detection (Remote (India) → remote-in, Anywhere → remote-global, Hybrid – Pune → pune/hybrid).
+- `normalizeTitle`: strips Sr./Senior/Lead/I/II/III + parentheticals.
+- `crossKey(company, title, locationNorm)`: SHA-1 of normalized (company, title, location) — drives cross-board dedup.
+
+**Cross-board dedup (canonical wins over aggregator)**
+- At insert, `tickSource` looks up by `(userId, crossKey)`. If an existing row came from an aggregator (`rss`, `remote-ok`, `remotive`, `adzuna`, `jooble`) and the current source is canonical, the existing row is rewritten to point at the canonical source and empties are filled.
+- Otherwise the duplicate insert is skipped. The lead row shows `↻ N sources` so the user knows the role was seen elsewhere too.
+
+**UI improvements at `/jobs`**
+- **Sources tab** — adapter badge per row (green "⚡ adapter-name" or amber "AI fallback") so the operator sees which sources burn Groq tokens.
+- **New tab** — min-salary INR-equivalent filter; Office/Hybrid/Remote-IN/Remote chip filter; "↻ N sources" badge on rows that dedup to other boards; existing sort + source + company + location filters retained.
+- **Archive tab** — split into Applied + Ignored sub-tabs; new **Restore** action moves any archived lead back to Saved.
+- **Delete** — per-row + bulk delete with inline confirmation banners (no `confirm()`).
+
+**Preset cleanup (`lib/job-board-presets.ts`)**
+- Removed: LinkedIn (login wall), Glassdoor (login wall), MarketerHire (talent supply marketplace, not jobs), FlexJobs (paywall), Freshteam stub (wrong host template), Y Combinator (404 for most slugs), GrowthHackers (host 521-down), Apna (SPA-only), WorkIndia (SPA-only), LinkedIn-IN + Glassdoor-IN.
+- Added: new **Public APIs** featured category — Greenhouse / Lever / Ashby / Workable / SmartRecruiters / Breezy HR boards (slug-based), Adzuna search, Jooble search, Remote OK API, Remotive API.
+- Demoted to admin-only: MarTech Jobs, The Drum, Mediabistro, MarketingHire, Powderkeg (pay-to-list).
+- HN Who-is-hiring kept with a "manual triage only" caveat — JDs live in comment bodies.
+
+**Schema additions (`0012_lead_normalization.sql`)**
+- `job_leads.salary_min`, `.salary_max`, `.salary_ccy`, `.salary_period`, `.location_norm`, `.remote_scope`, `.cross_key` + index `job_leads_cross_key_idx(user_id, cross_key)`.
+- Re-fetches back-fill the normalized columns on existing rows via the conflict-merge `CASE WHEN empty THEN new` pattern — no separate backfill job needed.
+
+**Hardening**
+- `sanitiseLink(url, sourceUrl)` now strips tracking params (utm_*, gclid, fbclid, src, ref, lever-source, gh_src, etc.) so two referrals to the same JD dedup cleanly.
+
+**Tests**
+- 33 new tests in `test/unit/normalize.test.ts` (salary / location / title / crossKey / isAggregator).
+- 11 new tests in `test/unit/sanitise-link.test.ts` (relative resolution, scheme allow-list, tracking strip, length cap).
+- `test/unit/job-board-presets.test.ts` updated to reflect the prune (still ≥ 6 marketing presets, ≥ 10 India presets, ≥ 5 API-backed presets; API category is now first).
+
+**Env vars added** (all optional)
+- `ADZUNA_APP_ID` + `ADZUNA_APP_KEY` — free dev key at developer.adzuna.com (250 req/day).
+- `JOOBLE_API_KEY` — free at jooble.org/api/about (~500 req/day).
 
 ## 🆕 What's new (2026-06-06, sixth batch — Job tracker functionality + organization)
 

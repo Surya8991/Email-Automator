@@ -338,6 +338,17 @@ export const jobLeads = sqliteTable('job_leads', {
   postedAt: integer('posted_at', { mode: 'timestamp_ms' }),
   salary: text('salary').notNull().default(''),
   description: text('description').notNull().default(''),
+  // Canonical salary in source currency. Period: 'year' | 'month' | ''.
+  salaryMin:   integer('salary_min'),
+  salaryMax:   integer('salary_max'),
+  salaryCcy:   text('salary_ccy').notNull().default(''),
+  salaryPeriod:text('salary_period').notNull().default(''),
+  // Normalized location ('bangalore' | 'mumbai' | …) — alias-collapsed.
+  locationNorm:text('location_norm').notNull().default(''),
+  // Remote scope: 'office' | 'hybrid' | 'remote-in' | 'remote-global' | ''.
+  remoteScope: text('remote_scope').notNull().default(''),
+  // Cross-board dedup key: sha1(companyNorm|titleNorm|locationNorm).
+  crossKey:    text('cross_key').notNull().default(''),
 }, (t) => ({
   byUser:        index('job_leads_user_idx').on(t.userId, t.status, t.seenAt),
   uqFingerprint: uniqueIndex('job_leads_fingerprint_idx').on(t.sourceId, t.fingerprint),
@@ -345,6 +356,8 @@ export const jobLeads = sqliteTable('job_leads', {
   byUserSource:  index('job_leads_user_source_idx').on(t.userId, t.sourceId),
   // Covers pruneOldLeads scan: WHERE status IN (...) AND seen_at < cutoff.
   byStatusSeen:  index('job_leads_status_seen_idx').on(t.status, t.seenAt),
+  // Cross-board dedup lookup at insert time.
+  byCrossKey:    index('job_leads_cross_key_idx').on(t.userId, t.crossKey),
 }))
 
 export type JobSource = typeof jobSources.$inferSelect

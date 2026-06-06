@@ -4,11 +4,13 @@ import { auth } from '@/auth'
 import {
   Send, Workflow, Sparkles, BarChart3, FileText, ShieldCheck, Building2,
   MailPlus, FlaskConical, Eye, Bot, Lock, ScrollText, Wand2, Zap, Github,
+  Briefcase,
 } from 'lucide-react'
 
 const FEATURES = [
   { icon: Send,         title: 'Bulk drafts + send',     blurb: 'Personalize with your variables. Stagger sends in batches with per-domain caps.' },
   { icon: Workflow,     title: 'Multi-step campaigns',   blurb: 'Sequences with delays + stop-on-reply + per-step performance + A/B testing.' },
+  { icon: Briefcase,    title: 'AI Job Tracker',         blurb: 'Adapter-first ingestion: Greenhouse, Lever, Ashby, Workable, Naukri, Remote OK + 10 more. Salary + remote normalization. Cross-board dedup. One-click outreach draft.' },
   { icon: BarChart3,    title: 'Tracking + analytics',   blurb: '1×1 pixel + link rewriting. Send-time heatmap, breakdowns by template / tag / platform.' },
   { icon: Sparkles,     title: 'AI assist (Groq)',       blurb: 'Llama 3.3 rewrites bodies, suggests subjects, enriches companies, generates openers.' },
   { icon: FileText,     title: 'Starter templates',      blurb: '5 public + 23 admin-overlay templates. Variables with fallbacks. Clickable insertion palette.' },
@@ -22,7 +24,7 @@ const FEATURES = [
 ] as const
 
 const STATS = [
-  { v: '6', l: 'admin tabs' },
+  { v: '14', l: 'job-board adapters' },
   { v: '100%', l: 'self-hosted' },
   { v: '$0', l: '/mo to operate' },
   { v: '5 min', l: 'to first send' },

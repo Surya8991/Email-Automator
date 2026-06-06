@@ -57,6 +57,46 @@ The CreateDraftsDialog flow goes through `server/services/drafts.ts`:
 
 `components/accent-provider.tsx` exports the `ACCENTS` map (single source) and `isValidAccent()`. Server actions that accept an accent value MUST whitelist via `isValidAccent()` before writing — the value flows into a CSS custom property and untrusted input could inject extra declarations.
 
+## Job Tracker — adapter architecture (refreshed 2026-06-06)
+
+The job tracker is **adapter-first**: dedicated per-vendor fetchers in `server/services/job-adapters/*` handle the boards we know about; the orchestrator in `server/services/job-tracker.ts` only handles control flow + dedup + cron.
+
+**Pipeline (`tickSource`)**:
+1. `findAdapter(url)` walks `registry.ts` and picks the first match.
+2. If matched, run that adapter — it returns `RawJob[]` straight from a JSON API.
+3. If no adapter (or the adapter returned 0, and it's NOT an RSS-like adapter that legitimately returns 0), fetch the URL via `fetchForAi()` (SSRF-defended) and try **JSON-LD** (`schema.org/JobPosting`) — most modern boards embed Google-Jobs markup. Zero AI cost.
+4. If still empty, fall back to **Groq AI extraction** (`aiExtractJobs`). 8000-char window, strict JSON schema, `llama-3.1-8b-instant` pinned with 1b-preview fallback on 429.
+5. For each `RawJob`:
+   - Compute `fingerprintOf(title, company)` for source-scoped dedup.
+   - Compute normalized fields via `server/services/normalize.ts`: `normalizeSalary`, `normalizeLocation`, `crossKey(company, title, locationNorm)`.
+   - Cross-board dedup: look up by `(userId, crossKey)` index. If an existing row came from an aggregator (`AGGREGATOR_ADAPTERS` set: `rss`, `remote-ok`, `remotive`, `adzuna`, `jooble`) and the current source is canonical (ATS / company page), the existing row's `sourceId` is rewritten to point at the canonical source and empties are filled — canonical wins. Otherwise skip the insert.
+   - Otherwise insert with all 11 columns populated.
+6. Conflict on the `(sourceId, fingerprint)` unique index ⇒ this is a re-fetch of the same lead on the same source. Merge fields with `CASE WHEN empty THEN new ELSE existing END` so we never overwrite richer data with emptier data.
+
+**Adapters** (all in `server/services/job-adapters/`):
+- `ats.ts` — Greenhouse / Lever / Ashby / SmartRecruiters / BreezyHR / Workable / Freshteam. Detect by host pattern, hit the vendor JSON API. Cleanest path; zero AI cost.
+- `naukri.ts`, `foundit.ts`, `internshala.ts` — India-specific JSON APIs / HTML.
+- `workday.ts`, `personio.ts`, `recruitee.ts`, `teamtailor.ts` — additional ATSes (per-tenant subdomain patterns).
+- `remote-ok.ts`, `remotive.ts` — remote-only public JSON.
+- `adzuna.ts`, `jooble.ts` — meta-aggregators. Gated on env vars (`ADZUNA_APP_ID/KEY`, `JOOBLE_API_KEY`). No-op + console warning when keys are missing.
+- `rss.ts` — Indeed RSS, TimesJobs RSS, generic feed.
+- `json-ld.ts` — fallback parser for `<script type="application/ld+json">@type=JobPosting`. Reused inside `tickSource`, not in `REGISTRY`.
+- `ai.ts` — last-resort Groq extractor. Same path as above.
+- `utils.ts` — `sanitiseLink(raw, sourceUrl)` resolves relatives, blocks non-http(s), drops same-as-source URLs, strips tracking params (`utm_*`, `gclid`, `fbclid`, `src`, `ref`, `lever-source`, `gh_src`, etc.). Every adapter routes link extraction through this.
+
+**Adding a new ATS adapter** (~80 LOC + 1 test):
+1. Create `server/services/job-adapters/myats.ts`. Export `myAtsAdapter: Adapter` matching the shape in `types.ts` — `name`, `matches: (url) => boolean`, `fetch(source, opts): Promise<RawJob[]>`, optional `skipKeywordFilter` (when the API's own search already filters).
+2. Insert into `REGISTRY` array in `registry.ts` in priority order — more-specific patterns first.
+3. Add a preset in `lib/job-board-presets.ts` under the `api` category so users can pick it from the picker. Use a URL template the matcher recognizes (e.g. `https://jobs.example.com/{role}`).
+4. Add a unit test in `test/unit/normalize.test.ts` or a new file for adapter-specific parsing.
+
+**Cross-board dedup precedence rule**: aggregator adapters (`AGGREGATOR_ADAPTERS`) yield to canonical ones. When you add a new adapter, classify it: if it's a meta-aggregator (returns jobs from many companies you didn't add directly), add its name to `AGGREGATOR_ADAPTERS` in `normalize.ts`.
+
+**Env vars**:
+- `ADZUNA_APP_ID` + `ADZUNA_APP_KEY` — Adzuna meta-aggregator. Free dev key at developer.adzuna.com (250 req/day, 25 req/min).
+- `JOOBLE_API_KEY` — Jooble meta-aggregator. Free at jooble.org/api/about (~500 req/day).
+- All three are optional. Adapters log a one-shot warning and return `[]` when their keys are missing — the rest of the tracker keeps working.
+
 ## What this is
 
 Self-hosted job-application email outreach app. Next.js 16 App Router +

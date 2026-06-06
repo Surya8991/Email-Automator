@@ -2,6 +2,20 @@
 
 > Captured 2026-06-01, refreshed 2026-06-06.
 
+## ✅ Done 2026-06-06 (seventh batch — Job tracker adapter rewrite)
+
+- Refactored `server/services/job-tracker.ts` (1024 → 324 lines) into per-vendor adapters in `server/services/job-adapters/*`.
+- 14 dedicated adapters: ATS (Greenhouse / Lever / Ashby / SmartRecruiters / Breezy / Workable / Freshteam / Recruitee / Personio / Teamtailor / Workday), India (Naukri / Foundit / Internshala), Remote (Remote OK / Remotive), Meta (Adzuna / Jooble), RSS feed. JSON-LD + AI as fallback.
+- Migration `0012_lead_normalization.sql`: `salary_min/max/ccy/period`, `location_norm`, `remote_scope`, `cross_key` + index `job_leads_cross_key_idx`.
+- `server/services/normalize.ts`: pure functions for salary / location / title / crossKey + `AGGREGATOR_ADAPTERS` precedence set. Wired into `tickSource` insert + conflict-merge.
+- **Cross-board dedup**: canonical adapters (ATSes) win over aggregators (rss / remote-ok / remotive / adzuna / jooble). Cross-board UI badge "↻ N sources" on lead rows.
+- `/jobs` UI: adapter badges on Sources tab, salary + remote-scope chip filters on New tab, Archive split into Applied + Ignored sub-tabs with Restore action, per-row + bulk Delete with inline confirmation banners.
+- Preset prune: removed LinkedIn / Glassdoor / MarketerHire / FlexJobs / Freshteam stub / Y Combinator / GrowthHackers / Apna / WorkIndia / LinkedIn-IN / Glassdoor-IN. Added Public APIs featured category (Greenhouse / Lever / Ashby / Workable / SmartRecruiters / Breezy / Adzuna / Jooble / Remote OK API / Remotive API).
+- `sanitiseLink` strips tracking params (utm_*, gclid, fbclid, src, ref, lever-source, gh_src).
+- 44 new unit tests (normalize.test.ts 33; sanitise-link.test.ts 11). `job-board-presets.test.ts` updated for the prune.
+- New env vars `ADZUNA_APP_ID`/`ADZUNA_APP_KEY`/`JOOBLE_API_KEY` (all optional, no-op when missing).
+- `/guide` §8b rewritten to cover the adapter pipeline + triage flow. Marketing landing + about page updated to surface the Job Tracker.
+
 ## 🟧 Deferred — see [FUTURE_FEATURES.html](../FUTURE_FEATURES.html)
 
 The full catalog of next-up features (sorted by impact × effort across

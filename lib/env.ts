@@ -42,6 +42,12 @@ const envSchema = z.object({
   APP_URL: z.string().default('http://localhost:3000'),
   DAILY_SEND_LIMIT: z.coerce.number().default(50),
   TIMEZONE: z.string().default('Asia/Kolkata'),
+  // Meta-aggregator keys for job-tracker adapters. All optional — each
+  // adapter no-ops with a logged warning when its key is missing so the
+  // rest of the system stays green for users who haven't registered.
+  ADZUNA_APP_ID: z.string().optional(),
+  ADZUNA_APP_KEY: z.string().optional(),
+  JOOBLE_API_KEY: z.string().optional(),
 })
 
 export const env = envSchema.parse(process.env)

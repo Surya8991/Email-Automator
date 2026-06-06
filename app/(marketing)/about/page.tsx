@@ -53,6 +53,15 @@ export default function AboutPage() {
             personalized outreach at meaningful scale and want a clean, hardened workspace
             without recurring fees.
           </p>
+          <p>
+            <strong className="text-foreground">For job seekers</strong>, the built-in Job Tracker
+            polls Greenhouse, Lever, Ashby, Workable, Naukri, Foundit, Remote OK, Remotive, plus 10
+            other adapters using each board&apos;s public JSON API or RSS feed — structured-first,
+            AI extraction only as a fallback. Salary, location, and remote-scope are normalized at
+            ingest; cross-board duplicates collapse to a single row. One click drafts a tailored
+            outreach email. No LinkedIn or Indeed scraping, no auto-apply spam — just clean
+            ingestion, triage, and a Saved→Applied→Interviewed pipeline that you control.
+          </p>
         </div>
       </section>
 

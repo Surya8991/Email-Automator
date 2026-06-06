@@ -126,6 +126,13 @@ TURSO_AUTH_TOKEN=...                  # required for Vercel
 CRON_SECRET=<openssl rand -hex 24>    # required for Vercel cron
 ENCRYPTION_KEY=<openssl rand -base64 32>   # recommended (decouples SMTP_PASS/GROQ_API_KEY encryption from AUTH_SECRET)
 DAILY_SEND_LIMIT=50
+
+# Job tracker meta-aggregators (all optional; each adapter no-ops with
+# a console warning when its key is missing, so the rest of the system
+# keeps working for users who haven't registered yet).
+ADZUNA_APP_ID=                          # free dev key at developer.adzuna.com
+ADZUNA_APP_KEY=
+JOOBLE_API_KEY=                         # free at jooble.org/api/about
 ```
 
 Do **not** set `ALLOW_DEV_SIGNIN=true` in a hosted environment. If you do anyway,
