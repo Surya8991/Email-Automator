@@ -149,8 +149,10 @@ const JOB_EXTRACT_MODEL = 'llama-3.1-8b-instant'
 // even with 30 concurrent AI sources. Quality is unchanged — job listings are
 // almost always in the first 8k chars of a page.
 const JOB_EXTRACT_CHARS = 8_000
-// Fallback model if the primary hits a rate limit (different quota bucket)
-const JOB_EXTRACT_FALLBACK = 'gemma2-9b-it'
+// Fallback model if the primary hits a rate limit (different quota bucket).
+// gemma2-9b-it was decommissioned by Groq in June 2026 — replaced with
+// llama3-8b-8192 which sits in a separate quota bucket from 8b-instant.
+const JOB_EXTRACT_FALLBACK = 'llama3-8b-8192'
 
 async function aiExtractJobs(userId: string, sourceText: string): Promise<ExtractedJob[]> {
   const creds = await getAiFor(userId)
@@ -900,33 +902,33 @@ export async function tickSource(source: JobSource): Promise<{ added: number; st
     let jobs: ExtractedJob[] = []
 
     if (isNaukri) {
-      // Naukri internal JSON API — bypasses JS-rendered HTML
+      // Naukri internal JSON API — bypasses JS-rendered HTML.
+      // If the API returns empty (e.g. Vercel IPs blocked → HTTP 406),
+      // fall through to the generic HTML → JSON-LD → AI path.
       jobs = await fetchNaukriApi(source.url, isFirstFetch ? NAUKRI_FIRST_PAGES : NAUKRI_TICK_PAGES)
     } else if (isFoundit) {
-      // Foundit (Monster India) internal JSON API
+      // Foundit internal API — fall through on empty (API may not be public)
       jobs = await fetchFounditApi(source.url)
     } else if (isRss) {
-      // RSS / Atom feed (Indeed, TimesJobs, etc.)
       jobs = await fetchRss(source.url)
     } else if (isRemoteOk) {
-      // Remote OK public JSON API
       jobs = await fetchRemoteOk(source.url)
     } else if (isRemotive) {
-      // Remotive public JSON API — no auth, global remote roles
       jobs = await fetchRemotive(source.url)
-    } else {
-      // Generic source — try structured methods before falling back to AI.
-      // Priority: ATS public API → JSON-LD in HTML → AI extraction.
+    }
 
-      // 1. ATS API (Lever / Greenhouse / Ashby / SmartRecruiters)
-      //    Structured JSON, zero AI tokens, no bot blocking.
+    // Generic fallback path — runs for non-structured sources AND as a
+    // safety net when a dedicated fetcher above returns 0 (e.g. Naukri
+    // API blocked by host IP, Foundit API returning 404, RSS returning 0).
+    // Priority: ATS public API → JSON-LD structured data → AI extraction.
+    if (jobs.length === 0 && !isRss && !isRemoteOk && !isRemotive) {
+      // 1. ATS JSON API (Lever / Greenhouse / Ashby / SmartRecruiters /
+      //    BreezyHR / Workable / Freshteam) — structured, zero AI tokens.
       const ats = detectAts(source.url)
-      if (ats) {
-        jobs = await fetchAtsApi(ats)
-      }
+      if (ats) jobs = await fetchAtsApi(ats)
 
       if (jobs.length === 0) {
-        // 2 + 3. Fetch HTML then try JSON-LD first, AI as last resort.
+        // 2 + 3. Fetch HTML then try JSON-LD, fall back to AI.
         const fetched = await fetchForAi(source.url)
         if (!fetched.ok) {
           await db.update(jobSources).set({
@@ -934,12 +936,10 @@ export async function tickSource(source: JobSource): Promise<{ added: number; st
           }).where(eq(jobSources.id, source.id))
           return { added: 0, status: 'fetch-failed', error: fetched.error }
         }
-
-        // 2. JSON-LD schema.org/JobPosting — free, instant, covers most
-        //    modern boards (LinkedIn, Glassdoor, company career pages).
+        // 2. JSON-LD schema.org/JobPosting — covers LinkedIn, Glassdoor,
+        //    company career pages that embed Google Jobs markup.
         jobs = extractJsonLd(fetched.rawHtml)
-
-        // 3. AI extraction — last resort for boards without structured data.
+        // 3. AI — last resort when no structured data found.
         if (jobs.length === 0) {
           jobs = await aiExtractJobs(source.userId, fetched.text)
         }
