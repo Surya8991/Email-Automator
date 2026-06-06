@@ -28,6 +28,7 @@ interface SourceRow {
 interface LeadRow {
   id: number; title: string; company: string; link: string; location: string
   status: string; sourceId: number; seenAt: Date
+  postedAt: Date | null; salary: string; description: string
 }
 
 export function JobsClient({
@@ -319,27 +320,31 @@ function LeadsTable({
   const router = useRouter()
   const [busy, start] = useTransition()
   const [q, setQ] = useState('')
-  // Per-source filter — null = all sources. Lets the user drill into
-  // leads from one board without leaving the page.
   const [sourceFilter, setSourceFilter] = useState<number | null>(null)
-  // Per-row selection for bulk triage. Cleared whenever the source
-  // list changes (router.refresh after a status change re-mounts the
-  // table because the `leads` prop changes).
+  const [companyFilter, setCompanyFilter] = useState('')
+  const [locationFilter, setLocationFilter] = useState('')
   const [selected, setSelected] = useState<Set<number>>(new Set())
-  // Client-side filter — cheap because we already cap server-side at
-  // 200. Matches title + company + location with a substring search,
-  // then optionally narrows by source.
+
+  const companies = useMemo(() =>
+    [...new Set(leads.map((l) => l.company).filter(Boolean))].sort(), [leads])
+  const locations = useMemo(() =>
+    [...new Set(leads.map((l) => l.location).filter(Boolean))].sort(), [leads])
+
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase()
     let out = leads
     if (sourceFilter != null) out = out.filter((l) => l.sourceId === sourceFilter)
+    if (companyFilter) out = out.filter((l) => l.company === companyFilter)
+    if (locationFilter) out = out.filter((l) => l.location === locationFilter)
     if (!needle) return out
     return out.filter((l) => (
       l.title.toLowerCase().includes(needle) ||
       l.company.toLowerCase().includes(needle) ||
-      l.location.toLowerCase().includes(needle)
+      l.location.toLowerCase().includes(needle) ||
+      l.salary.toLowerCase().includes(needle) ||
+      l.description.toLowerCase().includes(needle)
     ))
-  }, [leads, q, sourceFilter])
+  }, [leads, q, sourceFilter, companyFilter, locationFilter])
   const sourceById = useMemo(() => new Map(sources.map((s) => [s.id, s])), [sources])
   const allSelected = filtered.length > 0 && filtered.every((l) => selected.has(l.id))
   function bulk(next: 'saved' | 'ignored' | 'applied') {
@@ -389,6 +394,28 @@ function LeadsTable({
             {sources.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
         ) : null}
+        {companies.length > 1 ? (
+          <select
+            value={companyFilter}
+            onChange={(e) => setCompanyFilter(e.target.value)}
+            className="h-9 rounded-md border bg-background px-2 text-xs"
+            aria-label="Filter by company"
+          >
+            <option value="">All companies</option>
+            {companies.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        ) : null}
+        {locations.length > 1 ? (
+          <select
+            value={locationFilter}
+            onChange={(e) => setLocationFilter(e.target.value)}
+            className="h-9 rounded-md border bg-background px-2 text-xs"
+            aria-label="Filter by location"
+          >
+            <option value="">All locations</option>
+            {locations.map((l) => <option key={l} value={l}>{l}</option>)}
+          </select>
+        ) : null}
         <div className="text-xs text-muted-foreground">{filtered.length} of {leads.length} {leads.length === 1 ? 'lead' : 'leads'}</div>
         <Button variant="outline" size="sm" asChild className="ml-auto">
           <a href={`/api/jobs/export?status=${status}`} download>
@@ -436,6 +463,8 @@ function LeadsTable({
               <th>Title</th>
               <th>Company</th>
               <th>Location</th>
+              <th>Salary</th>
+              <th>Posted</th>
               <th>Seen</th>
               <th className="w-64 text-right">Actions</th>
             </tr></thead>
@@ -461,12 +490,19 @@ function LeadsTable({
                         {l.title} <ExternalLink className="h-3 w-3" />
                       </a>
                     ) : <span className="font-medium">{l.title}</span>}
+                    {l.description ? (
+                      <div className="mt-0.5 text-[11px] text-muted-foreground line-clamp-1">{l.description}</div>
+                    ) : null}
                     {src ? (
                       <div className="text-[10px] text-muted-foreground">via {src.label}</div>
                     ) : null}
                   </td>
                   <td className="text-xs text-muted-foreground">{l.company || '–'}</td>
                   <td className="text-xs text-muted-foreground">{l.location || '–'}</td>
+                  <td className="text-xs text-muted-foreground">{l.salary || '–'}</td>
+                  <td className="text-xs text-muted-foreground">
+                    {l.postedAt ? new Date(l.postedAt).toLocaleDateString() : '–'}
+                  </td>
                   <td className="text-xs text-muted-foreground">{new Date(l.seenAt).toLocaleDateString()}</td>
                   <td>
                     <div className="ea-row-actions flex justify-end gap-1">

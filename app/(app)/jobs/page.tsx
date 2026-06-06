@@ -1,5 +1,5 @@
 import { Briefcase, AlertTriangle } from 'lucide-react'
-import { requireUser } from '@/auth'
+import { requireAdmin } from '@/auth'
 import { listSources, listLeads, leadCountsBySource } from '@/server/services/job-tracker'
 import { isSchemaMissingError } from '@/lib/action-error'
 import { Card, CardContent } from '@/components/ui/card'
@@ -15,11 +15,12 @@ function mapLeads(rows: JobLead[]) {
   return rows.map((l) => ({
     id: l.id, title: l.title, company: l.company, link: l.link, location: l.location,
     status: l.status, sourceId: l.sourceId, seenAt: l.seenAt,
+    postedAt: l.postedAt ?? null, salary: l.salary ?? '', description: l.description ?? '',
   }))
 }
 
 export default async function JobsPage() {
-  const u = await requireUser()
+  const u = await requireAdmin()
   // Defensive on both reads — migration 0008 may not be applied to
   // prod yet. Each .catch falls back to an empty array so the page
   // renders an empty-state instead of 500ing.

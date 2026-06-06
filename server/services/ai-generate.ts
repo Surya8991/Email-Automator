@@ -74,10 +74,10 @@ const KIND_PREFACE: Record<GenerateKind, string> = {
 
 // ── URL fetcher (SSRF-defended) ─────────────────────────────────────
 
-const MAX_BYTES = 1_000_000  // 1 MB cap — large pages get truncated
-const FETCH_TIMEOUT_MS = 5_000
+const MAX_BYTES = 3_000_000  // 3 MB cap — large job boards need more
+const FETCH_TIMEOUT_MS = 10_000
 const ALLOWED_CONTENT_TYPES = [
-  'text/html', 'text/plain', 'application/xhtml+xml', 'text/markdown',
+  'text/html', 'text/plain', 'application/xhtml+xml', 'text/markdown', 'application/json',
 ]
 
 // Block private / link-local / loopback ranges so a malicious URL can't
@@ -170,9 +170,9 @@ export async function fetchForAi(rawUrl: string): Promise<FetchResult> {
       signal: controller.signal,
       redirect: 'follow',
       headers: {
-        // UA helps with sites that block default fetch UAs (mostly news/JD pages).
-        'User-Agent': 'Mozilla/5.0 (compatible; EmailAutomatorBot/1.0)',
-        Accept: 'text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.5',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+        Accept: 'text/html,application/xhtml+xml,application/json,text/plain;q=0.9,*/*;q=0.5',
+        'Accept-Language': 'en-US,en;q=0.9',
       },
     })
     if (!res.ok) return { ok: false, error: `HTTP ${res.status}` }
@@ -205,7 +205,7 @@ export async function fetchForAi(rawUrl: string): Promise<FetchResult> {
     let off = 0
     for (const c of chunks) { buf.set(c, off); off += c.byteLength }
     const raw = new TextDecoder('utf-8').decode(buf)
-    const text = stripHtml(raw).slice(0, 12_000)
+    const text = stripHtml(raw).slice(0, 30_000)
     return { ok: true, text, truncated }
   } catch (e) {
     if (e instanceof Error && e.name === 'AbortError') return { ok: false, error: 'Timed out' }

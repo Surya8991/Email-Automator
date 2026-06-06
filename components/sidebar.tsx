@@ -29,7 +29,6 @@ const GROUPS: NavGroup[] = [
       { href: '/dashboard',  label: 'Dashboard',  icon: LayoutDashboard },
       { href: '/contacts',   label: 'Contacts',   icon: Users },
       { href: '/companies',  label: 'Companies',  icon: Building2 },
-      { href: '/jobs',       label: 'Job tracker', icon: Briefcase },
     ],
   },
   {
@@ -68,8 +67,9 @@ const GROUPS: NavGroup[] = [
 const ADMIN_GROUP: NavGroup = {
   eyebrow: 'Admin',
   items: [
-    { href: '/admin',      label: 'Admin',      icon: Shield },
-    { href: '/diagnostic', label: 'Diagnostic', icon: FlaskConical },
+    { href: '/jobs',       label: 'Job tracker', icon: Briefcase },
+    { href: '/admin',      label: 'Admin',       icon: Shield },
+    { href: '/diagnostic', label: 'Diagnostic',  icon: FlaskConical },
   ],
 }
 

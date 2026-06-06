@@ -329,6 +329,10 @@ export const jobLeads = sqliteTable('job_leads', {
   status: text('status').notNull().default('new'), // new|saved|ignored|applied
   notes: text('notes').notNull().default(''),
   seenAt: integer('seen_at', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),
+  // Added in migration 0009
+  postedAt: integer('posted_at', { mode: 'timestamp_ms' }),
+  salary: text('salary').notNull().default(''),
+  description: text('description').notNull().default(''),
 }, (t) => ({
   byUser: index('job_leads_user_idx').on(t.userId, t.status, t.seenAt),
   uqFingerprint: uniqueIndex('job_leads_fingerprint_idx').on(t.sourceId, t.fingerprint),

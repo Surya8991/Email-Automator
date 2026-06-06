@@ -22,7 +22,10 @@ import { notify } from './notify'
 // is bounded so a slow / hostile target can't tank the tick.
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
-const MAX_NEW_PER_TICK = 25
+const MAX_NEW_PER_TICK = 50       // ongoing non-Naukri cap per tick
+const NAUKRI_PER_PAGE = 100       // results per Naukri API page (their max)
+const NAUKRI_FIRST_PAGES = 5      // first fetch: 5 pages × 100 = 500
+const NAUKRI_TICK_PAGES = 1       // ongoing: 1 page × 100 = 100
 
 export async function listSources(userId: string): Promise<JobSource[]> {
   return db.select().from(jobSources).where(eq(jobSources.userId, userId)).orderBy(desc(jobSources.id))
@@ -94,7 +97,7 @@ export async function bulkSetLeadStatus(
 export async function listLeads(userId: string, status: string = 'new'): Promise<JobLead[]> {
   return db.select().from(jobLeads)
     .where(and(eq(jobLeads.userId, userId), eq(jobLeads.status, status)))
-    .orderBy(desc(jobLeads.seenAt)).limit(200)
+    .orderBy(desc(jobLeads.seenAt)).limit(500)
 }
 
 export async function createSource(
@@ -127,9 +130,12 @@ export async function setLeadStatus(
  * list of {title, company?, link?, location?} objects. Errors return
  * an empty list so the tick proceeds for other sources.
  */
-async function aiExtractJobs(
-  userId: string, sourceText: string,
-): Promise<Array<{ title: string; company?: string; link?: string; location?: string }>> {
+type ExtractedJob = {
+  title: string; company?: string; link?: string; location?: string
+  salary?: string; description?: string; postedAt?: Date | null
+}
+
+async function aiExtractJobs(userId: string, sourceText: string): Promise<ExtractedJob[]> {
   const creds = await getAiFor(userId)
   if (creds.source === 'none') throw new Error('No AI key configured (Settings → AI)')
   const res = await fetch(GROQ_URL, {
@@ -138,21 +144,24 @@ async function aiExtractJobs(
     body: JSON.stringify({
       model: creds.model,
       temperature: 0.2,
-      max_tokens: 1024,
+      max_tokens: 4096,
       response_format: { type: 'json_object' },
       messages: [
         {
           role: 'system',
           content:
-            'You extract job listings from page text. Return ONLY JSON of the shape\n' +
-            '{"jobs":[{"title":"…","company":"…","link":"…","location":"…"}, ...]}.\n' +
-            'Keep at most 30 entries. title is required; company/link/location may be empty strings.\n' +
-            'Do NOT invent jobs that aren\'t in the source. Skip header / nav / cookie / footer text.\n' +
-            'If the page has no jobs (e.g. it\'s a marketing landing), return {"jobs": []}.',
+            'You extract job listings from page text. Return ONLY JSON:\n' +
+            '{"jobs":[{"title":"…","company":"…","link":"…","location":"…","salary":"…","description":"…","posted_date":"…"}, ...]}.\n' +
+            'Keep at most 100 entries. title is required; all other fields may be empty strings.\n' +
+            'posted_date: ISO date string if the posting date is visible (e.g. "2024-05-15"), else "".\n' +
+            'description: one-sentence job summary if visible, else "".\n' +
+            'salary: salary or CTC range if visible, else "".\n' +
+            'Do NOT invent data. Skip nav / cookie / footer text.\n' +
+            'If the page has no jobs return {"jobs": []}.',
         },
         {
           role: 'user',
-          content: `Extract jobs from this page text:\n\n${sourceText.slice(0, 9_000)}`,
+          content: `Extract jobs from this page text:\n\n${sourceText.slice(0, 25_000)}`,
         },
       ],
     }),
@@ -164,18 +173,107 @@ async function aiExtractJobs(
   const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> }
   const txt = data.choices?.[0]?.message?.content ?? '{}'
   try {
-    const parsed = JSON.parse(txt) as { jobs?: Array<{ title?: unknown; company?: unknown; link?: unknown; location?: unknown }> }
+    const parsed = JSON.parse(txt) as {
+      jobs?: Array<{ title?: unknown; company?: unknown; link?: unknown; location?: unknown; salary?: unknown; description?: unknown; posted_date?: unknown }>
+    }
     if (!Array.isArray(parsed.jobs)) return []
     return parsed.jobs
       .filter((j) => typeof j.title === 'string' && (j.title as string).trim())
-      .map((j) => ({
-        title: String(j.title).trim().slice(0, 200),
-        company: typeof j.company === 'string' ? j.company.trim().slice(0, 120) : '',
-        link: typeof j.link === 'string' ? j.link.trim().slice(0, 600) : '',
-        location: typeof j.location === 'string' ? j.location.trim().slice(0, 120) : '',
-      }))
-      .slice(0, 30)
+      .map((j) => {
+        const pd = typeof j.posted_date === 'string' ? j.posted_date.trim() : ''
+        let postedAt: Date | null = null
+        if (pd) { const d = new Date(pd); if (!isNaN(d.getTime())) postedAt = d }
+        return {
+          title: String(j.title).trim().slice(0, 200),
+          company: typeof j.company === 'string' ? j.company.trim().slice(0, 120) : '',
+          link: typeof j.link === 'string' ? j.link.trim().slice(0, 600) : '',
+          location: typeof j.location === 'string' ? j.location.trim().slice(0, 120) : '',
+          salary: typeof j.salary === 'string' ? j.salary.trim().slice(0, 120) : '',
+          description: typeof j.description === 'string' ? j.description.trim().slice(0, 400) : '',
+          postedAt,
+        }
+      })
+      .slice(0, 100)
   } catch { return [] }
+}
+
+// ── Naukri direct API ────────────────────────────────────────────────
+// Naukri is JS-rendered so plain HTML fetch returns an empty shell.
+// Their internal search API returns structured JSON without auth.
+// URL pattern: naukri.com/{role-slug}-jobs[-in-{location-slug}]
+
+function parseNaukriSlug(url: string): { keyword: string; location: string } | null {
+  try {
+    const u = new URL(url)
+    if (!/naukri\.com$/i.test(u.hostname)) return null
+    const slug = u.pathname.replace(/^\/|\/$/g, '')
+    const m = slug.match(/^(.+?)-jobs(?:-in-(.+))?$/)
+    if (!m) return null
+    return {
+      keyword: (m[1] ?? '').replace(/-/g, ' '),
+      location: (m[2] ?? '').replace(/-/g, ' '),
+    }
+  } catch { return null }
+}
+
+async function fetchNaukriApi(url: string, pages: number): Promise<ExtractedJob[]> {
+  const parsed = parseNaukriSlug(url)
+  if (!parsed) return []
+  const { keyword, location } = parsed
+  const results: ExtractedJob[] = []
+
+  for (let page = 1; page <= pages; page++) {
+    const apiUrl = new URL('https://www.naukri.com/jobapi/v3/search')
+    apiUrl.searchParams.set('noOfResults', String(NAUKRI_PER_PAGE))
+    apiUrl.searchParams.set('urlType', 'search_by_keyword')
+    apiUrl.searchParams.set('searchType', 'adv')
+    apiUrl.searchParams.set('keyword', keyword)
+    if (location) apiUrl.searchParams.set('location', location)
+    apiUrl.searchParams.set('pageNo', String(page))
+
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 10_000)
+    try {
+      const res = await fetch(apiUrl.toString(), {
+        signal: controller.signal,
+        headers: {
+          appid: '109', systemid: '109',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+          Accept: 'application/json',
+          'Accept-Language': 'en-US,en;q=0.9',
+        },
+      })
+      if (!res.ok) break
+      const data = (await res.json()) as {
+        jobDetails?: Array<{
+          title?: string; companyName?: string; jdURL?: string
+          placeholders?: Array<{ label?: string; title?: string }>
+          jobDescription?: string; createdDate?: string | number
+        }>
+      }
+      const jobs = data.jobDetails ?? []
+      if (jobs.length === 0) break
+      for (const j of jobs) {
+        const ph = (label: string) => j.placeholders?.find((p) => p.label === label)?.title ?? ''
+        let postedAt: Date | null = null
+        if (j.createdDate) {
+          const d = new Date(Number(j.createdDate))
+          if (!isNaN(d.getTime())) postedAt = d
+        }
+        results.push({
+          title: (j.title ?? '').trim().slice(0, 200),
+          company: (j.companyName ?? '').trim().slice(0, 120),
+          link: (j.jdURL ?? '').trim().slice(0, 600),
+          location: ph('location').slice(0, 120),
+          salary: ph('salary').slice(0, 120),
+          description: (j.jobDescription ?? '').replace(/<[^>]+>/g, '').trim().slice(0, 400),
+          postedAt,
+        })
+      }
+      if (jobs.length < NAUKRI_PER_PAGE) break // last page
+    } catch { break } finally { clearTimeout(timer) }
+  }
+  return results
 }
 
 /**
@@ -202,18 +300,27 @@ function keywordsMatch(title: string, company: string, keywords: string): boolea
  * record `lastStatus` / `lastError` on the source for visibility.
  */
 export async function tickSource(source: JobSource): Promise<{ added: number; status: string; error?: string }> {
+  const isFirstFetch = !source.lastFetchedAt
+  const isNaukri = /naukri\.com/i.test(source.url)
+
   try {
-    const fetched = await fetchForAi(source.url)
-    if (!fetched.ok) {
-      await db.update(jobSources).set({
-        lastFetchedAt: Date.now(), lastStatus: 'fetch-failed', lastError: fetched.error.slice(0, 240),
-      }).where(eq(jobSources.id, source.id))
-      return { added: 0, status: 'fetch-failed', error: fetched.error }
+    let jobs: ExtractedJob[]
+
+    if (isNaukri) {
+      // Bypass HTML fetch + AI — use Naukri's JSON search API directly.
+      jobs = await fetchNaukriApi(source.url, isFirstFetch ? NAUKRI_FIRST_PAGES : NAUKRI_TICK_PAGES)
+    } else {
+      const fetched = await fetchForAi(source.url)
+      if (!fetched.ok) {
+        await db.update(jobSources).set({
+          lastFetchedAt: Date.now(), lastStatus: 'fetch-failed', lastError: fetched.error.slice(0, 240),
+        }).where(eq(jobSources.id, source.id))
+        return { added: 0, status: 'fetch-failed', error: fetched.error }
+      }
+      jobs = await aiExtractJobs(source.userId, fetched.text)
     }
-    const jobs = await aiExtractJobs(source.userId, fetched.text)
-    // First-ever fetch: pull everything the AI found (no per-tick cap).
-    // Subsequent ticks: cap at MAX_NEW_PER_TICK to avoid long-running fns.
-    const isFirstFetch = !source.lastFetchedAt
+
+    // First fetch: take everything extracted. Ongoing: cap per tick.
     const batchCap = isFirstFetch ? jobs.length : MAX_NEW_PER_TICK
     let added = 0
     for (const j of jobs.slice(0, batchCap)) {
@@ -223,7 +330,13 @@ export async function tickSource(source: JobSource): Promise<{ added: number; st
         await db.insert(jobLeads).values({
           userId: source.userId, sourceId: source.id,
           fingerprint: fp,
-          title: j.title, company: j.company ?? '', link: j.link ?? '', location: j.location ?? '',
+          title: j.title,
+          company: j.company ?? '',
+          link: j.link ?? '',
+          location: j.location ?? '',
+          salary: j.salary ?? '',
+          description: j.description ?? '',
+          postedAt: j.postedAt ?? null,
         })
         added++
       } catch {
@@ -236,12 +349,11 @@ export async function tickSource(source: JobSource): Promise<{ added: number; st
       lastError: '',
     }).where(eq(jobSources.id, source.id))
     if (added > 0) {
-      // Fire-and-forget Slack/Discord notification.
       await notify(source.userId, 'send.completed', {
         title: `Job tracker: ${added} new ${added === 1 ? 'lead' : 'leads'}`,
         detail: `From source "${source.label}". Open /jobs to triage.`,
         meta: { source: source.label, new_leads: added },
-      }).catch(() => { /* notify is best-effort */ })
+      }).catch(() => {})
     }
     return { added, status: 'ok' }
   } catch (e) {
