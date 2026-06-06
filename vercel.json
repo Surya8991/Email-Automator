@@ -4,10 +4,6 @@
   "installCommand": "npm install --legacy-peer-deps",
   "framework": "nextjs",
   "regions": ["bom1"],
-  "crons": [
-    { "path": "/api/cron/tick?secret=$CRON_SECRET",        "schedule": "*/5 * * * *" },
-    { "path": "/api/cron/job-tracker?secret=$CRON_SECRET", "schedule": "0 * * * *"  }
-  ],
   "functions": {
     "app/api/track/open/route.ts":       { "maxDuration": 5  },
     "app/api/track/click/route.ts":      { "maxDuration": 5  },

@@ -1,0 +1,40 @@
+# Pokes /api/cron/job-tracker on the deployed app every hour. Uses GitHub
+# Actions instead of Vercel crons because Vercel's Hobby plan only allows a
+# minimum cadence of once per day.
+#
+# Required repo secrets (Settings → Secrets and variables → Actions):
+#   APP_URL      e.g. https://email-automator-three.vercel.app   (no trailing /)
+#   CRON_SECRET  same value you set in Vercel env vars
+#
+# The endpoint walks every user's active job sources, fetches them via the
+# SSRF-defended fetcher, AI-extracts new listings, and writes them to
+# job_leads. Capped at 40 sources per tick to stay inside function limits.
+name: Job tracker
+
+on:
+  schedule:
+    - cron: '0 * * * *'   # every hour on the hour
+  workflow_dispatch:       # lets you trigger a manual fetch from Actions tab
+
+permissions: {}
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Hit /api/cron/job-tracker
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "::error::APP_URL and CRON_SECRET secrets must be set in this repo."
+            exit 1
+          fi
+          code=$(curl -sS -o /tmp/body -w "%{http_code}" \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$APP_URL/api/cron/job-tracker")
+          echo "HTTP $code"
+          cat /tmp/body
+          [ "$code" = "200" ]
