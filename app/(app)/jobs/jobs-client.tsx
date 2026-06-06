@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import {
   Plus, RefreshCw, Trash2, ExternalLink, Bookmark, Briefcase, CheckCircle2, XCircle, Building2,
   Search, Download, MailPlus, Pause, Play, Pencil, RefreshCcw, Archive, Clock,
+  ChevronDown, ChevronUp, MapPin, DollarSign, CalendarDays, Tag, Eye,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -590,6 +591,7 @@ function LeadsTable({
   const [companyFilter, setCompanyFilter] = useState('')
   const [locationFilter, setLocationFilter] = useState('')
   const [selected, setSelected] = useState<Set<number>>(new Set())
+  const [expandedId, setExpandedId] = useState<number | null>(null)
 
   const companies = useMemo(() =>
     [...new Set(leads.map((l) => l.company).filter(Boolean))].sort(), [leads])
@@ -613,6 +615,7 @@ function LeadsTable({
   }, [leads, q, sourceFilter, companyFilter, locationFilter])
   const sourceById = useMemo(() => new Map(sources.map((s) => [s.id, s])), [sources])
   const allSelected = filtered.length > 0 && filtered.every((l) => selected.has(l.id))
+
   function bulk(next: 'saved' | 'ignored' | 'applied') {
     const ids = Array.from(selected)
     if (ids.length === 0) return
@@ -637,52 +640,41 @@ function LeadsTable({
     start(async () => {
       const r = await leadToDraftAction(id)
       if ('error' in r && r.error) { toast.error(r.error); return }
-      toast.success('Draft created. Finish it in /drafts.')
+      toast.success('Draft created — go to Drafts to add the recruiter email and send.')
       router.refresh()
     })
   }
 
   return (
     <div className="space-y-2">
+      {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative max-w-sm flex-1">
           <Search className="pointer-events-none absolute left-2 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search title / company / location…" className="pl-8 h-9 text-sm" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search title / company / location / JD…" className="pl-8 h-9 text-sm" />
         </div>
         {sources.length > 1 ? (
-          <select
-            value={sourceFilter ?? ''}
-            onChange={(e) => setSourceFilter(e.target.value === '' ? null : Number(e.target.value))}
-            className="h-9 rounded-md border bg-background px-2 text-xs"
-            aria-label="Filter by source"
-          >
+          <select value={sourceFilter ?? ''} onChange={(e) => setSourceFilter(e.target.value === '' ? null : Number(e.target.value))}
+            className="h-9 rounded-md border bg-background px-2 text-xs" aria-label="Filter by source">
             <option value="">All sources</option>
             {sources.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
         ) : null}
         {companies.length > 1 ? (
-          <select
-            value={companyFilter}
-            onChange={(e) => setCompanyFilter(e.target.value)}
-            className="h-9 rounded-md border bg-background px-2 text-xs"
-            aria-label="Filter by company"
-          >
+          <select value={companyFilter} onChange={(e) => setCompanyFilter(e.target.value)}
+            className="h-9 rounded-md border bg-background px-2 text-xs" aria-label="Filter by company">
             <option value="">All companies</option>
             {companies.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         ) : null}
         {locations.length > 1 ? (
-          <select
-            value={locationFilter}
-            onChange={(e) => setLocationFilter(e.target.value)}
-            className="h-9 rounded-md border bg-background px-2 text-xs"
-            aria-label="Filter by location"
-          >
+          <select value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)}
+            className="h-9 rounded-md border bg-background px-2 text-xs" aria-label="Filter by location">
             <option value="">All locations</option>
             {locations.map((l) => <option key={l} value={l}>{l}</option>)}
           </select>
         ) : null}
-        <div className="text-xs text-muted-foreground">{filtered.length} of {leads.length} {leads.length === 1 ? 'lead' : 'leads'}</div>
+        <span className="text-xs text-muted-foreground">{filtered.length} of {leads.length} {leads.length === 1 ? 'lead' : 'leads'}</span>
         <Button variant="outline" size="sm" asChild className="ml-auto">
           <a href={`/api/jobs/export?status=${status}`} download>
             <Download className="mr-1 h-3.5 w-3.5" /> CSV
@@ -690,6 +682,7 @@ function LeadsTable({
         </Button>
       </div>
 
+      {/* Bulk action bar */}
       {selected.size > 0 ? (
         <div className="flex flex-wrap items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs">
           <span className="font-medium">{selected.size} selected</span>
@@ -700,7 +693,7 @@ function LeadsTable({
           ) : null}
           <Button size="sm" variant="outline" disabled={busy || pending} onClick={() => bulk('applied')}>Mark all applied</Button>
           <Button size="sm" variant="ghost" disabled={busy || pending} onClick={() => bulk('ignored')}>Ignore all</Button>
-          <Button size="sm" variant="ghost" disabled={busy || pending} onClick={() => setSelected(new Set())} className="ml-auto">Clear selection</Button>
+          <Button size="sm" variant="ghost" disabled={busy || pending} onClick={() => setSelected(new Set())} className="ml-auto">Clear</Button>
         </div>
       ) : null}
 
@@ -713,92 +706,214 @@ function LeadsTable({
               : 'No leads found.'}
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-md border">
-          <table className="ea-table">
-            <thead><tr>
-              <th className="w-8">
-                <input
-                  type="checkbox" aria-label="Select all visible"
-                  checked={allSelected}
-                  onChange={(e) => {
-                    const n = new Set(selected)
-                    if (e.target.checked) for (const l of filtered) n.add(l.id)
-                    else for (const l of filtered) n.delete(l.id)
-                    setSelected(n)
-                  }}
-                />
-              </th>
-              <th>Title</th>
-              <th>Company</th>
-              <th>Location</th>
-              <th>Salary</th>
-              <th>Posted</th>
-              <th>Seen</th>
-              <th className="w-64 text-right">Actions</th>
-            </tr></thead>
-            <tbody>
-              {filtered.map((l) => {
-                const src = sourceById.get(l.sourceId)
-                return (
-                <tr key={l.id}>
-                  <td>
-                    <input
-                      type="checkbox" aria-label={`Select ${l.title}`}
-                      checked={selected.has(l.id)}
-                      onChange={(e) => {
-                        const n = new Set(selected)
-                        if (e.target.checked) n.add(l.id); else n.delete(l.id)
-                        setSelected(n)
-                      }}
-                    />
-                  </td>
-                  <td>
-                    {l.link ? (
-                      <a href={l.link} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-medium hover:text-primary">
-                        {l.title} <ExternalLink className="h-3 w-3" />
-                      </a>
-                    ) : <span className="font-medium">{l.title}</span>}
+        /* Select-all header */
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 px-1">
+            <input
+              type="checkbox" aria-label="Select all visible"
+              checked={allSelected}
+              onChange={(e) => {
+                const n = new Set(selected)
+                if (e.target.checked) for (const l of filtered) n.add(l.id)
+                else for (const l of filtered) n.delete(l.id)
+                setSelected(n)
+              }}
+              className="h-3.5 w-3.5"
+            />
+            <span className="text-[11px] text-muted-foreground">Select all visible</span>
+          </div>
+
+          {filtered.map((l) => {
+            const src = sourceById.get(l.sourceId)
+            const isExpanded = expandedId === l.id
+            return (
+              <div key={l.id}
+                className={`rounded-lg border bg-card transition-shadow ${isExpanded ? 'shadow-md ring-1 ring-primary/20' : 'hover:shadow-sm'}`}>
+                {/* Card header — always visible */}
+                <div className="flex items-start gap-3 p-4">
+                  <input
+                    type="checkbox" aria-label={`Select ${l.title}`}
+                    checked={selected.has(l.id)}
+                    onChange={(e) => {
+                      const n = new Set(selected)
+                      if (e.target.checked) n.add(l.id); else n.delete(l.id)
+                      setSelected(n)
+                    }}
+                    className="mt-1 h-3.5 w-3.5 shrink-0"
+                  />
+
+                  {/* Main info */}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        {/* Title + external link */}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {l.link ? (
+                            <a href={l.link} target="_blank" rel="noreferrer"
+                              className="inline-flex items-center gap-1 font-semibold text-base hover:text-primary ea-transition"
+                              onClick={(e) => e.stopPropagation()}>
+                              {l.title}
+                              <ExternalLink className="h-3.5 w-3.5 shrink-0 opacity-60" />
+                            </a>
+                          ) : (
+                            <span className="font-semibold text-base">{l.title}</span>
+                          )}
+                        </div>
+
+                        {/* Meta chips */}
+                        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                          {l.company ? (
+                            <span className="inline-flex items-center gap-1 font-medium text-foreground">
+                              <Building2 className="h-3 w-3" /> {l.company}
+                            </span>
+                          ) : null}
+                          {l.location ? (
+                            <span className="inline-flex items-center gap-1">
+                              <MapPin className="h-3 w-3" /> {l.location}
+                            </span>
+                          ) : null}
+                          {l.salary ? (
+                            <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
+                              <DollarSign className="h-3 w-3" /> {l.salary}
+                            </span>
+                          ) : null}
+                          {l.postedAt ? (
+                            <span className="inline-flex items-center gap-1">
+                              <CalendarDays className="h-3 w-3" /> {new Date(l.postedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                            </span>
+                          ) : null}
+                          {src ? (
+                            <span className="inline-flex items-center gap-1 opacity-60">
+                              <Tag className="h-3 w-3" /> {src.label}
+                            </span>
+                          ) : null}
+                        </div>
+
+                        {/* Description preview — collapsed */}
+                        {!isExpanded && l.description ? (
+                          <p className="mt-2 text-xs text-muted-foreground line-clamp-2 max-w-2xl">{l.description}</p>
+                        ) : null}
+                      </div>
+
+                      {/* Action buttons — top-right */}
+                      <div className="flex shrink-0 items-center gap-1 ea-row-actions">
+                        <Button size="sm" variant="default" disabled={busy || pending} onClick={() => convertToDraft(l.id)}
+                          title="Create a draft outreach email from this lead">
+                          <MailPlus className="mr-1 h-3 w-3" /> Draft
+                        </Button>
+                        {showSaveButton ? (
+                          <Button size="sm" variant="outline" disabled={busy || pending} onClick={() => setStatus(l.id, 'saved')} title="Save for later">
+                            <Bookmark className="mr-1 h-3 w-3" /> Save
+                          </Button>
+                        ) : null}
+                        <Button size="sm" variant="ghost" disabled={busy || pending} onClick={() => setStatus(l.id, 'applied')} title="Mark as applied">
+                          Applied
+                        </Button>
+                        <Button size="sm" variant="ghost" disabled={busy || pending} onClick={() => setStatus(l.id, 'ignored')} title="Dismiss this lead">
+                          Ignore
+                        </Button>
+                        <Button size="sm" variant="ghost"
+                          onClick={() => setExpandedId(isExpanded ? null : l.id)}
+                          title={isExpanded ? 'Collapse' : 'Expand full JD'}
+                          aria-expanded={isExpanded}>
+                          {isExpanded
+                            ? <ChevronUp className="h-4 w-4" />
+                            : <><Eye className="h-3.5 w-3.5 mr-1" /><ChevronDown className="h-3.5 w-3.5" /></>}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Expanded JD panel */}
+                {isExpanded ? (
+                  <div className="border-t bg-muted/30 px-4 py-4 space-y-4">
+                    {/* Full description */}
                     {l.description ? (
-                      <div className="mt-0.5 text-[11px] text-muted-foreground line-clamp-1">{l.description}</div>
-                    ) : null}
-                    {src ? (
-                      <div className="text-[10px] text-muted-foreground">via {src.label}</div>
-                    ) : null}
-                  </td>
-                  <td className="text-xs text-muted-foreground">{l.company || '–'}</td>
-                  <td className="text-xs text-muted-foreground">{l.location || '–'}</td>
-                  <td className="text-xs text-muted-foreground">{l.salary || '–'}</td>
-                  <td className="text-xs text-muted-foreground">
-                    {l.postedAt ? new Date(l.postedAt).toLocaleDateString() : '–'}
-                  </td>
-                  <td className="text-xs text-muted-foreground">{new Date(l.seenAt).toLocaleDateString()}</td>
-                  <td>
-                    <div className="ea-row-actions flex justify-end gap-1">
-                      <Button size="sm" variant="outline" disabled={busy || pending} onClick={() => convertToDraft(l.id)}
-                        title="Create a draft outreach email + contact for this lead">
-                        <MailPlus className="mr-1 h-3 w-3" /> Draft
+                      <div>
+                        <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Job Description</h4>
+                        <p className="text-sm leading-relaxed whitespace-pre-wrap text-foreground">{l.description}</p>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground italic">No description extracted. Open the listing for full JD.</p>
+                    )}
+
+                    {/* Detail grid */}
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-3 text-sm border-t pt-3">
+                      {l.company ? (
+                        <div>
+                          <span className="block text-[10px] uppercase tracking-wide text-muted-foreground">Company</span>
+                          <span className="font-medium">{l.company}</span>
+                        </div>
+                      ) : null}
+                      {l.location ? (
+                        <div>
+                          <span className="block text-[10px] uppercase tracking-wide text-muted-foreground">Location</span>
+                          <span>{l.location}</span>
+                        </div>
+                      ) : null}
+                      {l.salary ? (
+                        <div>
+                          <span className="block text-[10px] uppercase tracking-wide text-muted-foreground">Salary</span>
+                          <span className="font-medium text-emerald-600 dark:text-emerald-400">{l.salary}</span>
+                        </div>
+                      ) : null}
+                      {l.postedAt ? (
+                        <div>
+                          <span className="block text-[10px] uppercase tracking-wide text-muted-foreground">Posted</span>
+                          <span>{new Date(l.postedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                        </div>
+                      ) : null}
+                      <div>
+                        <span className="block text-[10px] uppercase tracking-wide text-muted-foreground">Seen</span>
+                        <span>{new Date(l.seenAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                      </div>
+                      {src ? (
+                        <div>
+                          <span className="block text-[10px] uppercase tracking-wide text-muted-foreground">Source</span>
+                          <a href={src.url} target="_blank" rel="noreferrer"
+                            className="inline-flex items-center gap-1 text-primary hover:underline">
+                            {src.label} <ExternalLink className="h-3 w-3" />
+                          </a>
+                        </div>
+                      ) : null}
+                      {l.link ? (
+                        <div>
+                          <span className="block text-[10px] uppercase tracking-wide text-muted-foreground">Listing URL</span>
+                          <a href={l.link} target="_blank" rel="noreferrer"
+                            className="inline-flex items-center gap-1 text-primary hover:underline text-xs truncate max-w-[14rem]">
+                            Open JD <ExternalLink className="h-3 w-3 shrink-0" />
+                          </a>
+                        </div>
+                      ) : null}
+                    </div>
+
+                    {/* Inline action row at bottom of expanded card */}
+                    <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+                      <Button size="sm" variant="default" disabled={busy || pending} onClick={() => convertToDraft(l.id)}>
+                        <MailPlus className="mr-1.5 h-3.5 w-3.5" /> Create draft outreach
                       </Button>
                       {showSaveButton ? (
-                        <Button size="sm" variant="ghost" disabled={busy || pending} onClick={() => setStatus(l.id, 'saved')}
-                          title="Save for later">
-                          <Bookmark className="mr-1 h-3 w-3" /> Save
+                        <Button size="sm" variant="outline" disabled={busy || pending} onClick={() => setStatus(l.id, 'saved')}>
+                          <Bookmark className="mr-1.5 h-3.5 w-3.5" /> Save lead
                         </Button>
                       ) : null}
-                      <Button size="sm" variant="ghost" disabled={busy || pending} onClick={() => setStatus(l.id, 'applied')}
-                        title="Mark as applied">
-                        Applied
+                      <Button size="sm" variant="outline" disabled={busy || pending} onClick={() => setStatus(l.id, 'applied')}>
+                        <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" /> Mark applied
                       </Button>
                       <Button size="sm" variant="ghost" disabled={busy || pending} onClick={() => setStatus(l.id, 'ignored')}
-                        title="Ignore">
-                        Ignore
+                        className="text-muted-foreground">
+                        <XCircle className="mr-1.5 h-3.5 w-3.5" /> Ignore
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setExpandedId(null)} className="ml-auto">
+                        <ChevronUp className="mr-1 h-3.5 w-3.5" /> Collapse
                       </Button>
                     </div>
-                  </td>
-                </tr>
-                )
-              })}
-            </tbody>
-          </table>
+                  </div>
+                ) : null}
+              </div>
+            )
+          })}
         </div>
       )}
     </div>

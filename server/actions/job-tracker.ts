@@ -209,14 +209,27 @@ export async function leadToDraftAction(id: number) {
       emailStatus: 'Draft Created',
     }).returning({ id: contactsTbl.id })
     const contactId = inserted[0]!.id
-    // Bare-bones draft body — the user customizes it. Subject uses
-    // {{name}} / {{company}} so it personalizes when an email is added.
-    const subject = `Re: ${lead.title} role at ${lead.company || '{{company}}'}`
+    const subject = `Application: ${lead.title}${lead.company ? ` at ${lead.company}` : ''}`
+    // Build a richer outreach email using whatever fields the lead has.
+    const metaLines: string[] = []
+    if (lead.company)  metaLines.push(`<strong>Company:</strong> ${lead.company}`)
+    if (lead.location) metaLines.push(`<strong>Location:</strong> ${lead.location}`)
+    if (lead.salary)   metaLines.push(`<strong>Salary:</strong> ${lead.salary}`)
+    if (lead.link)     metaLines.push(`<strong>Listing:</strong> <a href="${lead.link}">${lead.link}</a>`)
+    const descSnippet = lead.description
+      ? `<blockquote style="border-left:3px solid #ccc;padding-left:1em;margin:0.5em 0;color:#555;font-size:0.9em">${lead.description.slice(0, 300)}${lead.description.length > 300 ? '…' : ''}</blockquote>`
+      : ''
+    const metaBlock = metaLines.length
+      ? `<p style="font-size:0.85em;color:#666">${metaLines.join(' &nbsp;·&nbsp; ')}</p>`
+      : ''
     const body =
       `<p>Hi {{name}},</p>` +
-      `<p>I saw the ${lead.title}${lead.company ? ` role at ${lead.company}` : ''}` +
-      `${lead.location ? ` (${lead.location})` : ''} and wanted to reach out — would you be open to a quick chat?</p>` +
-      `<p>Best,<br/>{{your_name}}</p>`
+      `<p>I came across the <strong>${lead.title}</strong>${lead.company ? ` position at <strong>${lead.company}</strong>` : ' role'}` +
+      `${lead.location ? ` in ${lead.location}` : ''} and I'm very interested in applying.</p>` +
+      `${descSnippet}` +
+      `${metaBlock}` +
+      `<p>I'd love to learn more about the role and share how my background aligns with what you're looking for. Would you be open to a quick chat?</p>` +
+      `<p>Best regards,<br/>{{your_name}}</p>`
     await db.insert(draftsTbl).values({
       userId: u.id, contactId,
       toEmail: '', subject, htmlBody: body, plainBody: body.replace(/<[^>]+>/g, ''),

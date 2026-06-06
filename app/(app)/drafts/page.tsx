@@ -61,7 +61,17 @@ export default async function DraftsPage(props: { searchParams: Promise<{ page?:
       />
       <Card><CardContent className="p-0">
         <DraftsClient
-          rows={rows}
+          rows={rows.map((r) => ({
+            id: r.id, userId: r.userId, contactId: r.contactId,
+            toEmail: r.toEmail, subject: r.subject,
+            htmlBody: r.htmlBody, plainBody: r.plainBody,
+            status: r.status, createdAt: r.createdAt,
+            contactPlatform: r.contactPlatform ?? null,
+            contactJobTitle: r.contactJobTitle ?? null,
+            contactCompany: r.contactCompany ?? null,
+            contactLocation: r.contactLocation ?? null,
+            contactSourceUrl: r.contactSourceUrl ?? null,
+          }))}
           isAdmin={Boolean(u.isAdmin)}
           page={page}
           pages={pages}

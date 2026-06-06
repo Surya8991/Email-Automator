@@ -2,7 +2,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
-import { Send, Trash2, Sparkles, SendHorizontal, Pencil, Save, X, CalendarClock, Search, ChevronLeft, ChevronRight, Inbox } from 'lucide-react'
+import { Send, Trash2, Sparkles, SendHorizontal, Pencil, Save, X, CalendarClock, Search, ChevronLeft, ChevronRight, Inbox, Briefcase, MapPin, ExternalLink } from 'lucide-react'
 import { RichTextEditor } from '@/components/rich-text-editor'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,6 +14,15 @@ import {
   improveDraftAction,
 } from '@/server/actions/drafts'
 import type { Draft } from '@/server/db/schema'
+
+// Extended draft row includes contact context for job-tracker drafts
+type DraftRow = Draft & {
+  contactPlatform?: string | null
+  contactJobTitle?: string | null
+  contactCompany?: string | null
+  contactLocation?: string | null
+  contactSourceUrl?: string | null
+}
 import { useProgress } from '@/components/use-progress'
 import { AiImprovePicker } from '@/components/ai-improve-picker'
 import { CreateDraftsDialog, type TemplateOption } from './create-drafts-dialog'
@@ -24,7 +33,7 @@ import { SpamCheckChip } from '@/components/spam-check-chip'
 const PAGE_SIZE_OPTIONS = [50, 100, 500, 1000]
 
 interface DraftsClientProps {
-  rows: Draft[]
+  rows: DraftRow[]
   /** Kept for prop-compat; AI Improve was originally admin-only. Lifted 2026-06-05. */
   isAdmin?: boolean
   page?: number
@@ -209,7 +218,26 @@ export function DraftsClient({
                   }}
                 />
                 <div className="min-w-0 flex-1">
-                  <div className="text-xs font-mono text-muted-foreground">{d.toEmail}</div>
+                  <div className="text-xs font-mono text-muted-foreground">{d.toEmail || <span className="italic">no email yet — add on contact page</span>}</div>
+                  {/* Job-tracker context badge */}
+                  {d.contactPlatform === 'jobs-tracker' ? (
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-fuchsia-500/10 px-2 py-0.5 text-[10px] font-medium text-fuchsia-700 dark:text-fuchsia-300">
+                        <Briefcase className="h-2.5 w-2.5" /> Job tracker
+                      </span>
+                      {d.contactJobTitle ? <span className="font-medium text-foreground">{d.contactJobTitle}</span> : null}
+                      {d.contactCompany ? <span>{d.contactCompany}</span> : null}
+                      {d.contactLocation ? (
+                        <span className="inline-flex items-center gap-0.5"><MapPin className="h-2.5 w-2.5" /> {d.contactLocation}</span>
+                      ) : null}
+                      {d.contactSourceUrl ? (
+                        <a href={d.contactSourceUrl} target="_blank" rel="noreferrer"
+                          className="inline-flex items-center gap-0.5 hover:text-primary">
+                          View listing <ExternalLink className="h-2.5 w-2.5" />
+                        </a>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {isEditing ? (
                     <div className="mt-2 space-y-2">
                       <Input value={editSubject} onChange={(e) => setEditSubject(e.target.value)}

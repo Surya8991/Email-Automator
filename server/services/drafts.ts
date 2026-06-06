@@ -55,7 +55,22 @@ export async function listDrafts(userId: string, page = 1, pageSize = 50) {
   // limit so a bad ?pageSize= URL can't over-fetch.
   const cappedSize = Math.min(1000, Math.max(1, pageSize))
   const offset = (page - 1) * cappedSize
-  const rows = await db.select().from(drafts).where(and(eq(drafts.userId, userId), eq(drafts.status, 'draft')))
+  const rows = await db
+    .select({
+      id: drafts.id, userId: drafts.userId, contactId: drafts.contactId,
+      toEmail: drafts.toEmail, subject: drafts.subject,
+      htmlBody: drafts.htmlBody, plainBody: drafts.plainBody,
+      status: drafts.status, createdAt: drafts.createdAt,
+      // Contact context — populated when draft was created from a job lead
+      contactPlatform: contacts.platform,
+      contactJobTitle: contacts.jobTitle,
+      contactCompany: contacts.company,
+      contactLocation: contacts.location,
+      contactSourceUrl: contacts.sourceUrl,
+    })
+    .from(drafts)
+    .leftJoin(contacts, eq(drafts.contactId, contacts.id))
+    .where(and(eq(drafts.userId, userId), eq(drafts.status, 'draft')))
     .orderBy(desc(drafts.id)).limit(cappedSize).offset(offset)
   const countRows = await db.select({ n: sql<number>`COUNT(*)` }).from(drafts)
     .where(and(eq(drafts.userId, userId), eq(drafts.status, 'draft')))
