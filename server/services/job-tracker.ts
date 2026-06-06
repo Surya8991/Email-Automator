@@ -103,7 +103,7 @@ export async function bulkSetLeadStatus(
   return { updated: ids.length }
 }
 
-export async function listLeads(userId: string, status: string = 'new', limit = 5000): Promise<JobLead[]> {
+export async function listLeads(userId: string, status: string = 'new', limit = 20000): Promise<JobLead[]> {
   return db.select().from(jobLeads)
     .where(and(eq(jobLeads.userId, userId), eq(jobLeads.status, status)))
     .orderBy(desc(jobLeads.seenAt)).limit(limit)
