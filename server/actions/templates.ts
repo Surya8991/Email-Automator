@@ -8,6 +8,7 @@ import { personalize } from '@/lib/escape'
 import { wrapEmailHtml } from '@/lib/email-template'
 import { actionError } from '@/lib/action-error'
 import { rateLimit } from '@/lib/rate-limit'
+import { draftEmail, type Tone } from '@/server/services/ai'
 
 const TemplateSchema = z.object({
   key: z.string().min(1).max(80),
@@ -97,4 +98,29 @@ export async function cloneTemplateAction(id: number) {
   })
   revalidatePath('/templates')
   return { ok: true, id: created.id, key: newKey }
+}
+
+
+export async function improveTemplateBodyAction(
+  body: string,
+  tone: Tone = 'professional',
+  opts: { length?: 'short' | 'medium' | 'long'; cta?: 'none' | 'soft' | 'direct' } = {},
+) {
+  const u = await requireUser()
+  if (!rateLimit(`ai-improve-tpl:${u.id}`, 20, 60_000)) {
+    return { error: 'Too many AI improves — please wait a minute' }
+  }
+  if (!body.trim()) return { error: 'Body is empty' }
+  try {
+    const improved = await draftEmail(u.id, {
+      existing: body,
+      tone,
+      length: opts.length,
+      cta: opts.cta,
+      goal: 'Improve the email body below — keep the intent and any {{variables}} intact, tighten language, fix awkward phrasing, match the requested tone.',
+    })
+    return { ok: true as const, body: improved }
+  } catch (e) {
+    return actionError(e, 'AI request failed')
+  }
 }

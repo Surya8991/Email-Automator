@@ -16,7 +16,7 @@ import {
 import {
   addJobSourceAction, deleteJobSourceAction, refreshJobSourceAction, setJobLeadStatusAction,
   leadToDraftAction, bulkSetJobLeadStatusAction, toggleJobSourceActiveAction,
-  editJobSourceAction, refreshAllForUserAction,
+  editJobSourceAction, refreshAllForUserAction, validateJobSourceAction,
 } from '@/server/actions/job-tracker'
 import { JobPresetPicker } from './preset-picker'
 
@@ -105,52 +105,119 @@ function timeAgo(ms: number | null): string {
   return `${d}d ago`
 }
 
+type ValidationResult = {
+  ok: boolean; total: number; error?: string
+  sample: Array<{ title: string; company: string; location: string; salary: string }>
+}
+
 function AddSourceDialog() {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [label, setLabel] = useState('')
   const [url, setUrl] = useState('')
   const [keywords, setKeywords] = useState('')
+  const [notes, setNotes] = useState('')
   const [pending, start] = useTransition()
+  const [validating, setValidating] = useState(false)
+  const [validation, setValidation] = useState<ValidationResult | null>(null)
+
+  function reset() { setLabel(''); setUrl(''); setKeywords(''); setNotes(''); setValidation(null) }
+
+  async function testSource() {
+    if (!url.trim()) { toast.error('Enter a URL first'); return }
+    setValidating(true); setValidation(null)
+    const r = await validateJobSourceAction(url.trim(), keywords.trim())
+    setValidating(false)
+    if ('error' in r && r.error) { setValidation({ ok: false, total: 0, error: r.error, sample: [] }); return }
+    if ('ok' in r) setValidation({ ok: true, total: r.total, sample: r.sample, error: undefined })
+  }
+
   function submit() {
     start(async () => {
-      const r = await addJobSourceAction({ label, url, keywords })
+      const r = await addJobSourceAction({ label: label.trim() || url, url, keywords })
       if ('error' in r && r.error) { toast.error(r.error); return }
-      toast.success('Source added. Refresh to pull the first leads.')
-      setOpen(false); setLabel(''); setUrl(''); setKeywords('')
-      router.refresh()
+      toast.success('Source added — the cron will pull jobs on the next hourly tick.')
+      setOpen(false); reset(); router.refresh()
     })
   }
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) reset() }}>
       <DialogTrigger asChild>
         <Button><Plus className="mr-1.5 h-4 w-4" /> Add source</Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Add a job source</DialogTitle>
           <DialogDescription>
-            A URL we'll fetch periodically and extract jobs from. HTTPS-only in production; private IPs / loopback / link-local blocked.
+            Paste a job-board search URL or company careers page. We'll fetch it periodically and AI-extract new listings.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="grid gap-1.5">
-            <Label htmlFor="js-label">Label</Label>
-            <Input id="js-label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Wellfound, PM in Bangalore" />
+            <Label htmlFor="js-url">Board / careers URL <span className="text-destructive">*</span></Label>
+            <div className="flex gap-2">
+              <Input
+                id="js-url" type="url" value={url}
+                onChange={(e) => { setUrl(e.target.value); setValidation(null) }}
+                placeholder="https://www.naukri.com/seo-jobs-in-bangalore"
+                className="flex-1"
+              />
+              <Button type="button" variant="outline" size="sm" disabled={validating || !url.trim()} onClick={testSource}>
+                {validating ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : 'Test'}
+              </Button>
+            </div>
+            <p className="text-[11px] text-muted-foreground">HTTPS only in production. Naukri, LinkedIn, Wellfound, Greenhouse, Lever, and company careers pages all work.</p>
           </div>
+
+          {/* Validation result */}
+          {validation ? (
+            <div className={`rounded-md border p-3 text-xs ${validation.ok ? 'border-emerald-500/30 bg-emerald-500/10' : 'border-destructive/30 bg-destructive/10'}`}>
+              {validation.ok ? (
+                <>
+                  <div className="mb-1.5 font-medium text-emerald-700 dark:text-emerald-400">
+                    ✓ Reachable — found {validation.total} job{validation.total !== 1 ? 's' : ''} matching your keywords
+                  </div>
+                  {validation.sample.map((j, i) => (
+                    <div key={i} className="py-0.5 text-muted-foreground">
+                      <span className="font-medium text-foreground">{j.title}</span>
+                      {j.company ? ` · ${j.company}` : ''}
+                      {j.location ? ` · ${j.location}` : ''}
+                      {j.salary ? ` · ${j.salary}` : ''}
+                    </div>
+                  ))}
+                  {validation.total === 0 ? (
+                    <div className="text-amber-600 dark:text-amber-400">No listings found — try broadening your keywords or check if the board is publicly accessible.</div>
+                  ) : null}
+                </>
+              ) : (
+                <div className="text-destructive">{validation.error}</div>
+              )}
+            </div>
+          ) : null}
+
           <div className="grid gap-1.5">
-            <Label htmlFor="js-url">URL</Label>
-            <Input id="js-url" type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" />
+            <Label htmlFor="js-label">Label <span className="text-muted-foreground text-[11px]">(auto-filled from URL if blank)</span></Label>
+            <Input id="js-label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Naukri — SEO Bangalore" />
           </div>
+
           <div className="grid gap-1.5">
-            <Label htmlFor="js-keywords">Keywords (optional, comma-separated)</Label>
-            <Input id="js-keywords" value={keywords} onChange={(e) => setKeywords(e.target.value)} placeholder="PM, Product Manager, Growth" />
-            <p className="text-[11px] text-muted-foreground">Only listings whose title or company match at least one keyword are kept. Leave empty to capture all.</p>
+            <Label htmlFor="js-keywords">Keywords <span className="text-muted-foreground text-[11px]">(comma-separated, optional)</span></Label>
+            <Input id="js-keywords" value={keywords} onChange={(e) => setKeywords(e.target.value)} placeholder="SEO, Performance Marketing, Paid Media" />
+            <p className="text-[11px] text-muted-foreground">Only listings whose title or company contain at least one keyword are kept. Leave empty to capture everything.</p>
+          </div>
+
+          <div className="grid gap-1.5">
+            <Label htmlFor="js-notes">Notes <span className="text-muted-foreground text-[11px]">(optional — for your own reference)</span></Label>
+            <Input id="js-notes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. Best for mid-level IN roles, check weekly" />
           </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-          <Button onClick={submit} disabled={pending || !label.trim() || !url.trim()}>Add</Button>
+          <Button onClick={submit} disabled={pending || !url.trim()}>
+            {pending ? <RefreshCw className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Plus className="mr-1.5 h-3.5 w-3.5" />}
+            Add &amp; fetch
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

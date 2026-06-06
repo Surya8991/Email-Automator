@@ -396,4 +396,4 @@ export async function tickSourceById(userId: string, sourceId: number): Promise<
   return tickSource(s)
 }
 
-export { fingerprintOf, keywordsMatch }
+export { fingerprintOf, keywordsMatch, aiExtractJobs as aiExtractJobsPublic, fetchNaukriApi as fetchNaukriApiPublic }

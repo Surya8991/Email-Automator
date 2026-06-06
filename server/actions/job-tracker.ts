@@ -6,12 +6,13 @@ import { requireUser } from '@/auth'
 import { db } from '@/server/db/client'
 import { jobLeads, contacts as contactsTbl, drafts as draftsTbl } from '@/server/db/schema'
 import * as svc from '@/server/services/job-tracker'
-import { validateUrlForFetch } from '@/server/services/ai-generate'
+import { validateUrlForFetch, fetchForAi } from '@/server/services/ai-generate'
+import { aiExtractJobsPublic, fetchNaukriApiPublic } from '@/server/services/job-tracker'
 import { actionError } from '@/lib/action-error'
 import { rateLimit } from '@/lib/rate-limit'
 
 const AddSchema = z.object({
-  label: z.string().min(1).max(120),
+  label: z.string().max(120).optional(),
   url: z.string().min(8).max(500),
   keywords: z.string().max(400).optional(),
 })
@@ -33,7 +34,7 @@ export async function addJobSourceAction(input: z.infer<typeof AddSchema>) {
     return { error: `URL rejected: ${sanity.error}` }
   }
   try {
-    await svc.createSource(u.id, parsed.data.label, parsed.data.url, parsed.data.keywords ?? '')
+    await svc.createSource(u.id, parsed.data.label || parsed.data.url, parsed.data.url, parsed.data.keywords ?? '')
     revalidatePath('/jobs')
     return { ok: true as const }
   } catch (e) {
@@ -196,5 +197,47 @@ export async function leadToDraftAction(id: number) {
     return { ok: true as const, contactId }
   } catch (e) {
     return actionError(e, 'Convert failed')
+  }
+}
+
+/**
+ * Validate a source URL before saving — does a real test fetch and
+ * returns 1-3 sample jobs so the user can confirm the board is reachable
+ * and the AI extractor picks up real listings.
+ *
+ * Does NOT save anything to the DB. Rate-limited to 5/min/user.
+ */
+export async function validateJobSourceAction(url: string, keywords: string) {
+  const u = await requireUser()
+  if (!rateLimit(`job-validate:${u.id}`, 5, 60_000)) return { error: 'Slow down — wait a minute' }
+  const sanity = validateUrlForFetch(url)
+  if (!sanity.ok) return { error: `URL rejected: ${sanity.error}` }
+  try {
+    const isNaukri = /naukri\.com/i.test(url)
+    let jobs: Array<{ title: string; company?: string; location?: string; salary?: string }>
+    if (isNaukri) {
+      jobs = await fetchNaukriApiPublic(url, 1)
+    } else {
+      const fetched = await fetchForAi(url)
+      if (!fetched.ok) return { error: `Fetch failed: ${fetched.error}` }
+      jobs = await aiExtractJobsPublic(u.id, fetched.text)
+    }
+    const kw = keywords.trim()
+    const filtered = kw
+      ? jobs.filter((j) => {
+          const words = kw.split(',').map((w) => w.trim().toLowerCase()).filter(Boolean)
+          const hay = `${j.title} ${j.company ?? ''}`.toLowerCase()
+          return words.some((w) => hay.includes(w))
+        })
+      : jobs
+    return {
+      ok: true as const,
+      total: filtered.length,
+      sample: filtered.slice(0, 3).map((j) => ({
+        title: j.title, company: j.company ?? '', location: j.location ?? '', salary: j.salary ?? '',
+      })),
+    }
+  } catch (e) {
+    return actionError(e, 'Validation failed')
   }
 }

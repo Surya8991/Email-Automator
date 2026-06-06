@@ -9,11 +9,13 @@ import { Label } from '@/components/ui/label'
 import { GenerateFromContext } from './generate-from-context'
 import { Segmented } from '@/components/ui/segmented'
 import { SpamCheckChip } from '@/components/spam-check-chip'
+import { AiImprovePicker } from '@/components/ai-improve-picker'
+import { RichTextEditor, type RichTextEditorHandle } from '@/components/rich-text-editor'
 import { cn } from '@/lib/utils'
 import { useSaveShortcut } from '@/components/use-save-shortcut'
 import { useUnsavedGuard } from '@/components/use-unsaved-guard'
 import { personalize } from '@/lib/escape'
-import { activateTemplateAction, saveTemplateAction, cloneTemplateAction, sendTemplateTestAction } from '@/server/actions/templates'
+import { activateTemplateAction, saveTemplateAction, cloneTemplateAction, sendTemplateTestAction, improveTemplateBodyAction } from '@/server/actions/templates'
 import { aiDraftAction, aiSuggestSubjectsAction } from '@/server/actions/ai'
 import type { Template } from '@/server/db/schema'
 
@@ -72,7 +74,9 @@ export function TemplateEditor({
   const router = useRouter()
   const [pending, start] = useTransition()
   const subjectRef = useRef<HTMLInputElement>(null)
-  const bodyRef = useRef<HTMLTextAreaElement>(null)
+  const bodyRef = useRef<RichTextEditorHandle>(null)
+  const [aiImproveOpen, setAiImproveOpen] = useState(false)
+  const [aiImproveBusy, setAiImproveBusy] = useState(false)
   const [pickedId, setPickedId] = useState<number | null>(templates[0]?.id ?? null)
   const [draft, setDraft] = useState<Partial<Template>>({
     key: templates[0]?.key ?? 'default',
@@ -143,24 +147,17 @@ export function TemplateEditor({
   // in the field so the user can chain insertions without re-clicking.
   function insertVar(v: string, literal?: string) {
     const token = literal ?? `{{${v}}}`
-    const subjectActive = document.activeElement === subjectRef.current
-    if (subjectActive && subjectRef.current) {
+    if (document.activeElement === subjectRef.current && subjectRef.current) {
       const el = subjectRef.current
       const s = el.selectionStart ?? el.value.length
       const e = el.selectionEnd ?? el.value.length
       const next = el.value.slice(0, s) + token + el.value.slice(e)
       setDraft({ ...draft, subject: next })
-      // Restore cursor position after React re-renders.
       requestAnimationFrame(() => { el.focus(); el.setSelectionRange(s + token.length, s + token.length) })
       return
     }
-    const el = bodyRef.current
-    if (!el) return
-    const s = el.selectionStart ?? el.value.length
-    const e = el.selectionEnd ?? el.value.length
-    const next = el.value.slice(0, s) + token + el.value.slice(e)
-    setDraft({ ...draft, initialMsg: next })
-    requestAnimationFrame(() => { el.focus(); el.setSelectionRange(s + token.length, s + token.length) })
+    // Delegate to RichTextEditor handle — works in both rich and HTML modes.
+    bodyRef.current?.insert(token)
   }
 
   function load(t: Template) {
@@ -351,10 +348,45 @@ export function TemplateEditor({
           ) : null}
         </div>
         <div className="grid gap-1.5">
-          <Label htmlFor="initialMsg">Body (HTML)</Label>
-          <textarea ref={bodyRef} id="initialMsg" rows={14}
-            className="flex w-full rounded-md border bg-background px-3 py-2 font-mono text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
-            value={draft.initialMsg ?? ''} onChange={(e) => setDraft({ ...draft, initialMsg: e.target.value })} />
+          <div className="flex items-center justify-between">
+            <Label htmlFor="initialMsg">Body</Label>
+            <div className="relative">
+              <Button
+                type="button" variant="ghost" size="sm"
+                disabled={aiImproveBusy || pending}
+                onClick={() => setAiImproveOpen((o) => !o)}
+                className="h-7 gap-1.5 text-xs"
+              >
+                <Sparkles className={`h-3.5 w-3.5 ${aiImproveBusy ? 'animate-pulse text-primary' : ''}`} />
+                AI Improve
+              </Button>
+              {aiImproveOpen ? (
+                <AiImprovePicker
+                  busy={aiImproveBusy}
+                  onCancel={() => setAiImproveOpen(false)}
+                  onApply={(tone) => {
+                    setAiImproveBusy(true); setAiImproveOpen(false)
+                    start(async () => {
+                      const r = await improveTemplateBodyAction(draft.initialMsg ?? '', tone)
+                      setAiImproveBusy(false)
+                      if ('error' in r && r.error) { toast.error(r.error); return }
+                      if ('body' in r) {
+                        setDraft((d) => ({ ...d, initialMsg: r.body }))
+                        toast.success('Body improved — review and save when ready')
+                      }
+                    })
+                  }}
+                />
+              ) : null}
+            </div>
+          </div>
+          <RichTextEditor
+            ref={bodyRef}
+            value={draft.initialMsg ?? ''}
+            onChange={(v) => setDraft({ ...draft, initialMsg: v })}
+            rows={14}
+            placeholder="<p>Hi {{name}},</p><p>…</p>"
+          />
           {/* Clickable insertion palette. Groups: per-recipient variables
               (substituted on send), HTML snippets (raw markup), and any
               user-declared custom fields (Settings → Custom contact fields).
