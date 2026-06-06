@@ -29,12 +29,16 @@ jobs:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
-            echo "::error::APP_URL and CRON_SECRET secrets must be set in this repo."
+            echo "::error::APP_URL and CRON_SECRET must be set under Settings → Secrets → Actions."
             exit 1
           fi
           code=$(curl -sS -o /tmp/body -w "%{http_code}" \
+            --max-time 90 \
             -H "Authorization: Bearer $CRON_SECRET" \
             "$APP_URL/api/cron/job-tracker")
-          echo "HTTP $code"
-          cat /tmp/body
-          [ "$code" = "200" ]
+          body=$(cat /tmp/body)
+          echo "HTTP $code  —  $body"
+          if [ "$code" != "200" ]; then
+            echo "::error::Cron returned HTTP $code. Response: $body"
+            exit 1
+          fi

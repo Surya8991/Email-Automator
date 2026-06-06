@@ -21,8 +21,14 @@ export async function GET(req: Request) {
   }
   try {
     const r = await tickAll(40)
+    // Always 200 so the GitHub Actions workflow doesn't fail on source-level
+    // errors (those are recorded per-row in job_sources.last_error).
     return Response.json({ ok: true, ...r })
   } catch (e) {
-    return Response.json({ error: e instanceof Error ? e.message : 'tick failed' }, { status: 500 })
+    // Only fatal errors reach here (e.g. DB unreachable). Log + 500 so
+    // GitHub Actions marks the run as failed and the operator notices.
+    const msg = e instanceof Error ? e.message : 'tick failed'
+    console.error('[cron/job-tracker] fatal:', e)
+    return Response.json({ ok: false, error: msg }, { status: 500 })
   }
 }

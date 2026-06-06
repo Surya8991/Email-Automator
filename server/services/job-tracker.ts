@@ -1028,7 +1028,7 @@ export async function tickSource(source: JobSource): Promise<{ added: number; st
  * Manual refresh (tickSourceById / refreshAllForUserAction) bypasses
  * this cooldown — the user explicitly asked for a fresh pull.
  */
-export async function tickAll(limit = 40): Promise<{ scanned: number; addedTotal: number }> {
+export async function tickAll(limit = 40): Promise<{ scanned: number; addedTotal: number; errors: number }> {
   const cutoff = Date.now() - FETCH_INTERVAL_MS
   const sources = await db.select().from(jobSources)
     .where(and(
@@ -1036,12 +1036,20 @@ export async function tickAll(limit = 40): Promise<{ scanned: number; addedTotal
       or(isNull(jobSources.lastFetchedAt), lt(jobSources.lastFetchedAt, cutoff)),
     ))
     .limit(limit)
-  let addedTotal = 0
+  let addedTotal = 0, errors = 0
   for (const s of sources) {
-    const r = await tickSource(s)
-    addedTotal += r.added
+    try {
+      const r = await tickSource(s)
+      addedTotal += r.added
+      if (r.status === 'error') errors++
+    } catch (e) {
+      // tickSource has its own try/catch, but if the DB write inside
+      // that catch block also throws we still want to continue.
+      errors++
+      console.error(`[tickAll] uncaught from source ${s.id}:`, e)
+    }
   }
-  return { scanned: sources.length, addedTotal }
+  return { scanned: sources.length, addedTotal, errors }
 }
 
 /**
