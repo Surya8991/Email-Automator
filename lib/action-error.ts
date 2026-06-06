@@ -56,5 +56,10 @@ export function actionError(e: unknown, fallback: string, ctx?: Record<string, u
  */
 export function isSchemaMissingError(e: unknown): boolean {
   if (!(e instanceof Error)) return false
-  return /no such table|no such column|SQLITE_ERROR.*no such/i.test(e.message)
+  // Covers:
+  //   SQLite:   "no such table: X" / "no such column: X"
+  //   libsql:   "SqliteError: table X has no column named Y"
+  //   libsql:   "SQLITE_ERROR no such table/column"
+  //   Drizzle:  "column X is missing" (rare, generated during schema mapping)
+  return /no such table|no such column|has no column named|SQLITE_ERROR.*no such|column.*is missing/i.test(e.message)
 }
