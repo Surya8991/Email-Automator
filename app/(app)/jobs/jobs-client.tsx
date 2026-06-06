@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import {
   Plus, RefreshCw, Trash2, ExternalLink, Bookmark, Briefcase, CheckCircle2, XCircle, Building2,
   Search, Download, MailPlus, Pause, Play, Pencil, RefreshCcw, Archive, Clock,
-  MapPin, IndianRupee, CalendarDays, Tag, Eye, AlertTriangle,
+  MapPin, IndianRupee, CalendarDays, Tag, Eye, AlertTriangle, Zap, RotateCcw,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -59,49 +59,58 @@ export function JobsClient({
         />
         <div className="flex items-center gap-2">
           {sources.length > 0 ? (
-            <>
-              <Button
-                variant="outline" size="sm" disabled={pending}
+            <div className="flex items-center divide-x rounded-md border bg-background overflow-hidden">
+              {/* Fetch new — quick pull, ongoing batch cap (50–100 per source) */}
+              <button
+                disabled={pending}
                 onClick={() => start(async () => {
                   const r = await refreshAllForUserAction()
                   if ('error' in r && r.error) { toast.error(r.error); return }
-                  if ('addedTotal' in r) toast.success(`Scanned ${r.scanned}, +${r.addedTotal} new`)
+                  if ('addedTotal' in r) toast.success(`+${r.addedTotal} new lead${r.addedTotal === 1 ? '' : 's'} from ${r.scanned} source${r.scanned === 1 ? '' : 's'}`)
                   router.refresh()
                 })}
-                title="Refresh every active source now"
+                title="Quick pull — fetches only new listings (up to 100 per source). Fast, runs in seconds."
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium hover:bg-muted ea-transition disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                <RefreshCcw className={`mr-1.5 h-3.5 w-3.5 ${pending ? 'animate-spin' : ''}`} /> Refresh all
-              </Button>
-              <Button
-                variant="default" size="sm" disabled={pending}
+                <Zap className={`h-3.5 w-3.5 text-primary ${pending ? 'animate-pulse' : ''}`} />
+                Fetch new
+              </button>
+              {/* Full refresh — resets timestamps to first-fetch, 500 results, enriches existing */}
+              <button
+                disabled={pending}
                 onClick={() => start(async () => {
-                  toast.info('Full refresh started — this may take a minute...')
+                  toast.info('Full refresh started — fetching up to 500 results per source…')
                   const r = await fullRefreshAllAction()
                   if ('error' in r && r.error) { toast.error(r.error); return }
-                  if ('addedTotal' in r) toast.success(`Full refresh done — scanned ${r.scanned} sources, +${r.addedTotal} new leads (existing leads enriched)`)
+                  if ('addedTotal' in r) toast.success(`Full refresh done · ${r.scanned} sources · +${r.addedTotal} new · existing leads enriched`)
                   router.refresh()
                 })}
-                title="Re-fetch all sources with first-fetch budget (500 results from Naukri). Enriches existing leads with fuller descriptions, salary, and links."
+                title="Full refresh — resets page budget to 500 results (Naukri), re-fetches every source, and fills in missing descriptions / salary / links on existing leads."
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium hover:bg-muted ea-transition disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${pending ? 'animate-spin' : ''}`} /> Full refresh
-              </Button>
-              <Button
-                variant="outline" size="sm" disabled={pending}
+                <RotateCcw className={`h-3.5 w-3.5 ${pending ? 'animate-spin' : ''}`} />
+                Full refresh
+              </button>
+              {/* Fix 404s — HEAD-check all links, auto-ignore expired listings */}
+              <button
+                disabled={pending}
                 onClick={() => start(async () => {
                   toast.info('Checking links for 404s…')
                   const r = await checkDeadLinksAction()
                   if ('error' in r && r.error) { toast.error(r.error); return }
                   if ('dead' in r) {
-                    if (r.dead === 0) toast.success(`All ${r.checked} links alive`)
-                    else toast.warning(`Removed ${r.dead} dead listing${r.dead === 1 ? '' : 's'} (checked ${r.checked})`)
+                    if (r.dead === 0) toast.success(`All ${r.checked} links are alive`)
+                    else toast.warning(`Removed ${r.dead} expired listing${r.dead === 1 ? '' : 's'} — ${r.checked} checked`)
                   }
                   router.refresh()
                 })}
-                title="Check all new/saved leads for 404 and auto-ignore expired listings"
+                title="Fix 404s — checks every new/saved lead link and auto-ignores listings that have expired or been removed."
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 ea-transition disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                <AlertTriangle className={`mr-1.5 h-3.5 w-3.5 ${pending ? 'animate-spin' : ''}`} /> Check 404s
-              </Button>
-            </>
+                <AlertTriangle className="h-3.5 w-3.5" />
+                Fix 404s
+              </button>
+            </div>
           ) : null}
           <JobPresetPicker />
           <AddSourceDialog />
