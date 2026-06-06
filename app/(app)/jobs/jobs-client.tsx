@@ -685,6 +685,13 @@ function JobDetailDialog({
         </div>
 
         <DialogFooter className="shrink-0 flex-wrap gap-2 border-t pt-4">
+          {lead.link ? (
+            <Button variant="outline" asChild className="mr-auto">
+              <a href={lead.link} target="_blank" rel="noreferrer">
+                <ExternalLink className="mr-1.5 h-4 w-4" /> View job posting
+              </a>
+            </Button>
+          ) : null}
           <Button variant="default" disabled={busy} onClick={() => { onDraft(lead.id); onClose() }}>
             <MailPlus className="mr-1.5 h-4 w-4" /> Draft outreach email
           </Button>
