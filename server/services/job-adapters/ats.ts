@@ -118,7 +118,7 @@ export async function fetchAtsApi(ats: { type: AtsType; company: string }): Prom
     return (data.content ?? []).slice(0, 100).map((j) => ({
       title: String(j.name ?? '').trim().slice(0, 200),
       company,
-      link: j.ref ? `https://careers.smartrecruiters.com/${company}/${j.ref}` : '',
+      link: j.ref ? `https://careers.smartrecruiters.com/${c}/${j.ref}` : '',
       location: [j.location?.city, j.location?.country].filter(Boolean).join(', ').slice(0, 120),
       salary: '',
       description: String(j.department?.label ?? '').trim().slice(0, 2000),

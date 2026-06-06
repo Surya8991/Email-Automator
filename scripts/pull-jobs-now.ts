@@ -291,16 +291,25 @@ async function pullSource(src: Source): Promise<{ added: number; status: string 
       }
     }
 
-    // Keyword filter (skip if url already encodes the keyword)
+    // Keyword filter: skip when the URL already encodes the role keyword,
+    // or when the source is a known aggregator/ATS that returns all jobs
+    // for a board (Greenhouse, Lever, Ashby, SmartRecruiters, etc.).
     const urlLower = (() => { try { return decodeURIComponent(url).toLowerCase() } catch { return url.toLowerCase() } })()
     const kws = src.keywords.split(',').map(w => w.trim().toLowerCase()).filter(Boolean)
     const urlFiltered = kws.length > 0 && kws.some(kw =>
       urlLower.includes(kw) || urlLower.includes(kw.replace(/\s+/g, '-')) ||
       urlLower.includes(kw.replace(/\s+/g, '+')) || urlLower.includes(kw.replace(/\s+/g, '_'))
     )
-    const skipKw = /naukri\.com|remotive\.com|remoteok\.com|foundit\.in/i.test(url) ||
+    // ATS boards (Greenhouse/Lever/Ashby/SmartRecruiters/Workable/Breezy)
+    // return ALL jobs for a company — skip keyword filter so we see every role,
+    // then rely on the user's triage in the UI. Same for Remotive/RemoteOK/RSS
+    // since those already filter by the ?tags= / ?search= query param.
+    const isAtsDomain = /boards\.greenhouse\.io|job-boards\.greenhouse\.io|jobs\.lever\.co|jobs\.ashbyhq\.com|careers\.smartrecruiters\.com|apply\.workable\.com|\.breezy\.hr/i.test(url)
+    const skipKw = isAtsDomain ||
+      /naukri\.com|remotive\.com|remoteok\.com|foundit\.in/i.test(url) ||
       /\/rss|\/feed|\.xml/i.test(new URL(url).pathname) || urlFiltered
 
+    const nowMs = Date.now()
     let added = 0
     for (const j of jobs.slice(0, jobs.length)) {
       if (!skipKw && kws.length > 0) {
@@ -309,12 +318,23 @@ async function pullSource(src: Source): Promise<{ added: number; status: string 
       }
       const fp = fingerprint(j.title, j.company ?? '')
       try {
+        // seen_at is NOT NULL with no SQL DEFAULT (only Drizzle $defaultFn).
+        // Must supply it in raw SQL or the insert is silently rejected.
         await client.execute({
-          sql: 'INSERT INTO job_leads (user_id, source_id, fingerprint, title, company, link, location, salary, description, posted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          args: [src.userId, src.id, fp, j.title, j.company ?? '', j.link ?? '', j.location ?? '', j.salary ?? '', j.description ?? '', j.postedAt ? j.postedAt.getTime() : null],
+          sql: `INSERT INTO job_leads
+                  (user_id, source_id, fingerprint, title, company, link, location,
+                   salary, description, posted_at, status, seen_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?)`,
+          args: [
+            src.userId, src.id, fp,
+            j.title, j.company ?? '', j.link ?? '', j.location ?? '',
+            j.salary ?? '', j.description ?? '',
+            j.postedAt ? j.postedAt.getTime() : null,
+            nowMs,
+          ],
         })
         added++
-      } catch { /* duplicate */ }
+      } catch { /* unique-index violation = already seen */ }
     }
 
     const status = added > 0 ? `ok-${added}-new` : `ok-no-new(${jobs.length}raw)`

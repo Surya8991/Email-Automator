@@ -888,6 +888,11 @@ function JobDetailDialog({
   )
 }
 
+// Rough currency → INR multipliers for the min-salary filter.
+// Right ballpark, not market-accurate; the filter is for "show me roles
+// above X" not for portfolio reporting.
+const CCY_TO_INR: Record<string, number> = { INR: 1, USD: 84, EUR: 90, GBP: 105 }
+
 // ── Leads Table ──────────────────────────────────────────────────────────────
 function LeadsTable({
   leads, sources, pending, showSaveButton, status,
@@ -925,10 +930,6 @@ function LeadsTable({
     [...new Set(leads.map((l) => l.location).filter(Boolean))].sort(), [leads])
   const [detailLead, setDetailLead] = useState<LeadRow | null>(null)
 
-  // Rough currency → INR multipliers for the min-salary filter. Right
-  // ballpark, not market-accurate; the filter is for "show me roles
-  // above X" not for portfolio reporting.
-  const CCY_TO_INR: Record<string, number> = { INR: 1, USD: 84, EUR: 90, GBP: 105 }
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase()
     let out = leads
@@ -955,8 +956,11 @@ function LeadsTable({
     else if (sort === 'oldest') sorted.sort((a, b) => +new Date(a.seenAt) - +new Date(b.seenAt))
     else if (sort === 'company') sorted.sort((a, b) => a.company.localeCompare(b.company))
     else if (sort === 'salary') {
-      const firstNum = (s: string) => { const m = s.match(/\d+/); return m ? Number(m[0]) : -1 }
-      sorted.sort((a, b) => firstNum(b.salary) - firstNum(a.salary))
+      sorted.sort((a, b) => {
+        const aVal = Math.max(a.salaryMin ?? -1, a.salaryMax ?? -1)
+        const bVal = Math.max(b.salaryMin ?? -1, b.salaryMax ?? -1)
+        return bVal - aVal
+      })
     }
     return sorted
   }, [leads, q, sourceFilter, companyFilter, locationFilter, sort, remoteScopes, minSalary])

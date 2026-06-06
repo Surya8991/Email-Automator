@@ -18,7 +18,9 @@
     "seed:templates": "tsx scripts/seed-templates.ts",
     "seed:contacts": "tsx scripts/seed-contacts.ts",
     "import:admin-contacts": "tsx scripts/import-admin-contacts.ts",
-    "db:reset": "tsx scripts/reset-db.ts"
+    "db:reset": "tsx scripts/reset-db.ts",
+    "seed:jobs": "tsx scripts/seed-job-sources.ts",
+    "pull:jobs": "tsx scripts/pull-jobs-now.ts"
   },
   "dependencies": {
     "@auth/core": "^0.37.4",
