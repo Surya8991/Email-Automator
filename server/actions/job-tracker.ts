@@ -53,6 +53,14 @@ export async function deleteJobSourceAction(id: number) {
   return { ok: true as const }
 }
 
+export async function deleteAllJobSourcesAction() {
+  const u = await requireUser()
+  if (!rateLimit(`delete-all-sources:${u.id}`, 3, 60_000)) return { error: 'Slow down — try again in a minute' }
+  const r = await svc.deleteAllSources(u.id)
+  revalidatePath('/jobs')
+  return { ok: true as const, deleted: r.deleted }
+}
+
 export async function refreshJobSourceAction(id: number) {
   const u = await requireUser()
   // Manual refresh is heavier than cron — rate-limit 6/min/user.

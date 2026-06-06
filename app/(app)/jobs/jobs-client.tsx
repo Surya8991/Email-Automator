@@ -14,7 +14,8 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog'
 import {
-  addJobSourceAction, deleteJobSourceAction, refreshJobSourceAction, setJobLeadStatusAction,
+  addJobSourceAction, deleteJobSourceAction, deleteAllJobSourcesAction,
+  refreshJobSourceAction, setJobLeadStatusAction,
   leadToDraftAction, bulkSetJobLeadStatusAction, toggleJobSourceActiveAction,
   editJobSourceAction, refreshAllForUserAction, validateJobSourceAction,
 } from '@/server/actions/job-tracker'
@@ -322,6 +323,50 @@ function SourcesTable({
   sources: SourceRow[]; pending: boolean; router: ReturnType<typeof useRouter>; start: (cb: () => void | Promise<void>) => void
 }) {
   const [editing, setEditing] = useState<SourceRow | null>(null)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
+  const [confirmDeleteAll, setConfirmDeleteAll] = useState(false)
+  const [selected, setSelected] = useState<Set<number>>(new Set())
+
+  const allSelected = sources.length > 0 && sources.every((s) => selected.has(s.id))
+
+  function toggleSelect(id: number) {
+    setSelected((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  }
+  function toggleAll() {
+    setSelected(allSelected ? new Set() : new Set(sources.map((s) => s.id)))
+  }
+
+  function deleteOne(id: number) {
+    start(async () => {
+      await deleteJobSourceAction(id)
+      setConfirmDeleteId(null)
+      setSelected((prev) => { const n = new Set(prev); n.delete(id); return n })
+      toast.success('Source deleted')
+      router.refresh()
+    })
+  }
+
+  function deleteSelected() {
+    const ids = Array.from(selected)
+    start(async () => {
+      for (const id of ids) await deleteJobSourceAction(id)
+      setSelected(new Set())
+      toast.success(`${ids.length} source${ids.length === 1 ? '' : 's'} deleted`)
+      router.refresh()
+    })
+  }
+
+  function deleteAll() {
+    start(async () => {
+      const r = await deleteAllJobSourcesAction()
+      setConfirmDeleteAll(false)
+      setSelected(new Set())
+      if ('error' in r && r.error) { toast.error(r.error); return }
+      toast.success(`Deleted ${'deleted' in r ? r.deleted : 'all'} sources`)
+      router.refresh()
+    })
+  }
+
   if (sources.length === 0) {
     return (
       <div className="rounded-md border bg-card p-8 text-center text-sm text-muted-foreground">
@@ -329,20 +374,66 @@ function SourcesTable({
       </div>
     )
   }
+
   return (
     <>
+      {/* Bulk action bar */}
+      {selected.size > 0 ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs">
+          <span className="font-medium">{selected.size} selected</span>
+          <Button size="sm" variant="outline" disabled={pending}
+            onClick={() => start(async () => {
+              for (const id of selected) await toggleJobSourceActiveAction(id, true)
+              setSelected(new Set()); toast.success('Resumed'); router.refresh()
+            })}>Resume selected</Button>
+          <Button size="sm" variant="outline" disabled={pending}
+            onClick={() => start(async () => {
+              for (const id of selected) await toggleJobSourceActiveAction(id, false)
+              setSelected(new Set()); toast.success('Paused'); router.refresh()
+            })}>Pause selected</Button>
+          <Button size="sm" variant="ghost" disabled={pending}
+            className="text-destructive hover:text-destructive"
+            onClick={deleteSelected}>Delete selected</Button>
+          <Button size="sm" variant="ghost" disabled={pending}
+            onClick={() => setSelected(new Set())} className="ml-auto">Clear</Button>
+        </div>
+      ) : null}
+
+      {/* Delete-all confirm banner */}
+      {confirmDeleteAll ? (
+        <div className="flex items-center gap-3 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-sm">
+          <span className="font-medium text-destructive">Delete all {sources.length} sources? This cannot be undone.</span>
+          <Button size="sm" variant="destructive" disabled={pending} onClick={deleteAll}>Yes, delete all</Button>
+          <Button size="sm" variant="ghost" onClick={() => setConfirmDeleteAll(false)}>Cancel</Button>
+        </div>
+      ) : null}
+
       <div className="overflow-x-auto rounded-md border">
         <table className="ea-table">
           <thead><tr>
+            <th className="w-8">
+              <input type="checkbox" aria-label="Select all" checked={allSelected}
+                onChange={toggleAll} />
+            </th>
             <th>Source</th>
             <th>Keywords</th>
             <th className="text-right">Leads</th>
-            <th>Last status</th>
-            <th className="w-48 text-right">Actions</th>
+            <th>Last fetch</th>
+            <th className="w-44 text-right">
+              <button
+                className="text-[10px] font-normal text-destructive/70 hover:text-destructive ea-transition"
+                onClick={() => setConfirmDeleteAll(true)}
+                title="Delete all sources"
+              >Delete all</button>
+            </th>
           </tr></thead>
           <tbody>
             {sources.map((s) => (
-              <tr key={s.id} className={!s.active ? 'opacity-50' : undefined}>
+              <tr key={s.id} className={!s.active ? 'opacity-55' : undefined}>
+                <td>
+                  <input type="checkbox" aria-label={`Select ${s.label}`}
+                    checked={selected.has(s.id)} onChange={() => toggleSelect(s.id)} />
+                </td>
                 <td>
                   <div className="flex items-center gap-2">
                     <span className="font-medium">{s.label}</span>
@@ -352,9 +443,10 @@ function SourcesTable({
                       </span>
                     ) : null}
                   </div>
-                  <a href={s.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary">
-                    <span className="truncate max-w-[24rem]">{s.url}</span>
-                    <ExternalLink className="h-3 w-3" />
+                  <a href={s.url} target="_blank" rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary">
+                    <span className="truncate max-w-[22rem]">{s.url}</span>
+                    <ExternalLink className="h-3 w-3 shrink-0" />
                   </a>
                 </td>
                 <td className="text-xs text-muted-foreground">{s.keywords || <em>(any)</em>}</td>
@@ -362,48 +454,51 @@ function SourcesTable({
                 <td className="text-xs">
                   {s.lastStatus ? (
                     <span className={`inline-flex items-center gap-1 ${s.lastStatus.startsWith('ok') ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
-                      {s.lastStatus.startsWith('ok') ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
-                      {s.lastStatus}
+                      {s.lastStatus.startsWith('ok') ? <CheckCircle2 className="h-3 w-3 shrink-0" /> : <XCircle className="h-3 w-3 shrink-0" />}
+                      <span className="truncate max-w-[12rem]">{s.lastStatus}</span>
                     </span>
-                  ) : <span className="text-muted-foreground italic">never run</span>}
-                  <div className="mt-0.5 inline-flex items-center gap-1 text-[10px] text-muted-foreground">
-                    <Clock className="h-2.5 w-2.5" /> {timeAgo(s.lastFetchedAt)}
+                  ) : <span className="italic text-muted-foreground">never run</span>}
+                  <div className="mt-0.5 flex items-center gap-1 text-[10px] text-muted-foreground">
+                    <Clock className="h-2.5 w-2.5 shrink-0" /> {timeAgo(s.lastFetchedAt)}
                   </div>
-                  {s.lastError ? <div className="mt-0.5 text-[11px] text-amber-600 dark:text-amber-400">{s.lastError}</div> : null}
+                  {s.lastError ? (
+                    <div className="mt-0.5 truncate text-[11px] text-amber-600 dark:text-amber-400 max-w-[18rem]" title={s.lastError}>{s.lastError}</div>
+                  ) : null}
                 </td>
                 <td>
-                  <div className="ea-row-actions flex justify-end gap-1">
-                    <Button size="sm" variant="ghost" disabled={pending}
-                      onClick={() => start(async () => {
-                        const r = await toggleJobSourceActiveAction(s.id, !s.active)
-                        if ('ok' in r && r.ok) toast.success(s.active ? 'Paused' : 'Resumed')
-                        router.refresh()
-                      })}
-                      title={s.active ? 'Pause this source (skipped by cron)' : 'Resume this source'}
-                    >{s.active ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}</Button>
-                    <Button size="sm" variant="ghost" disabled={pending}
-                      onClick={() => setEditing(s)}
-                      title="Edit label / URL / keywords"
-                    ><Pencil className="h-3.5 w-3.5" /></Button>
-                    <Button size="sm" variant="ghost" disabled={pending}
-                      onClick={() => start(async () => {
-                        const r = await refreshJobSourceAction(s.id)
-                        if ('error' in r && r.error) toast.error(r.error)
-                        else toast.success('added' in r && r.added > 0 ? `+${r.added} new leads` : 'No new leads')
-                        router.refresh()
-                      })}
-                      title="Refresh now"
-                    ><RefreshCw className={`h-3.5 w-3.5 ${pending ? 'animate-spin' : ''}`} /></Button>
-                    <Button size="sm" variant="ghost" disabled={pending}
-                      onClick={() => start(async () => {
-                        if (!confirm(`Delete source "${s.label}"? Its leads stay.`)) return
-                        await deleteJobSourceAction(s.id)
-                        toast.success('Source deleted')
-                        router.refresh()
-                      })}
-                      title="Delete source"
-                    ><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>
-                  </div>
+                  {confirmDeleteId === s.id ? (
+                    <div className="flex items-center justify-end gap-1">
+                      <span className="text-xs text-muted-foreground">Delete?</span>
+                      <Button size="sm" variant="destructive" disabled={pending} onClick={() => deleteOne(s.id)}>Yes</Button>
+                      <Button size="sm" variant="ghost" onClick={() => setConfirmDeleteId(null)}>No</Button>
+                    </div>
+                  ) : (
+                    <div className="ea-row-actions flex justify-end gap-1">
+                      <Button size="sm" variant="ghost" disabled={pending}
+                        onClick={() => start(async () => {
+                          const r = await toggleJobSourceActiveAction(s.id, !s.active)
+                          if ('ok' in r && r.ok) toast.success(s.active ? 'Paused' : 'Resumed')
+                          router.refresh()
+                        })}
+                        title={s.active ? 'Pause (skip in cron)' : 'Resume'}
+                      >{s.active ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}</Button>
+                      <Button size="sm" variant="ghost" disabled={pending}
+                        onClick={() => setEditing(s)} title="Edit label / URL / keywords"
+                      ><Pencil className="h-3.5 w-3.5" /></Button>
+                      <Button size="sm" variant="ghost" disabled={pending}
+                        onClick={() => start(async () => {
+                          const r = await refreshJobSourceAction(s.id)
+                          if ('error' in r && r.error) toast.error(r.error)
+                          else toast.success('added' in r && r.added > 0 ? `+${r.added} new leads` : 'No new leads')
+                          router.refresh()
+                        })}
+                        title="Refresh now"
+                      ><RefreshCw className={`h-3.5 w-3.5 ${pending ? 'animate-spin' : ''}`} /></Button>
+                      <Button size="sm" variant="ghost" disabled={pending}
+                        onClick={() => setConfirmDeleteId(s.id)} title="Delete source"
+                      ><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>
+                    </div>
+                  )}
                 </td>
               </tr>
             ))}
@@ -411,9 +506,6 @@ function SourcesTable({
         </table>
       </div>
       {editing ? (
-        // key={editing.id} forces a fresh mount per row so the lazy
-        // useState initializers re-seed cleanly — avoids the React 19
-        // "setState in effect" lint while keeping per-row freshness.
         <EditSourceDialog key={editing.id} source={editing} onClose={() => setEditing(null)} />
       ) : null}
     </>

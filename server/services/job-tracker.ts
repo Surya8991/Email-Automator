@@ -113,9 +113,14 @@ export async function createSource(
 }
 
 export async function deleteSource(userId: string, id: number): Promise<void> {
-  // Tenancy: WHERE filters by userId so a leaked id from another
-  // tenant silently no-ops.
   await db.delete(jobSources).where(and(eq(jobSources.id, id), eq(jobSources.userId, userId)))
+}
+
+export async function deleteAllSources(userId: string): Promise<{ deleted: number }> {
+  const rows = await db.delete(jobSources)
+    .where(eq(jobSources.userId, userId))
+    .returning({ id: jobSources.id })
+  return { deleted: rows.length }
 }
 
 export async function setLeadStatus(
@@ -313,6 +318,127 @@ async function fetchRss(url: string): Promise<ExtractedJob[]> {
 
 function isRemoteOkUrl(url: string): boolean {
   return /remoteok\.com/i.test(url)
+}
+
+// ── Remotive public JSON API ─────────────────────────────────────────
+// remotive.com/api/remote-jobs — no auth, returns up to 500 jobs.
+// We map the URL query to the API search param so a URL like
+// remotive.com/remote-jobs?search=marketing works as expected.
+
+function isRemotiveUrl(url: string): boolean {
+  return /remotive\.com/i.test(url)
+}
+
+async function fetchRemotive(url: string): Promise<ExtractedJob[]> {
+  let search = ''
+  let category = ''
+  try {
+    const u = new URL(url)
+    search = u.searchParams.get('search') || u.searchParams.get('query') || u.searchParams.get('q') || ''
+    category = u.searchParams.get('category') || ''
+  } catch { /* keep empty */ }
+  const params = new URLSearchParams({ limit: '100' })
+  if (search) params.set('search', search)
+  if (category) params.set('category', category)
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 10_000)
+  try {
+    const res = await fetch(`https://remotive.com/api/remote-jobs?${params}`, {
+      signal: controller.signal,
+      headers: { 'User-Agent': RSS_UA, Accept: 'application/json' },
+    })
+    if (!res.ok) return []
+    const data = (await res.json()) as {
+      jobs?: Array<{
+        title?: string; company_name?: string; url?: string
+        candidate_required_location?: string; salary?: string
+        description?: string; publication_date?: string; tags?: string[]
+      }>
+    }
+    return (data.jobs ?? []).slice(0, 100).map((j) => ({
+      title: String(j.title ?? '').trim().slice(0, 200),
+      company: String(j.company_name ?? '').trim().slice(0, 120),
+      link: String(j.url ?? '').trim().slice(0, 600),
+      location: String(j.candidate_required_location ?? 'Remote').trim().slice(0, 120),
+      salary: String(j.salary ?? '').trim().slice(0, 120),
+      description: String(j.description ?? '').replace(/<[^>]+>/g, '').trim().slice(0, 400),
+      postedAt: j.publication_date ? new Date(j.publication_date) : null,
+    }))
+  } catch { return [] } finally { clearTimeout(timer) }
+}
+
+// ── Foundit (Monster India) internal API ────────────────────────────
+// Foundit.in is one of India's largest job boards. Their internal
+// search API mirrors the Naukri pattern — slug-based URL with a
+// hidden JSON backend. Detected from URL shape.
+
+function isFounditUrl(url: string): boolean {
+  return /foundit\.in/i.test(url)
+}
+
+function parseFounditSlug(url: string): { keyword: string; location: string } | null {
+  try {
+    const u = new URL(url)
+    if (!/foundit\.in$/i.test(u.hostname)) return null
+    // Pattern: /j/{role}-jobs or /srp/results?searchKey=...
+    const sq = u.searchParams.get('searchKey') || u.searchParams.get('query') || ''
+    if (sq) return { keyword: sq, location: u.searchParams.get('location') || '' }
+    // Slug path: /j/{role}-jobs-in-{city} or /j/{role}-jobs
+    const slug = u.pathname.replace(/^\/j\/|^\/|\/$/g, '')
+    const m = slug.match(/^(.+?)-jobs(?:-in-(.+))?$/)
+    if (!m) return null
+    return { keyword: (m[1] ?? '').replace(/-/g, ' '), location: (m[2] ?? '').replace(/-/g, ' ') }
+  } catch { return null }
+}
+
+async function fetchFounditApi(url: string): Promise<ExtractedJob[]> {
+  const parsed = parseFounditSlug(url)
+  if (!parsed) return []
+  const { keyword, location } = parsed
+  const apiUrl = new URL('https://www.foundit.in/middleware/jobsearch/v1/find')
+  apiUrl.searchParams.set('sort', '1')
+  apiUrl.searchParams.set('rows', '30')
+  apiUrl.searchParams.set('start', '0')
+  apiUrl.searchParams.set('query', keyword)
+  if (location) apiUrl.searchParams.set('location', location)
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 10_000)
+  try {
+    const res = await fetch(apiUrl.toString(), {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': RSS_UA,
+        Accept: 'application/json',
+        Referer: 'https://www.foundit.in/',
+        Origin: 'https://www.foundit.in',
+      },
+    })
+    if (!res.ok) return []
+    const data = (await res.json()) as {
+      jobSearchResponse?: {
+        data?: Array<{
+          title?: string; companyName?: string; jobId?: string | number
+          locations?: string[]; minSal?: number; maxSal?: number
+          jobDescription?: string; modifiedDate?: string
+        }>
+      }
+    }
+    const jobs = data.jobSearchResponse?.data ?? []
+    return jobs.slice(0, 100).map((j) => {
+      const salary = j.minSal && j.maxSal ? `${j.minSal}–${j.maxSal} LPA` : ''
+      const link = j.jobId ? `https://www.foundit.in/job/details/${j.jobId}` : ''
+      return {
+        title: String(j.title ?? '').trim().slice(0, 200),
+        company: String(j.companyName ?? '').trim().slice(0, 120),
+        link: link.slice(0, 600),
+        location: (j.locations ?? []).join(', ').slice(0, 120),
+        salary,
+        description: String(j.jobDescription ?? '').replace(/<[^>]+>/g, '').trim().slice(0, 400),
+        postedAt: j.modifiedDate ? new Date(j.modifiedDate) : null,
+      }
+    })
+  } catch { return [] } finally { clearTimeout(timer) }
 }
 
 async function fetchRemoteOk(url: string): Promise<ExtractedJob[]> {
@@ -525,17 +651,28 @@ function extractJsonLd(html: string): ExtractedJob[] {
 //   • No bot blocking (they're public APIs, not pages)
 //   • Zero AI tokens consumed
 
-type AtsType = 'lever' | 'greenhouse' | 'ashby' | 'smartrecruiters'
+type AtsType = 'lever' | 'greenhouse' | 'ashby' | 'smartrecruiters' | 'breezy' | 'workable' | 'freshteam'
 function detectAts(url: string): { type: AtsType; company: string } | null {
   try {
     const u = new URL(url)
     const host = u.hostname.toLowerCase()
     const seg = u.pathname.replace(/^\/|\/$/g, '').split('/')[0] ?? ''
-    if (!seg) return null
-    if (host === 'jobs.lever.co' || host === 'lever.co') return { type: 'lever', company: seg }
-    if (host === 'boards.greenhouse.io' || host === 'job-boards.greenhouse.io') return { type: 'greenhouse', company: seg }
-    if (host === 'jobs.ashbyhq.com') return { type: 'ashby', company: seg }
-    if (host === 'careers.smartrecruiters.com') return { type: 'smartrecruiters', company: seg }
+    if (host === 'jobs.lever.co' || host === 'lever.co') return seg ? { type: 'lever', company: seg } : null
+    if (host === 'boards.greenhouse.io' || host === 'job-boards.greenhouse.io') return seg ? { type: 'greenhouse', company: seg } : null
+    if (host === 'jobs.ashbyhq.com') return seg ? { type: 'ashby', company: seg } : null
+    if (host === 'careers.smartrecruiters.com') return seg ? { type: 'smartrecruiters', company: seg } : null
+    // BreezyHR: company.breezy.hr
+    if (host.endsWith('.breezy.hr')) {
+      const company = host.replace(/\.breezy\.hr$/, '')
+      if (company) return { type: 'breezy', company }
+    }
+    // Workable: apply.workable.com/company or jobs.workable.com/company
+    if (host === 'apply.workable.com' || host === 'jobs.workable.com') return seg ? { type: 'workable', company: seg } : null
+    // Freshteam: company.freshteam.com
+    if (host.endsWith('.freshteam.com')) {
+      const company = host.replace(/\.freshteam\.com$/, '')
+      if (company) return { type: 'freshteam', company }
+    }
   } catch { /* invalid URL */ }
   return null
 }
@@ -635,6 +772,76 @@ async function fetchAtsApi(ats: { type: AtsType; company: string }): Promise<Ext
     }))
   }
 
+  if (type === 'breezy') {
+    // BreezyHR public JSON endpoint — no auth required for published jobs
+    const res = await fetch(`https://${company}.breezy.hr/json`, {
+      headers: { 'User-Agent': RSS_UA, Accept: 'application/json' },
+    }).catch(() => null)
+    if (!res?.ok) return []
+    const data = (await res.json()) as Array<{
+      _id?: string; name?: string; type?: { name?: string }
+      department?: { name?: string }; location?: { name?: string; city?: string; country?: { name?: string } }
+      url?: string; published_date?: string
+    }>
+    return data.slice(0, 100).map((j) => ({
+      title: String(j.name ?? '').trim().slice(0, 200),
+      company,
+      link: String(j.url ?? '').trim().slice(0, 600),
+      location: String(j.location?.name ?? j.location?.city ?? '').trim().slice(0, 120),
+      salary: '',
+      description: String(j.department?.name ?? '').trim().slice(0, 400),
+      postedAt: j.published_date ? new Date(j.published_date) : null,
+    }))
+  }
+
+  if (type === 'workable') {
+    // Workable widget API — used by their embeddable job board
+    const res = await fetch(
+      `https://apply.workable.com/api/v2/widget/accounts/${c}/jobs`,
+      { headers: { 'User-Agent': RSS_UA, Accept: 'application/json' } },
+    ).catch(() => null)
+    if (!res?.ok) return []
+    const data = (await res.json()) as {
+      results?: Array<{
+        id?: string; title?: string; department?: string
+        location?: { location_str?: string }; url?: string
+        published_on?: string; employment_type?: string
+      }>
+    }
+    return (data.results ?? []).slice(0, 100).map((j) => ({
+      title: String(j.title ?? '').trim().slice(0, 200),
+      company,
+      link: String(j.url ?? `https://apply.workable.com/${company}/j/${j.id}`).trim().slice(0, 600),
+      location: String(j.location?.location_str ?? '').trim().slice(0, 120),
+      salary: '',
+      description: String(j.employment_type ?? j.department ?? '').trim().slice(0, 400),
+      postedAt: j.published_on ? new Date(j.published_on) : null,
+    }))
+  }
+
+  if (type === 'freshteam') {
+    // Freshteam (Freshworks ATS) public careers API
+    const res = await fetch(
+      `https://${company}.freshteam.com/api/job_postings?status=published`,
+      { headers: { 'User-Agent': RSS_UA, Accept: 'application/json' } },
+    ).catch(() => null)
+    if (!res?.ok) return []
+    const data = (await res.json()) as Array<{
+      id?: number; title?: string; department?: { name?: string }
+      location?: { city?: string }; remote?: boolean
+      job_posting_url?: string; updated_at?: string
+    }>
+    return data.slice(0, 100).map((j) => ({
+      title: String(j.title ?? '').trim().slice(0, 200),
+      company,
+      link: String(j.job_posting_url ?? '').trim().slice(0, 600),
+      location: j.remote ? 'Remote' : String(j.location?.city ?? '').trim().slice(0, 120),
+      salary: '',
+      description: String(j.department?.name ?? '').trim().slice(0, 400),
+      postedAt: j.updated_at ? new Date(j.updated_at) : null,
+    }))
+  }
+
   return []
 }
 
@@ -662,15 +869,15 @@ function keywordsMatch(title: string, company: string, keywords: string): boolea
  * record `lastStatus` / `lastError` on the source for visibility.
  */
 export async function tickSource(source: JobSource): Promise<{ added: number; status: string; error?: string }> {
-  const isFirstFetch = !source.lastFetchedAt
-  const isNaukri     = /naukri\.com/i.test(source.url)
-  const isRss        = isRssUrl(source.url)
-  const isRemoteOk   = isRemoteOkUrl(source.url)
+  const isFirstFetch    = !source.lastFetchedAt
+  const isNaukri        = /naukri\.com/i.test(source.url)
+  const isRss           = isRssUrl(source.url)
+  const isRemoteOk      = isRemoteOkUrl(source.url)
+  const isRemotive      = isRemotiveUrl(source.url)
+  const isFoundit       = isFounditUrl(source.url)
   // Sources whose search API already filters by keyword — skip post-fetch keywordsMatch.
   // Also skip when the source URL already encodes the keyword (e.g. Internshala
   // with ?categories=Paid%20Media, or any board where the role is in the path/query).
-  // This prevents valid jobs from being dropped just because the AI-extracted title
-  // uses a synonym or abbreviation of the role the URL searched for.
   const urlAlreadyFiltered = (() => {
     if (!source.keywords.trim()) return false
     try {
@@ -687,20 +894,26 @@ export async function tickSource(source: JobSource): Promise<{ added: number; st
         )
     } catch { return false }
   })()
-  const skipKwFilter = isNaukri || isRss || isRemoteOk || urlAlreadyFiltered
+  const skipKwFilter = isNaukri || isRss || isRemoteOk || isRemotive || isFoundit || urlAlreadyFiltered
 
   try {
     let jobs: ExtractedJob[] = []
 
     if (isNaukri) {
-      // Bypass HTML — use Naukri's internal JSON search API.
+      // Naukri internal JSON API — bypasses JS-rendered HTML
       jobs = await fetchNaukriApi(source.url, isFirstFetch ? NAUKRI_FIRST_PAGES : NAUKRI_TICK_PAGES)
+    } else if (isFoundit) {
+      // Foundit (Monster India) internal JSON API
+      jobs = await fetchFounditApi(source.url)
     } else if (isRss) {
-      // RSS / Atom feed (Indeed, TimesJobs, etc.). Standard XML, no auth.
+      // RSS / Atom feed (Indeed, TimesJobs, etc.)
       jobs = await fetchRss(source.url)
     } else if (isRemoteOk) {
-      // Remote OK public JSON API.
+      // Remote OK public JSON API
       jobs = await fetchRemoteOk(source.url)
+    } else if (isRemotive) {
+      // Remotive public JSON API — no auth, global remote roles
+      jobs = await fetchRemotive(source.url)
     } else {
       // Generic source — try structured methods before falling back to AI.
       // Priority: ATS public API → JSON-LD in HTML → AI extraction.
