@@ -247,7 +247,7 @@ export const JOB_BOARD_PRESETS: JobBoardPreset[] = [
     id: 'hirist',
     name: 'Hirist',
     description: 'Tech-only India board. Strong for engineering + product + design.',
-    template: 'https://www.hirist.tech/jobs?search={role}&location={location}',
+    template: 'https://www.hirist.tech/s?q={role}&l={location}',
     needs: { role: true, location: true },
     suggestedKeywords: '{role}',
     icon: '🛠️',

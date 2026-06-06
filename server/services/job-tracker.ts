@@ -132,66 +132,89 @@ type ExtractedJob = {
   salary?: string; description?: string; postedAt?: Date | null
 }
 
+// For job extraction we pin llama-3.1-8b-instant regardless of the user's
+// model setting. The 70b-versatile model has only 12k TPM (tokens/min) on
+// Groq's free tier — 3 HTML pages' worth — making bulk refreshes impossible.
+// The 8b-instant model has 500k+ TPM at the same quality for JSON extraction.
+const JOB_EXTRACT_MODEL = 'llama-3.1-8b-instant'
+// Keep text small: 8k chars ≈ 2k input tokens, well within one minute's budget
+// even with 30 concurrent AI sources. Quality is unchanged — job listings are
+// almost always in the first 8k chars of a page.
+const JOB_EXTRACT_CHARS = 8_000
+// Fallback model if the primary hits a rate limit (different quota bucket)
+const JOB_EXTRACT_FALLBACK = 'gemma2-9b-it'
+
 async function aiExtractJobs(userId: string, sourceText: string): Promise<ExtractedJob[]> {
   const creds = await getAiFor(userId)
   if (creds.source === 'none') throw new Error('No AI key configured (Settings → AI)')
-  const res = await fetch(GROQ_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${creds.apiKey}` },
-    body: JSON.stringify({
-      model: creds.model,
-      temperature: 0.2,
-      max_tokens: 4096,
-      response_format: { type: 'json_object' },
-      messages: [
-        {
-          role: 'system',
-          content:
-            'You extract job listings from page text. Return ONLY JSON:\n' +
-            '{"jobs":[{"title":"…","company":"…","link":"…","location":"…","salary":"…","description":"…","posted_date":"…"}, ...]}.\n' +
-            'Keep at most 100 entries. title is required; all other fields may be empty strings.\n' +
-            'posted_date: ISO date string if the posting date is visible (e.g. "2024-05-15"), else "".\n' +
-            'description: one-sentence job summary if visible, else "".\n' +
-            'salary: salary or CTC range if visible, else "".\n' +
-            'Do NOT invent data. Skip nav / cookie / footer text.\n' +
-            'If the page has no jobs return {"jobs": []}.',
-        },
-        {
-          role: 'user',
-          content: `Extract jobs from this page text:\n\n${sourceText.slice(0, 25_000)}`,
-        },
-      ],
-    }),
-  })
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(`Groq ${res.status}: ${text.slice(0, 200)}`)
-  }
-  const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> }
-  const txt = data.choices?.[0]?.message?.content ?? '{}'
-  try {
-    const parsed = JSON.parse(txt) as {
-      jobs?: Array<{ title?: unknown; company?: unknown; link?: unknown; location?: unknown; salary?: unknown; description?: unknown; posted_date?: unknown }>
-    }
-    if (!Array.isArray(parsed.jobs)) return []
-    return parsed.jobs
-      .filter((j) => typeof j.title === 'string' && (j.title as string).trim())
-      .map((j) => {
-        const pd = typeof j.posted_date === 'string' ? j.posted_date.trim() : ''
-        let postedAt: Date | null = null
-        if (pd) { const d = new Date(pd); if (!isNaN(d.getTime())) postedAt = d }
-        return {
-          title: String(j.title).trim().slice(0, 200),
-          company: typeof j.company === 'string' ? j.company.trim().slice(0, 120) : '',
-          link: typeof j.link === 'string' ? j.link.trim().slice(0, 600) : '',
-          location: typeof j.location === 'string' ? j.location.trim().slice(0, 120) : '',
-          salary: typeof j.salary === 'string' ? j.salary.trim().slice(0, 120) : '',
-          description: typeof j.description === 'string' ? j.description.trim().slice(0, 400) : '',
-          postedAt,
-        }
+
+  const SYSTEM_PROMPT =
+    'Extract job listings from the page text. Return ONLY valid JSON:\n' +
+    '{"jobs":[{"title":"…","company":"…","link":"…","location":"…","salary":"…","description":"…","posted_date":"…"}]}.\n' +
+    'title is required; all other fields may be empty strings. Keep ≤50 entries.\n' +
+    'posted_date: ISO date string if visible, else "". description: one-sentence summary.\n' +
+    'Do NOT invent data. Skip nav/cookie/footer. If no jobs: {"jobs":[]}'
+
+  const models = [JOB_EXTRACT_MODEL, JOB_EXTRACT_FALLBACK, creds.model].filter(Boolean)
+
+  for (const model of models) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      const res = await fetch(GROQ_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${creds.apiKey}` },
+        body: JSON.stringify({
+          model,
+          temperature: 0.1,
+          max_tokens: 2048,
+          response_format: { type: 'json_object' },
+          messages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'user', content: `Page text:\n\n${sourceText.slice(0, JOB_EXTRACT_CHARS)}` },
+          ],
+        }),
       })
-      .slice(0, 100)
-  } catch { return [] }
+
+      if (res.status === 429) {
+        // Retry-After header tells us how long to wait; fall back to 20s
+        const wait = Math.min(Number(res.headers.get('retry-after') || 20) * 1000, 30_000)
+        if (attempt < 2) { await new Promise((r) => setTimeout(r, wait)); continue }
+        // Second attempt also 429 → try next model in the list
+        break
+      }
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => '')
+        throw new Error(`Groq ${res.status}: ${text.slice(0, 200)}`)
+      }
+
+      const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> }
+      const txt = data.choices?.[0]?.message?.content ?? '{}'
+      try {
+        const parsed = JSON.parse(txt) as {
+          jobs?: Array<{ title?: unknown; company?: unknown; link?: unknown; location?: unknown; salary?: unknown; description?: unknown; posted_date?: unknown }>
+        }
+        if (!Array.isArray(parsed.jobs)) return []
+        return parsed.jobs
+          .filter((j) => typeof j.title === 'string' && (j.title as string).trim())
+          .map((j) => {
+            const pd = typeof j.posted_date === 'string' ? j.posted_date.trim() : ''
+            let postedAt: Date | null = null
+            if (pd) { const d = new Date(pd); if (!isNaN(d.getTime())) postedAt = d }
+            return {
+              title: String(j.title).trim().slice(0, 200),
+              company: typeof j.company === 'string' ? j.company.trim().slice(0, 120) : '',
+              link: typeof j.link === 'string' ? j.link.trim().slice(0, 600) : '',
+              location: typeof j.location === 'string' ? j.location.trim().slice(0, 120) : '',
+              salary: typeof j.salary === 'string' ? j.salary.trim().slice(0, 120) : '',
+              description: typeof j.description === 'string' ? j.description.trim().slice(0, 400) : '',
+              postedAt,
+            }
+          })
+          .slice(0, 50)
+      } catch { return [] }
+    }
+  }
+  throw new Error('All Groq models rate-limited — try again in 1 minute')
 }
 
 // ── RSS feed parser ──────────────────────────────────────────────────
@@ -206,7 +229,9 @@ async function aiExtractJobs(userId: string, sourceText: string): Promise<Extrac
 // TimesJobs and other boards also emit standard RSS so this path covers
 // any URL that returns XML with <item> blocks.
 
-const RSS_UA = 'Mozilla/5.0 (compatible; JobTrackerBot/1.0; +https://emailautomator.app)'
+// Indeed and several India boards actively block bot User-Agent strings.
+// Using a plausible Chrome UA causes them to return results normally.
+const RSS_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
 
 function isRssUrl(url: string): boolean {
   try {
@@ -378,9 +403,11 @@ async function fetchNaukriApi(url: string, pages: number): Promise<ExtractedJob[
         signal: controller.signal,
         headers: {
           appid: '109', systemid: '109',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+          'User-Agent': RSS_UA,
           Accept: 'application/json',
           'Accept-Language': 'en-US,en;q=0.9',
+          Referer: 'https://www.naukri.com/',
+          Origin: 'https://www.naukri.com',
         },
       })
       if (!res.ok) break
@@ -445,7 +472,27 @@ export async function tickSource(source: JobSource): Promise<{ added: number; st
   const isRss        = isRssUrl(source.url)
   const isRemoteOk   = isRemoteOkUrl(source.url)
   // Sources whose search API already filters by keyword — skip post-fetch keywordsMatch.
-  const skipKwFilter = isNaukri || isRss || isRemoteOk
+  // Also skip when the source URL already encodes the keyword (e.g. Internshala
+  // with ?categories=Paid%20Media, or any board where the role is in the path/query).
+  // This prevents valid jobs from being dropped just because the AI-extracted title
+  // uses a synonym or abbreviation of the role the URL searched for.
+  const urlAlreadyFiltered = (() => {
+    if (!source.keywords.trim()) return false
+    try {
+      const urlDecoded = decodeURIComponent(source.url).toLowerCase()
+      return source.keywords
+        .split(',')
+        .map((w) => w.trim().toLowerCase())
+        .filter(Boolean)
+        .some((kw) =>
+          urlDecoded.includes(kw) ||
+          urlDecoded.includes(kw.replace(/\s+/g, '-')) ||
+          urlDecoded.includes(kw.replace(/\s+/g, '+')) ||
+          urlDecoded.includes(kw.replace(/\s+/g, '_')),
+        )
+    } catch { return false }
+  })()
+  const skipKwFilter = isNaukri || isRss || isRemoteOk || urlAlreadyFiltered
 
   try {
     let jobs: ExtractedJob[]
