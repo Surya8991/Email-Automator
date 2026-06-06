@@ -1,6 +1,6 @@
 'use client'
-import DOMPurify from 'dompurify'
 import { useState, useTransition } from 'react'
+import { purify } from '@/lib/sanitize-html'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { Send, Trash2, Sparkles, SendHorizontal, Pencil, Save, X, CalendarClock, Search, ChevronLeft, ChevronRight, Inbox, Briefcase, MapPin, ExternalLink } from 'lucide-react'
@@ -32,13 +32,6 @@ import { SendConfirmDialog } from './send-confirm-dialog'
 import { SpamCheckChip } from '@/components/spam-check-chip'
 
 const PAGE_SIZE_OPTIONS = [50, 100, 500, 1000]
-
-// DOMPurify requires window/document, so we guard for SSR.
-// suppressHydrationWarning on the render site handles the client/server mismatch.
-function purify(html: string): string {
-  if (typeof window === 'undefined') return html
-  return DOMPurify.sanitize(html)
-}
 
 interface DraftsClientProps {
   rows: DraftRow[]
@@ -99,6 +92,11 @@ export function DraftsClient({
   const [discardSelectedOpen, setDiscardSelectedOpen] = useState(false)
   const [discardAllOpen, setDiscardAllOpen] = useState(false)
   const [discardAllPhrase, setDiscardAllPhrase] = useState('')
+  // Duplicate-send warning dialog — fires when server returns recent-send.
+  const [recentSend, setRecentSend] = useState<null | { id: number; email: string; when: string; toEmail: string }>(null)
+  // Follow-up day-picker — replaces browser prompt().
+  const [followupFor, setFollowupFor] = useState<null | { contactId: number }>(null)
+  const [followupDays, setFollowupDays] = useState('3')
 
   return (
     <div>
@@ -389,12 +387,12 @@ export function DraftsClient({
                     try {
                       const r = await sendDraftAction(d.id)
                       // Duplicate-send guard: the server returns a
-                      // 'recent-send' warning instead of sending. Confirm
-                      // with the user, then call again with force=true.
+                      // 'recent-send' warning instead of sending. Open the
+                      // in-app confirmation dialog; the user picks Yes/No.
                       if ('warning' in r && r.warning === 'recent-send') {
                         const when = new Date(r.lastSentAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })
-                        if (!confirm(`You already emailed ${r.email} on ${when} (IST). Send again anyway?`)) return
-                        await sendDraftAction(d.id, { force: true })
+                        setRecentSend({ id: d.id, email: r.email, when, toEmail: d.toEmail })
+                        return
                       }
                       toast.success(`Sent to ${d.toEmail}`)
                     } catch (e) { toast.error(e instanceof Error ? e.message : 'Send failed') }
@@ -405,18 +403,7 @@ export function DraftsClient({
                 {d.contactId ? (
                   <Button variant="ghost" size="icon" aria-label="Schedule follow-up" disabled={pending || isEditing}
                     title="Schedule a follow-up for this contact"
-                    onClick={() => {
-                      const v = prompt('Send follow-up in how many days?', '3')?.trim()
-                      if (!v) return
-                      const dDays = Math.max(1, Math.min(60, Number(v) || 0))
-                      if (!dDays) return
-                      start(async () => {
-                        const r = await scheduleFollowupAction(d.contactId!, dDays)
-                        if ('error' in r && r.error) toast.error(r.error)
-                        else toast.success(`Follow-up in ${dDays}d`)
-                        router.refresh()
-                      })
-                    }}>
+                    onClick={() => { setFollowupDays('3'); setFollowupFor({ contactId: d.contactId! }) }}>
                     <CalendarClock className="h-4 w-4" />
                   </Button>
                 ) : null}
@@ -503,6 +490,59 @@ export function DraftsClient({
           })
         }}
       />
+
+      {/* Recent-send warning — replaces browser confirm() so the user
+          sees the recipient + last-sent timestamp without a native dialog. */}
+      {recentSend ? (
+        <div className="fixed inset-x-0 bottom-4 z-50 mx-auto w-full max-w-md rounded-lg border border-amber-500/40 bg-amber-50 px-4 py-3 shadow-lg dark:bg-amber-950/40">
+          <div className="text-sm font-medium text-amber-900 dark:text-amber-200">Send again?</div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            You already emailed <span className="font-mono">{recentSend.email}</span> on {recentSend.when} (IST).
+          </p>
+          <div className="mt-2 flex justify-end gap-2">
+            <Button size="sm" variant="ghost" disabled={pending} onClick={() => setRecentSend(null)}>Cancel</Button>
+            <Button size="sm" variant="default" disabled={pending}
+              onClick={() => start(async () => {
+                const target = recentSend
+                setRecentSend(null)
+                try {
+                  await sendDraftAction(target.id, { force: true })
+                  toast.success(`Sent to ${target.toEmail}`)
+                } catch (e) { toast.error(e instanceof Error ? e.message : 'Send failed') }
+                router.refresh()
+              })}>Send anyway</Button>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Follow-up day picker — replaces browser prompt(). */}
+      {followupFor ? (
+        <div className="fixed inset-x-0 bottom-4 z-50 mx-auto w-full max-w-sm rounded-lg border bg-card px-4 py-3 shadow-lg">
+          <div className="text-sm font-medium">Schedule follow-up</div>
+          <div className="mt-2 flex items-center gap-2">
+            <label htmlFor="followup-days" className="text-xs text-muted-foreground">In</label>
+            <Input id="followup-days" type="number" min={1} max={60} value={followupDays}
+              onChange={(e) => setFollowupDays(e.target.value)} className="h-8 w-20 text-xs" />
+            <span className="text-xs text-muted-foreground">days</span>
+          </div>
+          <div className="mt-3 flex justify-end gap-2">
+            <Button size="sm" variant="ghost" disabled={pending} onClick={() => setFollowupFor(null)}>Cancel</Button>
+            <Button size="sm" variant="default" disabled={pending}
+              onClick={() => {
+                const dDays = Math.max(1, Math.min(60, Math.floor(Number(followupDays) || 0)))
+                if (!dDays) { toast.error('Pick a number 1-60'); return }
+                const target = followupFor
+                setFollowupFor(null)
+                start(async () => {
+                  const r = await scheduleFollowupAction(target.contactId, dDays)
+                  if ('error' in r && r.error) toast.error(r.error)
+                  else toast.success(`Follow-up in ${dDays}d`)
+                  router.refresh()
+                })
+              }}>Schedule</Button>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

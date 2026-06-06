@@ -20,7 +20,9 @@ export async function GET(req: Request) {
   const validStatuses = new Set(['new', 'saved', 'ignored', 'applied'])
   const filterStatus = validStatuses.has(status) ? status : 'new'
 
-  const leads = await listLeads(u.id, filterStatus).catch(() => [])
+  // Export uses a larger cap than the on-screen list so users get the
+  // full archive in the CSV — 10k rows is enough for any real tenant.
+  const leads = await listLeads(u.id, filterStatus, 10_000).catch(() => [])
   const header = ['id', 'title', 'company', 'location', 'link', 'status', 'seenAt'].join(',')
   const rows = leads.map((l) => [
     l.id,

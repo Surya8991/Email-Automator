@@ -343,6 +343,8 @@ export const jobLeads = sqliteTable('job_leads', {
   uqFingerprint: uniqueIndex('job_leads_fingerprint_idx').on(t.sourceId, t.fingerprint),
   bySource:      index('job_leads_source_idx').on(t.sourceId),
   byUserSource:  index('job_leads_user_source_idx').on(t.userId, t.sourceId),
+  // Covers pruneOldLeads scan: WHERE status IN (...) AND seen_at < cutoff.
+  byStatusSeen:  index('job_leads_status_seen_idx').on(t.status, t.seenAt),
 }))
 
 export type JobSource = typeof jobSources.$inferSelect

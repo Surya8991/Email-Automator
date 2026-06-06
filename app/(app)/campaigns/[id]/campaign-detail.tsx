@@ -13,6 +13,7 @@ import {
   improveCampaignTemplateAction,
   addVariantAction, removeVariantAction,
 } from '@/server/actions/campaigns'
+import { purify } from '@/lib/sanitize-html'
 import { useFormatDate } from '@/components/timezone-provider'
 
 import { AiImprovePicker } from '@/components/ai-improve-picker'
@@ -178,8 +179,9 @@ export function CampaignDetail({ campaign, steps, enrollments, templates, tags, 
                     <div className="border-t bg-muted/40 p-3">
                       <div className="text-xs text-muted-foreground">Template body, what each enrolled contact will receive (still {'{{personalized}}'} at send time):</div>
                       <div className="prose prose-sm dark:prose-invert mt-2 max-h-72 max-w-none overflow-auto rounded-md border bg-background p-3 text-sm"
+                        suppressHydrationWarning
                         // eslint-disable-next-line react/no-danger
-                        dangerouslySetInnerHTML={{ __html: liveBody || '<em class="text-muted-foreground">empty</em>' }} />
+                        dangerouslySetInnerHTML={{ __html: purify(liveBody || '<em class="text-muted-foreground">empty</em>') }} />
                     </div>
                   ) : null}
 

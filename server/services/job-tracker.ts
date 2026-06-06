@@ -111,10 +111,10 @@ export async function bulkSetLeadStatus(
   return { updated: ids.length }
 }
 
-export async function listLeads(userId: string, status: string = 'new'): Promise<JobLead[]> {
+export async function listLeads(userId: string, status: string = 'new', limit = 500): Promise<JobLead[]> {
   return db.select().from(jobLeads)
     .where(and(eq(jobLeads.userId, userId), eq(jobLeads.status, status)))
-    .orderBy(desc(jobLeads.seenAt)).limit(500)
+    .orderBy(desc(jobLeads.seenAt)).limit(limit)
 }
 
 export async function createSource(
@@ -1090,11 +1090,15 @@ export async function pruneOldLeads(): Promise<number> {
 
 export async function tickAll(limit = 40): Promise<{ scanned: number; addedTotal: number; errors: number; pruned: number }> {
   const cutoff = Date.now() - FETCH_INTERVAL_MS
+  // Oldest-fetched first so a single noisy tenant with many sources can't
+  // starve smaller tenants — never-fetched (NULL) wins via `asc(NULLS FIRST)`
+  // expressed manually with sql to stay portable across libSQL.
   const sources = await db.select().from(jobSources)
     .where(and(
       eq(jobSources.active, true),
       or(isNull(jobSources.lastFetchedAt), lt(jobSources.lastFetchedAt, cutoff)),
     ))
+    .orderBy(sql`${jobSources.lastFetchedAt} IS NOT NULL, ${jobSources.lastFetchedAt} ASC`)
     .limit(limit)
   let addedTotal = 0, errors = 0
   for (const s of sources) {

@@ -176,6 +176,16 @@ export async function fetchForAi(rawUrl: string): Promise<FetchResult> {
       },
     })
     if (!res.ok) return { ok: false, error: `HTTP ${res.status}` }
+    // Defense-in-depth: if redirects led us to an internal host (e.g. a
+    // malicious source 302s to 169.254.169.254), refuse to read the body.
+    // We can't undo the request, but we can stop the response from
+    // reaching the AI prompt and from being logged.
+    try {
+      const finalHost = new URL(res.url).hostname
+      if (isPrivateIp(finalHost)) {
+        return { ok: false, error: 'Redirect resolved to a private host' }
+      }
+    } catch { /* res.url might be opaque on some runtimes — ignore */ }
     const ctype = (res.headers.get('content-type') ?? '').toLowerCase()
     if (!ALLOWED_CONTENT_TYPES.some((t) => ctype.startsWith(t))) {
       return { ok: false, error: `Unsupported content-type: ${ctype || '(none)'}` }

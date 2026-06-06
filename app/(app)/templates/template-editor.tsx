@@ -13,6 +13,7 @@ import { AiImprovePicker } from '@/components/ai-improve-picker'
 import { RichTextEditor, type RichTextEditorHandle } from '@/components/rich-text-editor'
 import { cn } from '@/lib/utils'
 import { useSaveShortcut } from '@/components/use-save-shortcut'
+import { purify } from '@/lib/sanitize-html'
 import { useUnsavedGuard } from '@/components/use-unsaved-guard'
 import { personalize } from '@/lib/escape'
 import { activateTemplateAction, saveTemplateAction, cloneTemplateAction, sendTemplateTestAction, improveTemplateBodyAction } from '@/server/actions/templates'
@@ -545,8 +546,9 @@ export function TemplateEditor({
           <div className="text-xs text-muted-foreground">To: {SAMPLE.name} &lt;{SAMPLE.email}&gt;</div>
           <div className="mt-1 font-medium">{personalize(draft.subject ?? '', SAMPLE, 'subject')}</div>
           <div className="prose prose-sm dark:prose-invert mt-3 max-w-none"
+            suppressHydrationWarning
             // eslint-disable-next-line react/no-danger
-            dangerouslySetInnerHTML={{ __html: personalize(draft.initialMsg ?? '', SAMPLE, 'html') }} />
+            dangerouslySetInnerHTML={{ __html: purify(personalize(draft.initialMsg ?? '', SAMPLE, 'html')) }} />
         </div>
       </section>
         </div>

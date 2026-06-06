@@ -10,6 +10,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { cancelScheduleAction, enqueueScheduleAction, previewScheduleAction, cancelSelectedAction, improveScheduledEmailAction } from '@/server/actions/schedule'
 import { useFormatDate, useTimezone } from '@/components/timezone-provider'
 import { AiImprovePicker } from '@/components/ai-improve-picker'
+import { purify } from '@/lib/sanitize-html'
 
 interface QueueRow {
   id: number; email: string; subject: string; scheduledAt: string; status: string
@@ -334,8 +335,9 @@ export function ScheduleClient({ queue, queueCount, isAdmin = false }: { queue: 
                       <td colSpan={8} className="p-3">
                         <div className="text-xs text-muted-foreground">Body preview — what the worker will send (still {'{{personalized}}'} at send time):</div>
                         <div className="prose prose-sm dark:prose-invert mt-2 max-h-72 max-w-none overflow-auto rounded-md border bg-background p-3 text-sm"
+                          suppressHydrationWarning
                           // eslint-disable-next-line react/no-danger
-                          dangerouslySetInnerHTML={{ __html: previewOpen.body || '<em class="text-muted-foreground">empty</em>' }} />
+                          dangerouslySetInnerHTML={{ __html: purify(previewOpen.body || '<em class="text-muted-foreground">empty</em>') }} />
                       </td>
                     </tr>
                   )

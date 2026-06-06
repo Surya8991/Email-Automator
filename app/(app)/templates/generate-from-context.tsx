@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { aiGenerateAction } from '@/server/actions/ai'
 import { cn } from '@/lib/utils'
+import { purify } from '@/lib/sanitize-html'
 
 // New "Generate" pane on Templates: paste a Job Description / LinkedIn
 // post / URL / free-form text and get back a subject + body draft. The
@@ -183,7 +184,8 @@ export function GenerateFromContext({
               <div className="mb-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">Body preview</div>
               <div
                 className="prose prose-sm dark:prose-invert max-h-96 max-w-none overflow-auto rounded-md border bg-background px-3 py-2"
-                dangerouslySetInnerHTML={{ __html: draft.html }}
+                suppressHydrationWarning
+                dangerouslySetInnerHTML={{ __html: purify(draft.html) }}
               />
             </div>
             {draft.reasoning ? (

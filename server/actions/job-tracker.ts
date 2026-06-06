@@ -163,16 +163,21 @@ export async function refreshAllForUserAction() {
   if (!rateLimit(`refresh-all:${u.id}`, 3, 60_000)) return { error: 'Too many full refreshes — wait a minute' }
   try {
     const sources = await svc.listSources(u.id)
-    let addedTotal = 0
-    let scanned = 0
+    let addedTotal = 0, scanned = 0, errors = 0
     for (const s of sources) {
       if (!s.active) continue
-      const r = await svc.tickSource(s)
-      addedTotal += r.added
+      try {
+        const r = await svc.tickSource(s)
+        addedTotal += r.added
+        if (r.status === 'error') errors++
+      } catch (e) {
+        errors++
+        console.error(`[refreshAllForUserAction] source ${s.id} threw:`, e)
+      }
       scanned++
     }
     revalidatePath('/jobs')
-    return { ok: true as const, scanned, addedTotal }
+    return { ok: true as const, scanned, addedTotal, errors }
   } catch (e) {
     return actionError(e, 'Refresh-all failed')
   }
@@ -190,15 +195,21 @@ export async function fullRefreshAllAction() {
   try {
     await svc.resetSourceTimestamps(u.id)
     const sources = await svc.listSources(u.id)
-    let addedTotal = 0, enriched = 0, scanned = 0
+    let addedTotal = 0, enriched = 0, scanned = 0, errors = 0
     for (const s of sources) {
       if (!s.active) continue
-      const r = await svc.tickSource(s)
-      addedTotal += r.added
+      try {
+        const r = await svc.tickSource(s)
+        addedTotal += r.added
+        if (r.status === 'error') errors++
+      } catch (e) {
+        errors++
+        console.error(`[fullRefreshAllAction] source ${s.id} threw:`, e)
+      }
       scanned++
     }
     revalidatePath('/jobs')
-    return { ok: true as const, scanned, addedTotal, enriched }
+    return { ok: true as const, scanned, addedTotal, enriched, errors }
   } catch (e) {
     return actionError(e, 'Full refresh failed')
   }
@@ -221,14 +232,20 @@ export async function leadToDraftAction(id: number) {
     .where(and(eq(jobLeads.id, id), eq(jobLeads.userId, u.id)))
   if (!lead) return { error: 'Lead not found' }
   try {
-    // Dedup guard: if a contact already exists for this listing URL, a draft
-    // was already created — return early instead of creating a duplicate.
-    if (lead.link) {
-      const [dup] = await db.select({ id: contactsTbl.id }).from(contactsTbl)
-        .where(and(eq(contactsTbl.userId, u.id), eq(contactsTbl.sourceUrl, lead.link)))
-        .limit(1)
-      if (dup) return { error: 'An outreach draft already exists for this listing.' }
-    }
+    // Dedup guard: if a contact already exists for this listing — either
+    // by URL (preferred) or by (jobTitle, company) when there's no link —
+    // skip the insert so we don't accumulate identical job-tracker contacts.
+    const dedupCond = lead.link
+      ? and(eq(contactsTbl.userId, u.id), eq(contactsTbl.sourceUrl, lead.link))
+      : and(
+          eq(contactsTbl.userId, u.id),
+          eq(contactsTbl.platform, 'jobs-tracker'),
+          eq(contactsTbl.jobTitle, lead.title),
+          eq(contactsTbl.company, lead.company || ''),
+        )
+    const [dup] = await db.select({ id: contactsTbl.id }).from(contactsTbl)
+      .where(dedupCond).limit(1)
+    if (dup) return { error: 'An outreach draft already exists for this listing.' }
     // Insert a placeholder contact for analytics / dedupe. Empty email
     // is intentional — the user fills it in on the contact detail.
     const inserted = await db.insert(contactsTbl).values({
@@ -384,14 +401,21 @@ export async function getActiveSourcesAction() {
  */
 export async function tickSingleSourceAction(sourceId: number, fullMode = false) {
   const u = await requireUser()
+  // Cap how fast the client orchestration can hammer this — 60/min/user is
+  // more than enough for any real refresh fan-out but protects Groq quota
+  // from a stolen session looping the endpoint.
+  if (!rateLimit(`tick-single:${u.id}`, 60, 60_000)) return { added: 0, status: 'rate-limited' as const }
+  // Verify ownership BEFORE the reset write so a tampered ID can't
+  // null someone else's lastFetchedAt.
+  const [source] = await db.select().from(jobSources)
+    .where(and(eq(jobSources.id, sourceId), eq(jobSources.userId, u.id)))
+  if (!source) return { added: 0, status: 'not-found' as const }
   if (fullMode) {
     await db.update(jobSources)
       .set({ lastFetchedAt: null })
       .where(and(eq(jobSources.id, sourceId), eq(jobSources.userId, u.id)))
+    source.lastFetchedAt = null
   }
-  const [source] = await db.select().from(jobSources)
-    .where(and(eq(jobSources.id, sourceId), eq(jobSources.userId, u.id)))
-  if (!source) return { added: 0, status: 'not-found' as const }
   try {
     const r = await svc.tickSource(source)
     revalidatePath('/jobs')

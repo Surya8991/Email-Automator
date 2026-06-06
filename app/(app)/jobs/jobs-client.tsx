@@ -59,16 +59,19 @@ export function JobsClient({
   async function runFetchNew() {
     const { sources: srcs } = await getActiveSourcesAction()
     if (!srcs.length) { toast.info('No active sources'); return }
-    let added = 0
+    let added = 0, failed = 0
     setProgress({ label: 'Fetch new', phase: 'Starting…', total: srcs.length, done: 0, stat: '+0 new' })
     try {
       for (const s of srcs) {
         setProgress((p) => p && { ...p, phase: `Fetching "${s.label}"…` })
         const r = await tickSingleSourceAction(s.id, false)
         added += r.added ?? 0
-        setProgress((p) => p && { ...p, done: p.done + 1, stat: `+${added} new` })
+        if (r.status === 'error' || r.status === 'rate-limited') failed++
+        setProgress((p) => p && { ...p, done: p.done + 1, stat: `+${added} new${failed ? ` · ${failed} failed` : ''}` })
       }
-      toast.success(`+${added} new lead${added === 1 ? '' : 's'} from ${srcs.length} source${srcs.length === 1 ? '' : 's'}`)
+      const msg = `+${added} new lead${added === 1 ? '' : 's'} from ${srcs.length} source${srcs.length === 1 ? '' : 's'}`
+      if (failed) toast.warning(`${msg} · ${failed} failed`)
+      else toast.success(msg)
       router.refresh()
     } finally {
       setProgress(null)
@@ -78,16 +81,19 @@ export function JobsClient({
   async function runFullRefresh() {
     const { sources: srcs } = await getActiveSourcesAction()
     if (!srcs.length) { toast.info('No active sources'); return }
-    let added = 0
+    let added = 0, failed = 0
     setProgress({ label: 'Full refresh', phase: 'Starting…', total: srcs.length, done: 0, stat: '+0 new' })
     try {
       for (const s of srcs) {
         setProgress((p) => p && { ...p, phase: `Refreshing "${s.label}"…` })
         const r = await tickSingleSourceAction(s.id, true)
         added += r.added ?? 0
-        setProgress((p) => p && { ...p, done: p.done + 1, stat: `+${added} new · enriching…` })
+        if (r.status === 'error' || r.status === 'rate-limited') failed++
+        setProgress((p) => p && { ...p, done: p.done + 1, stat: `+${added} new${failed ? ` · ${failed} failed` : ' · enriching…'}` })
       }
-      toast.success(`Full refresh done · ${srcs.length} sources · +${added} new leads · existing leads enriched`)
+      const msg = `Full refresh done · ${srcs.length} sources · +${added} new leads`
+      if (failed) toast.warning(`${msg} · ${failed} failed`)
+      else toast.success(`${msg} · existing leads enriched`)
       router.refresh()
     } finally {
       setProgress(null)
@@ -861,7 +867,8 @@ function LeadsTable({
       l.description.toLowerCase().includes(needle)
     ))
     const sorted = [...out]
-    if (sort === 'oldest') sorted.reverse()
+    if (sort === 'newest') sorted.sort((a, b) => +new Date(b.seenAt) - +new Date(a.seenAt))
+    else if (sort === 'oldest') sorted.sort((a, b) => +new Date(a.seenAt) - +new Date(b.seenAt))
     else if (sort === 'company') sorted.sort((a, b) => a.company.localeCompare(b.company))
     else if (sort === 'salary') {
       const firstNum = (s: string) => { const m = s.match(/\d+/); return m ? Number(m[0]) : -1 }

@@ -1,6 +1,6 @@
 'use server'
 import { revalidatePath } from 'next/cache'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import { requireUser, requireAdmin } from '@/auth'
 import { db } from '@/server/db/client'
 import { drafts as draftsTable, templates as templatesTable, auditLog } from '@/server/db/schema'
@@ -93,12 +93,15 @@ export async function scheduleSelectedDraftsAction(
       intervalMax: opts.intervalMax,
     })
     // Mark the matching drafts done so they leave the pending list.
-    // Per-id WHERE keeps tenancy guarantee tight even though picked
-    // already filtered by userId above.
-    for (const d of picked) {
-      await db.update(draftsTable).set({ status: 'sent' })
-        .where(and(eq(draftsTable.id, d.id), eq(draftsTable.userId, u.id), eq(draftsTable.status, 'draft')))
-    }
+    // Single batched update keeps tenancy + status guard tight while
+    // collapsing N round-trips into one.
+    const pickedIds = picked.map((d) => d.id)
+    await db.update(draftsTable).set({ status: 'sent' })
+      .where(and(
+        inArray(draftsTable.id, pickedIds),
+        eq(draftsTable.userId, u.id),
+        eq(draftsTable.status, 'draft'),
+      ))
     revalidatePath('/drafts')
     revalidatePath('/schedule')
     return { ok: true as const, scheduled: r.scheduled, skipped: r.skipped + (picked.length - contactIds.length) }
