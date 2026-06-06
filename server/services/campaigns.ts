@@ -159,21 +159,16 @@ export async function enroll(userId: string, campaignId: number, opts: EnrollOpt
       .from(campaignEnrollments).where(eq(campaignEnrollments.campaignId, campaignId)))
       .map((r) => r.cid)
   )
-  let added = 0
-  for (const c of pool) {
-    if (existing.has(c.id)) continue
-    try {
-      await db.insert(campaignEnrollments).values({
-        campaignId, contactId: c.id, currentStep: 0,
-        nextRunAt: Date.now(), // first step fires on the next worker tick
-        status: 'active',
-      })
-      added++
-    } catch (e) {
-      // UNIQUE constraint — a concurrent enroll() already inserted this row.
-      // Swallow and keep going; the contact ends up enrolled either way.
-      if (!(e instanceof Error) || !/UNIQUE/i.test(e.message)) throw e
-    }
-  }
-  return { enrolled: added }
+  const toEnroll = pool.filter((c) => !existing.has(c.id))
+  if (toEnroll.length === 0) return { enrolled: 0 }
+  const now = Date.now()
+  // Batch insert all at once; onConflictDoNothing() handles any race where
+  // a concurrent enroll() wins on the UNIQUE (campaignId, contactId) index.
+  await db.insert(campaignEnrollments)
+    .values(toEnroll.map((c) => ({
+      campaignId, contactId: c.id, currentStep: 0,
+      nextRunAt: now, status: 'active' as const,
+    })))
+    .onConflictDoNothing()
+  return { enrolled: toEnroll.length }
 }

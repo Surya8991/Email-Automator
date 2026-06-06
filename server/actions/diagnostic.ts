@@ -70,7 +70,7 @@ export async function runDiagnosticsAction(opts: { mode?: 'quick' | 'full' } = {
   // SMTP/cron still work.
   const sender = smtp.user
   if (mode === 'full' && sender && sender.includes('@')) {
-    const domain = sender.split('@')[1]!.toLowerCase()
+    const domain = (sender.split('@')[1] ?? '').toLowerCase()
     const isProvider = PROVIDER_DOMAINS.has(domain)
 
     // MX records — if there are none, mail to this domain bounces. This

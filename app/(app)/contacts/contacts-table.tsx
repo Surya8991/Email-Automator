@@ -52,8 +52,9 @@ export function ContactsTable({
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [q, setQ] = useState(search)
   const [timelineFor, setTimelineFor] = useState<Contact | null>(null)
-  // Schedule / Enroll inline panels for the bulk bar. Null = closed.
-  const [bulkPanel, setBulkPanel] = useState<'schedule' | 'enroll' | null>(null)
+  // Schedule / Enroll / Tag inline panels for the bulk bar. Null = closed.
+  const [bulkPanel, setBulkPanel] = useState<'schedule' | 'enroll' | 'tag' | 'untag' | null>(null)
+  const [tagInput, setTagInput] = useState('')
   const tomorrow930 = () => {
     const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(9, 30, 0, 0)
     return { date: d.toISOString().slice(0, 10), time: '09:30' }
@@ -147,51 +148,42 @@ export function ContactsTable({
                 <Layers className="mr-1 h-3.5 w-3.5" /> Enroll in campaign…
               </Button>
             ) : null}
-            <Button variant="ghost" size="sm" disabled={pending} onClick={() => {
-              const t = prompt('Tags to add (comma-separated):')?.trim()
-              if (!t) return
-              const ids = Array.from(selected)
-              start(async () => {
-                const r = await bulkTagAction(ids, t, '')
-                setSelected(new Set())
-                router.refresh()
-                if ('updated' in r) alert(`Tagged ${r.updated}`)
-              })
-            }}>
+            <Button variant="ghost" size="sm" disabled={pending}
+              onClick={() => { setTagInput(''); setBulkPanel(bulkPanel === 'tag' ? null : 'tag') }}>
               <Plus className="mr-1 h-3.5 w-3.5" /> Add tag
             </Button>
-            <Button variant="ghost" size="sm" disabled={pending} onClick={() => {
-              const t = prompt('Tags to remove (comma-separated):')?.trim()
-              if (!t) return
-              const ids = Array.from(selected)
-              start(async () => {
-                await bulkTagAction(ids, '', t); setSelected(new Set()); router.refresh()
-              })
-            }}>
+            <Button variant="ghost" size="sm" disabled={pending}
+              onClick={() => { setTagInput(''); setBulkPanel(bulkPanel === 'untag' ? null : 'untag') }}>
               <X className="mr-1 h-3.5 w-3.5" /> Remove tag
             </Button>
             <Button variant="ghost" size="sm" disabled={pending} onClick={() => {
-              if (!confirm(`Reset email-status on ${selected.size} contact(s)? They'll be eligible for a new draft.`)) return
               const ids = Array.from(selected)
-              start(async () => { await resetStatusAction(ids); setSelected(new Set()); router.refresh() })
+              start(async () => {
+                await resetStatusAction(ids)
+                setSelected(new Set()); router.refresh()
+                toast.success(`Reset status on ${ids.length} contact${ids.length !== 1 ? 's' : ''}`)
+              })
             }}>
               <RotateCcw className="mr-1 h-3.5 w-3.5" /> Reset status
             </Button>
             <Button variant="ghost" size="sm" disabled={pending} onClick={() => {
-              if (!confirm(`Block ${selected.size} email(s) AND remove them from contacts? This adds them to your blocklist.`)) return
               const ids = Array.from(selected)
               start(async () => {
                 const r = await bulkBlockAction(ids)
                 setSelected(new Set()); router.refresh()
-                if ('blocked' in r) alert(`Blocked ${r.blocked}, removed ${r.deleted}`)
+                if ('blocked' in r) toast.success(`Blocked ${r.blocked} email${r.blocked !== 1 ? 's' : ''}, removed ${r.deleted} contact${r.deleted !== 1 ? 's' : ''}`)
+                else if ('error' in r) toast.error(r.error)
               })
             }}>
               <Ban className="mr-1 h-3.5 w-3.5" /> Block
             </Button>
             <Button variant="destructive" size="sm" disabled={pending} onClick={() => {
-              if (!confirm(`Delete ${selected.size} contact(s) permanently?`)) return
               const ids = Array.from(selected)
-              start(async () => { await deleteContactsBulkAction(ids); setSelected(new Set()); router.refresh() })
+              start(async () => {
+                await deleteContactsBulkAction(ids)
+                setSelected(new Set()); router.refresh()
+                toast.success(`Deleted ${ids.length} contact${ids.length !== 1 ? 's' : ''}`)
+              })
             }}>
               <Trash2 className="mr-1 h-3.5 w-3.5" /> Delete
             </Button>
@@ -260,6 +252,33 @@ export function ContactsTable({
             })
           }}>Confirm enroll</Button>
           <Button size="sm" variant="ghost" onClick={() => setBulkPanel(null)}>Cancel</Button>
+        </div>
+      ) : null}
+
+      {selected.size > 0 && (bulkPanel === 'tag' || bulkPanel === 'untag') ? (
+        <div className="flex flex-wrap items-end gap-3 border-b bg-muted/20 p-3">
+          <div className="grid gap-1 flex-1 min-w-[200px]">
+            <label className="text-xs text-muted-foreground" htmlFor="bulk-tag-input">
+              {bulkPanel === 'tag' ? 'Tags to add' : 'Tags to remove'} (comma-separated)
+            </label>
+            <input
+              id="bulk-tag-input" value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.closest('form')?.requestSubmit() }}
+              placeholder="e.g. vc, priority-a, seo"
+              className="h-8 rounded-md border bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+          </div>
+          <Button size="sm" disabled={pending || !tagInput.trim()} onClick={() => {
+            const ids = Array.from(selected)
+            const t = tagInput.trim()
+            start(async () => {
+              const r = await bulkTagAction(ids, bulkPanel === 'tag' ? t : '', bulkPanel === 'untag' ? t : '')
+              setSelected(new Set()); setBulkPanel(null); setTagInput(''); router.refresh()
+              if ('updated' in r) toast.success(`${bulkPanel === 'tag' ? 'Tagged' : 'Untagged'} ${r.updated} contact${r.updated !== 1 ? 's' : ''}`)
+            })
+          }}>Confirm</Button>
+          <Button size="sm" variant="ghost" onClick={() => { setBulkPanel(null); setTagInput('') }}>Cancel</Button>
         </div>
       ) : null}
 

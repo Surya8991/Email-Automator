@@ -85,13 +85,10 @@ export async function bulkSetLeadStatus(
 ): Promise<{ updated: number }> {
   if (!ids || ids.length === 0) return { updated: 0 }
   if (ids.length > 500) ids = ids.slice(0, 500)
-  let updated = 0
-  for (const id of ids) {
-    await db.update(jobLeads).set({ status })
-      .where(and(eq(jobLeads.id, id), eq(jobLeads.userId, userId)))
-    updated++
-  }
-  return { updated }
+  // Single UPDATE with inArray instead of N individual updates.
+  await db.update(jobLeads).set({ status })
+    .where(and(inArray(jobLeads.id, ids), eq(jobLeads.userId, userId)))
+  return { updated: ids.length }
 }
 
 export async function listLeads(userId: string, status: string = 'new'): Promise<JobLead[]> {

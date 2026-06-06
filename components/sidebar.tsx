@@ -1,7 +1,7 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   LayoutDashboard, Users, FileText, Send, CalendarClock, BarChart3, Workflow,
   Settings, Shield, Ban, ScrollText, UserCircle2, FlaskConical, Eye, BookOpen,
@@ -73,6 +73,19 @@ const ADMIN_GROUP: NavGroup = {
   ],
 }
 
+function KbdHint() {
+  const [isMac, setIsMac] = useState(true)
+  useEffect(() => {
+    setIsMac(/Mac|iPhone|iPad|iPod/i.test(navigator.userAgent))
+  }, [])
+  return (
+    <div className="border-t p-3 text-[11px] text-muted-foreground/80">
+      <span className="font-medium text-foreground/80">v2</span>{' '}· press{' '}
+      <kbd className="rounded border bg-background px-1 font-mono text-[10px]">{isMac ? '⌘K' : 'Ctrl+K'}</kbd>{' '}to jump
+    </div>
+  )
+}
+
 export function Sidebar({ isAdmin }: { isAdmin?: boolean }) {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
@@ -138,10 +151,7 @@ export function Sidebar({ isAdmin }: { isAdmin?: boolean }) {
       <aside className="hidden md:flex w-60 shrink-0 flex-col border-r bg-card/40 backdrop-blur-sm">
         {brand}
         {list}
-        <div className="border-t p-3 text-[11px] text-muted-foreground/80">
-          <span className="font-medium text-foreground/80">v2</span>{' '}· press{' '}
-          <kbd className="rounded border bg-background px-1 font-mono text-[10px]">⌘K</kbd>{' '}to jump
-        </div>
+        <KbdHint />
       </aside>
 
       {/* Mobile drawer */}

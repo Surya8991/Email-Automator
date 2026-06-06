@@ -62,8 +62,10 @@ export const contacts = sqliteTable('contacts', {
   tags: text('tags').notNull().default(''),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),
 }, (t) => ({
-  byUser: index('contacts_user_idx').on(t.userId),
-  byEmail: index('contacts_email_idx').on(t.userId, t.recruiterEmail),
+  byUser:        index('contacts_user_idx').on(t.userId),
+  byEmail:       index('contacts_email_idx').on(t.userId, t.recruiterEmail),
+  byStatus:      index('contacts_status_idx').on(t.userId, t.status),
+  byEmailStatus: index('contacts_email_status_idx').on(t.userId, t.emailStatus),
 }))
 
 export const templates = sqliteTable('templates', {
@@ -313,7 +315,10 @@ export const jobSources = sqliteTable('job_sources', {
   lastError: text('last_error').notNull().default(''),
   active: integer('active', { mode: 'boolean' }).notNull().default(true),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),
-}, (t) => ({ byUser: index('job_sources_user_idx').on(t.userId) }))
+}, (t) => ({
+  byUser:   index('job_sources_user_idx').on(t.userId),
+  byActive: index('job_sources_active_idx').on(t.active, t.userId),
+}))
 
 export const jobLeads = sqliteTable('job_leads', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -334,8 +339,9 @@ export const jobLeads = sqliteTable('job_leads', {
   salary: text('salary').notNull().default(''),
   description: text('description').notNull().default(''),
 }, (t) => ({
-  byUser: index('job_leads_user_idx').on(t.userId, t.status, t.seenAt),
+  byUser:        index('job_leads_user_idx').on(t.userId, t.status, t.seenAt),
   uqFingerprint: uniqueIndex('job_leads_fingerprint_idx').on(t.sourceId, t.fingerprint),
+  bySource:      index('job_leads_source_idx').on(t.sourceId),
 }))
 
 export type JobSource = typeof jobSources.$inferSelect
