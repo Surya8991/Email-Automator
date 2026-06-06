@@ -8,6 +8,7 @@ import { contacts, blocklist } from '@/server/db/schema'
 import * as svc from '@/server/services/contacts'
 import { parseCsv, parseXlsx } from '@/server/services/importer'
 import { emit } from '@/server/sse'
+import { rateLimit } from '@/lib/rate-limit'
 
 const NewContactSchema = z.object({
   recruiterEmail: z.string().email(),
@@ -62,6 +63,7 @@ export async function deleteContactsBulkAction(ids: number[]) {
 // Wipe everything (no filter) — caller MUST double-confirm in the UI.
 export async function deleteAllContactsAction() {
   const u = await requireUser()
+  if (!rateLimit(`delete-all-contacts:${u.id}`, 3, 60_000)) return { error: 'Slow down — try again in a minute' }
   const n = await svc.deleteAllContacts(u.id)
   revalidatePath('/contacts')
   revalidatePath('/admin')
@@ -75,6 +77,7 @@ export async function deleteFilteredContactsAction(opts: {
   company?: string; location?: string; platform?: string
 }) {
   const u = await requireUser()
+  if (!rateLimit(`delete-filtered-contacts:${u.id}`, 5, 60_000)) return { error: 'Slow down — try again in a minute' }
   const n = await svc.deleteFilteredContacts(u.id, opts)
   revalidatePath('/contacts')
   return { ok: true, deleted: n }
