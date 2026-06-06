@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import {
   Plus, RefreshCw, Trash2, ExternalLink, Bookmark, Briefcase, CheckCircle2, XCircle, Building2,
   Search, Download, MailPlus, Pause, Play, Pencil, RefreshCcw, Archive, Clock,
-  MapPin, IndianRupee, CalendarDays, Tag, Eye,
+  MapPin, IndianRupee, CalendarDays, Tag, Eye, AlertTriangle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -19,7 +19,8 @@ import {
   bulkDeleteJobSourcesAction, bulkToggleSourceActiveAction,
   refreshJobSourceAction, setJobLeadStatusAction,
   leadToDraftAction, bulkSetJobLeadStatusAction, toggleJobSourceActiveAction,
-  editJobSourceAction, refreshAllForUserAction, fullRefreshAllAction, validateJobSourceAction,
+  editJobSourceAction, refreshAllForUserAction, fullRefreshAllAction,
+  checkDeadLinksAction, validateJobSourceAction,
 } from '@/server/actions/job-tracker'
 import { JobPresetPicker } from './preset-picker'
 
@@ -83,6 +84,22 @@ export function JobsClient({
                 title="Re-fetch all sources with first-fetch budget (500 results from Naukri). Enriches existing leads with fuller descriptions, salary, and links."
               >
                 <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${pending ? 'animate-spin' : ''}`} /> Full refresh
+              </Button>
+              <Button
+                variant="outline" size="sm" disabled={pending}
+                onClick={() => start(async () => {
+                  toast.info('Checking links for 404s…')
+                  const r = await checkDeadLinksAction()
+                  if ('error' in r && r.error) { toast.error(r.error); return }
+                  if ('dead' in r) {
+                    if (r.dead === 0) toast.success(`All ${r.checked} links alive`)
+                    else toast.warning(`Removed ${r.dead} dead listing${r.dead === 1 ? '' : 's'} (checked ${r.checked})`)
+                  }
+                  router.refresh()
+                })}
+                title="Check all new/saved leads for 404 and auto-ignore expired listings"
+              >
+                <AlertTriangle className={`mr-1.5 h-3.5 w-3.5 ${pending ? 'animate-spin' : ''}`} /> Check 404s
               </Button>
             </>
           ) : null}

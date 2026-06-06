@@ -1,6 +1,6 @@
 'use server'
 import { z } from 'zod'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, inArray, ne } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { requireUser } from '@/auth'
 import { db } from '@/server/db/client'
@@ -278,6 +278,73 @@ export async function leadToDraftAction(id: number) {
  *
  * Does NOT save anything to the DB. Rate-limited to 5/min/user.
  */
+/**
+ * Check all active (new/saved) leads' links for 404s and auto-ignore dead ones.
+ * Processes in batches of 20 with a 6 s timeout per request.
+ * Follows redirects and also checks if the final URL contains typical
+ * "job not found" patterns used by Naukri, Foundit, and ATS boards.
+ */
+export async function checkDeadLinksAction() {
+  const u = await requireUser()
+  if (!rateLimit(`dead-links:${u.id}`, 1, 2 * 60_000)) return { error: 'Already running — wait 2 minutes' }
+
+  const leads = await db.select({ id: jobLeads.id, link: jobLeads.link })
+    .from(jobLeads)
+    .where(and(
+      eq(jobLeads.userId, u.id),
+      inArray(jobLeads.status, ['new', 'saved']),
+      ne(jobLeads.link, ''),
+    ))
+
+  if (leads.length === 0) return { ok: true as const, dead: 0, checked: 0 }
+
+  const DEAD_STATUS  = new Set([404, 410, 400])
+  // URL fragments/paths that job boards put in their "job not found" redirect
+  const DEAD_PATTERN = /(\/404|not.found|job.not.available|position.closed|listing.expired|no.longer.available|job.filled|job.closed)/i
+  const CHECK_UA     = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36'
+
+  async function isDead(url: string): Promise<boolean> {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 6_000)
+    try {
+      // Try HEAD first (no body download). Some servers reject HEAD → catch and skip.
+      const r = await fetch(url, {
+        method: 'HEAD', signal: ctrl.signal,
+        headers: { 'User-Agent': CHECK_UA }, redirect: 'follow',
+      }).catch(() => null)
+      if (r) {
+        if (DEAD_STATUS.has(r.status)) return true
+        if (DEAD_PATTERN.test(r.url)) return true
+        // 200 on the original URL = alive
+        return false
+      }
+      return false
+    } catch { return false }
+    finally { clearTimeout(timer) }
+  }
+
+  // Process in batches of 20 concurrent requests
+  const deadIds: number[] = []
+  const BATCH = 20
+  for (let i = 0; i < leads.length; i += BATCH) {
+    const batch = leads.slice(i, i + BATCH)
+    const results = await Promise.all(batch.map(async (l) => {
+      const dead = await isDead(l.link)
+      return dead ? l.id : null
+    }))
+    deadIds.push(...results.filter((x): x is number => x !== null))
+  }
+
+  if (deadIds.length > 0) {
+    await db.update(jobLeads)
+      .set({ status: 'ignored' })
+      .where(and(eq(jobLeads.userId, u.id), inArray(jobLeads.id, deadIds)))
+  }
+
+  revalidatePath('/jobs')
+  return { ok: true as const, dead: deadIds.length, checked: leads.length }
+}
+
 export async function validateJobSourceAction(url: string, keywords: string) {
   const u = await requireUser()
   if (!rateLimit(`job-validate:${u.id}`, 5, 60_000)) return { error: 'Slow down — wait a minute' }
