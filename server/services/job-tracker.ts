@@ -103,7 +103,7 @@ export async function bulkSetLeadStatus(
   return { updated: ids.length }
 }
 
-export async function listLeads(userId: string, status: string = 'new', limit = 2000): Promise<JobLead[]> {
+export async function listLeads(userId: string, status: string = 'new', limit = 3000): Promise<JobLead[]> {
   return db.select().from(jobLeads)
     .where(and(eq(jobLeads.userId, userId), eq(jobLeads.status, status)))
     .orderBy(desc(jobLeads.seenAt)).limit(limit)
@@ -176,7 +176,16 @@ export async function tickSource(source: JobSource): Promise<{ added: number; sk
     //         the matched adapter returned 0 (e.g. Naukri API blocked).
     //         RSS / RemoteOK / Remotive don't fall through (their APIs
     //         legitimately return 0 when no listings match).
-    const isRssLike = adapter?.name === 'rss' || adapter?.name === 'remote-ok' || adapter?.name === 'remotive'
+    // Adapters that use their own structured API — don't fall back to HTML/AI
+    // when they return 0 (their API legitimately returns 0, or is blocked).
+    // Naukri/Foundit have dedicated APIs; falling through causes the AI
+    // extractor to be called against the SPA homepage (waste + error).
+    const isRssLike = adapter?.name === 'rss'
+      || adapter?.name === 'remote-ok'
+      || adapter?.name === 'remotive'
+      || adapter?.name === 'naukri'
+      || adapter?.name === 'foundit'
+      || adapter?.name === 'internshala'
     if (jobs.length === 0 && !isRssLike) {
       const fetched = await fetchForAi(source.url)
       if (!fetched.ok) {

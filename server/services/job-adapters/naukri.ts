@@ -53,7 +53,14 @@ export async function fetchNaukriApi(url: string, pages: number): Promise<RawJob
           Origin: 'https://www.naukri.com',
         },
       })
-      if (!res.ok) break
+      if (!res.ok) {
+        if (res.status === 406) {
+          // Naukri requires recaptcha — API is temporarily blocked.
+          // Return whatever we have so far; orchestrator won't fall through to AI.
+          console.warn(`[naukri] recaptcha on page ${page} — returning ${results.length} leads fetched so far`)
+        }
+        break
+      }
       const data = (await res.json()) as {
         jobDetails?: Array<{
           title?: string; companyName?: string; jdURL?: string
