@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import {
   Plus, RefreshCw, Trash2, ExternalLink, Bookmark, Briefcase, CheckCircle2, XCircle, Building2,
   Search, Download, MailPlus, Pause, Play, Pencil, RefreshCcw, Archive, Clock,
-  ChevronDown, ChevronUp, MapPin, DollarSign, CalendarDays, Tag, Eye,
+  MapPin, IndianRupee, CalendarDays, Tag, Eye,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -578,6 +578,133 @@ function EditSourceDialog({ source, onClose }: { source: SourceRow; onClose: () 
   )
 }
 
+// ── Job Detail Dialog ────────────────────────────────────────────────────────
+function JobDetailDialog({
+  lead, src, open, onClose, onDraft, onStatus, busy,
+}: {
+  lead: LeadRow; src: SourceRow | undefined
+  open: boolean; onClose: () => void
+  onDraft: (id: number) => void
+  onStatus: (id: number, s: 'saved' | 'ignored' | 'applied') => void
+  busy: boolean
+}) {
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose() }}>
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+        <DialogHeader className="shrink-0">
+          <DialogTitle className="text-xl leading-snug pr-6">{lead.title}</DialogTitle>
+          {/* Meta line under title */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1 text-sm text-muted-foreground">
+            {lead.company ? (
+              <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
+                <Building2 className="h-4 w-4 shrink-0" /> {lead.company}
+              </span>
+            ) : null}
+            {lead.location ? (
+              <span className="inline-flex items-center gap-1.5">
+                <MapPin className="h-3.5 w-3.5 shrink-0" /> {lead.location}
+              </span>
+            ) : null}
+            {lead.salary ? (
+              <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-600 dark:text-emerald-400">
+                <IndianRupee className="h-3.5 w-3.5 shrink-0" /> {lead.salary}
+              </span>
+            ) : null}
+          </div>
+        </DialogHeader>
+
+        {/* Scrollable body */}
+        <div className="flex-1 overflow-y-auto space-y-5 py-2 pr-1">
+          {/* Full JD */}
+          <section>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Job Description</h3>
+            {lead.description ? (
+              <p className="text-sm leading-relaxed whitespace-pre-wrap">{lead.description}</p>
+            ) : (
+              <div className="rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground">
+                No description extracted.{lead.link ? (
+                  <> <a href={lead.link} target="_blank" rel="noreferrer" className="ml-1 text-primary underline underline-offset-2">Open the original listing</a> for the full JD.</>
+                ) : ' Open the original listing for the full JD.'}
+              </div>
+            )}
+          </section>
+
+          {/* Detail grid */}
+          <section className="grid grid-cols-2 gap-x-8 gap-y-3 rounded-lg border bg-muted/30 p-4 text-sm sm:grid-cols-3">
+            {lead.company ? (
+              <div>
+                <dt className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Company</dt>
+                <dd className="font-medium">{lead.company}</dd>
+              </div>
+            ) : null}
+            {lead.location ? (
+              <div>
+                <dt className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Location</dt>
+                <dd>{lead.location}</dd>
+              </div>
+            ) : null}
+            {lead.salary ? (
+              <div>
+                <dt className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Salary / CTC</dt>
+                <dd className="font-semibold text-emerald-600 dark:text-emerald-400">{lead.salary}</dd>
+              </div>
+            ) : null}
+            {lead.postedAt ? (
+              <div>
+                <dt className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Posted</dt>
+                <dd>{new Date(lead.postedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</dd>
+              </div>
+            ) : null}
+            <div>
+              <dt className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Seen on</dt>
+              <dd>{new Date(lead.seenAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</dd>
+            </div>
+            {src ? (
+              <div>
+                <dt className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Source</dt>
+                <dd>
+                  <a href={src.url} target="_blank" rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-primary hover:underline">
+                    {src.label} <ExternalLink className="h-3 w-3" />
+                  </a>
+                </dd>
+              </div>
+            ) : null}
+            {lead.link ? (
+              <div className="col-span-2 sm:col-span-1">
+                <dt className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Original listing</dt>
+                <dd>
+                  <a href={lead.link} target="_blank" rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-primary hover:underline text-xs">
+                    View full JD <ExternalLink className="h-3 w-3 shrink-0" />
+                  </a>
+                </dd>
+              </div>
+            ) : null}
+          </section>
+        </div>
+
+        <DialogFooter className="shrink-0 flex-wrap gap-2 border-t pt-4">
+          <Button variant="default" disabled={busy} onClick={() => { onDraft(lead.id); onClose() }}>
+            <MailPlus className="mr-1.5 h-4 w-4" /> Draft outreach email
+          </Button>
+          <Button variant="outline" disabled={busy} onClick={() => { onStatus(lead.id, 'saved'); onClose() }}>
+            <Bookmark className="mr-1.5 h-4 w-4" /> Save lead
+          </Button>
+          <Button variant="outline" disabled={busy} onClick={() => { onStatus(lead.id, 'applied'); onClose() }}>
+            <CheckCircle2 className="mr-1.5 h-4 w-4" /> Mark applied
+          </Button>
+          <Button variant="ghost" disabled={busy} className="text-muted-foreground"
+            onClick={() => { onStatus(lead.id, 'ignored'); onClose() }}>
+            <XCircle className="mr-1.5 h-4 w-4" /> Ignore
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ── Leads Table ──────────────────────────────────────────────────────────────
 function LeadsTable({
   leads, sources, pending, showSaveButton, status,
 }: {
@@ -597,6 +724,7 @@ function LeadsTable({
     [...new Set(leads.map((l) => l.company).filter(Boolean))].sort(), [leads])
   const locations = useMemo(() =>
     [...new Set(leads.map((l) => l.location).filter(Boolean))].sort(), [leads])
+  const [detailLead, setDetailLead] = useState<LeadRow | null>(null)
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase()
@@ -640,18 +768,19 @@ function LeadsTable({
     start(async () => {
       const r = await leadToDraftAction(id)
       if ('error' in r && r.error) { toast.error(r.error); return }
-      toast.success('Draft created — go to Drafts to add the recruiter email and send.')
+      toast.success('Draft created — go to Drafts to add recruiter email and send.')
       router.refresh()
     })
   }
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative max-w-sm flex-1">
           <Search className="pointer-events-none absolute left-2 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search title / company / location / JD…" className="pl-8 h-9 text-sm" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)}
+            placeholder="Search title, company, location, JD…" className="pl-8 h-9 text-sm" />
         </div>
         {sources.length > 1 ? (
           <select value={sourceFilter ?? ''} onChange={(e) => setSourceFilter(e.target.value === '' ? null : Number(e.target.value))}
@@ -706,12 +835,10 @@ function LeadsTable({
               : 'No leads found.'}
         </div>
       ) : (
-        /* Select-all header */
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 px-1">
-            <input
-              type="checkbox" aria-label="Select all visible"
-              checked={allSelected}
+        <div className="rounded-md border overflow-hidden">
+          {/* Select-all header row */}
+          <div className="flex items-center gap-3 border-b bg-muted/40 px-4 py-2">
+            <input type="checkbox" aria-label="Select all visible" checked={allSelected}
               onChange={(e) => {
                 const n = new Set(selected)
                 if (e.target.checked) for (const l of filtered) n.add(l.id)
@@ -720,202 +847,118 @@ function LeadsTable({
               }}
               className="h-3.5 w-3.5"
             />
-            <span className="text-[11px] text-muted-foreground">Select all visible</span>
+            <span className="text-[11px] text-muted-foreground">Select all visible ({filtered.length})</span>
           </div>
 
-          {filtered.map((l) => {
-            const src = sourceById.get(l.sourceId)
-            const isExpanded = expandedId === l.id
-            return (
-              <div key={l.id}
-                className={`rounded-lg border bg-card transition-shadow ${isExpanded ? 'shadow-md ring-1 ring-primary/20' : 'hover:shadow-sm'}`}>
-                {/* Card header — always visible */}
-                <div className="flex items-start gap-3 p-4">
-                  <input
-                    type="checkbox" aria-label={`Select ${l.title}`}
+          {/* Lead rows */}
+          <ul className="divide-y">
+            {filtered.map((l) => {
+              const src = sourceById.get(l.sourceId)
+              return (
+                <li key={l.id} className="group flex items-start gap-3 px-4 py-3 hover:bg-muted/20 ea-transition">
+                  <input type="checkbox" aria-label={`Select ${l.title}`}
                     checked={selected.has(l.id)}
                     onChange={(e) => {
-                      const n = new Set(selected)
-                      if (e.target.checked) n.add(l.id); else n.delete(l.id)
-                      setSelected(n)
+                      const n = new Set(selected); if (e.target.checked) n.add(l.id); else n.delete(l.id); setSelected(n)
                     }}
                     className="mt-1 h-3.5 w-3.5 shrink-0"
                   />
 
-                  {/* Main info */}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        {/* Title + external link */}
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          {l.link ? (
-                            <a href={l.link} target="_blank" rel="noreferrer"
-                              className="inline-flex items-center gap-1 font-semibold text-base hover:text-primary ea-transition"
-                              onClick={(e) => e.stopPropagation()}>
-                              {l.title}
-                              <ExternalLink className="h-3.5 w-3.5 shrink-0 opacity-60" />
-                            </a>
-                          ) : (
-                            <span className="font-semibold text-base">{l.title}</span>
-                          )}
-                        </div>
-
-                        {/* Meta chips */}
-                        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                          {l.company ? (
-                            <span className="inline-flex items-center gap-1 font-medium text-foreground">
-                              <Building2 className="h-3 w-3" /> {l.company}
-                            </span>
-                          ) : null}
-                          {l.location ? (
-                            <span className="inline-flex items-center gap-1">
-                              <MapPin className="h-3 w-3" /> {l.location}
-                            </span>
-                          ) : null}
-                          {l.salary ? (
-                            <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
-                              <DollarSign className="h-3 w-3" /> {l.salary}
-                            </span>
-                          ) : null}
-                          {l.postedAt ? (
-                            <span className="inline-flex items-center gap-1">
-                              <CalendarDays className="h-3 w-3" /> {new Date(l.postedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                            </span>
-                          ) : null}
-                          {src ? (
-                            <span className="inline-flex items-center gap-1 opacity-60">
-                              <Tag className="h-3 w-3" /> {src.label}
-                            </span>
-                          ) : null}
-                        </div>
-
-                        {/* Description preview — collapsed */}
-                        {!isExpanded && l.description ? (
-                          <p className="mt-2 text-xs text-muted-foreground line-clamp-2 max-w-2xl">{l.description}</p>
-                        ) : null}
-                      </div>
-
-                      {/* Action buttons — top-right */}
-                      <div className="flex shrink-0 items-center gap-1 ea-row-actions">
-                        <Button size="sm" variant="default" disabled={busy || pending} onClick={() => convertToDraft(l.id)}
-                          title="Create a draft outreach email from this lead">
-                          <MailPlus className="mr-1 h-3 w-3" /> Draft
-                        </Button>
-                        {showSaveButton ? (
-                          <Button size="sm" variant="outline" disabled={busy || pending} onClick={() => setStatus(l.id, 'saved')} title="Save for later">
-                            <Bookmark className="mr-1 h-3 w-3" /> Save
-                          </Button>
-                        ) : null}
-                        <Button size="sm" variant="ghost" disabled={busy || pending} onClick={() => setStatus(l.id, 'applied')} title="Mark as applied">
-                          Applied
-                        </Button>
-                        <Button size="sm" variant="ghost" disabled={busy || pending} onClick={() => setStatus(l.id, 'ignored')} title="Dismiss this lead">
-                          Ignore
-                        </Button>
-                        <Button size="sm" variant="ghost"
-                          onClick={() => setExpandedId(isExpanded ? null : l.id)}
-                          title={isExpanded ? 'Collapse' : 'Expand full JD'}
-                          aria-expanded={isExpanded}>
-                          {isExpanded
-                            ? <ChevronUp className="h-4 w-4" />
-                            : <><Eye className="h-3.5 w-3.5 mr-1" /><ChevronDown className="h-3.5 w-3.5" /></>}
-                        </Button>
-                      </div>
+                  {/* Main content — click anywhere to open detail */}
+                  <button
+                    type="button"
+                    className="min-w-0 flex-1 text-left"
+                    onClick={() => setDetailLead(l)}
+                  >
+                    {/* Title */}
+                    <div className="font-semibold text-sm leading-snug group-hover:text-primary ea-transition">
+                      {l.title}
+                      {l.description ? null : (
+                        <span className="ml-2 text-[10px] font-normal text-muted-foreground italic">no JD</span>
+                      )}
                     </div>
-                  </div>
-                </div>
-
-                {/* Expanded JD panel */}
-                {isExpanded ? (
-                  <div className="border-t bg-muted/30 px-4 py-4 space-y-4">
-                    {/* Full description */}
-                    {l.description ? (
-                      <div>
-                        <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Job Description</h4>
-                        <p className="text-sm leading-relaxed whitespace-pre-wrap text-foreground">{l.description}</p>
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground italic">No description extracted. Open the listing for full JD.</p>
-                    )}
-
-                    {/* Detail grid */}
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-3 text-sm border-t pt-3">
+                    {/* Meta chips */}
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
                       {l.company ? (
-                        <div>
-                          <span className="block text-[10px] uppercase tracking-wide text-muted-foreground">Company</span>
-                          <span className="font-medium">{l.company}</span>
-                        </div>
+                        <span className="inline-flex items-center gap-1 font-medium text-foreground/80">
+                          <Building2 className="h-3 w-3 shrink-0" /> {l.company}
+                        </span>
                       ) : null}
                       {l.location ? (
-                        <div>
-                          <span className="block text-[10px] uppercase tracking-wide text-muted-foreground">Location</span>
-                          <span>{l.location}</span>
-                        </div>
+                        <span className="inline-flex items-center gap-1">
+                          <MapPin className="h-3 w-3 shrink-0" /> {l.location}
+                        </span>
                       ) : null}
                       {l.salary ? (
-                        <div>
-                          <span className="block text-[10px] uppercase tracking-wide text-muted-foreground">Salary</span>
-                          <span className="font-medium text-emerald-600 dark:text-emerald-400">{l.salary}</span>
-                        </div>
+                        <span className="inline-flex items-center gap-1 font-semibold text-emerald-600 dark:text-emerald-400">
+                          <IndianRupee className="h-3 w-3 shrink-0" /> {l.salary}
+                        </span>
                       ) : null}
                       {l.postedAt ? (
-                        <div>
-                          <span className="block text-[10px] uppercase tracking-wide text-muted-foreground">Posted</span>
-                          <span>{new Date(l.postedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
-                        </div>
+                        <span className="inline-flex items-center gap-1">
+                          <CalendarDays className="h-3 w-3 shrink-0" />
+                          {new Date(l.postedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                        </span>
                       ) : null}
-                      <div>
-                        <span className="block text-[10px] uppercase tracking-wide text-muted-foreground">Seen</span>
-                        <span>{new Date(l.seenAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
-                      </div>
                       {src ? (
-                        <div>
-                          <span className="block text-[10px] uppercase tracking-wide text-muted-foreground">Source</span>
-                          <a href={src.url} target="_blank" rel="noreferrer"
-                            className="inline-flex items-center gap-1 text-primary hover:underline">
-                            {src.label} <ExternalLink className="h-3 w-3" />
-                          </a>
-                        </div>
-                      ) : null}
-                      {l.link ? (
-                        <div>
-                          <span className="block text-[10px] uppercase tracking-wide text-muted-foreground">Listing URL</span>
-                          <a href={l.link} target="_blank" rel="noreferrer"
-                            className="inline-flex items-center gap-1 text-primary hover:underline text-xs truncate max-w-[14rem]">
-                            Open JD <ExternalLink className="h-3 w-3 shrink-0" />
-                          </a>
-                        </div>
+                        <span className="inline-flex items-center gap-1 opacity-50">
+                          <Tag className="h-3 w-3 shrink-0" /> {src.label}
+                        </span>
                       ) : null}
                     </div>
+                    {/* Description snippet */}
+                    {l.description ? (
+                      <p className="mt-1.5 text-xs text-muted-foreground line-clamp-2 max-w-2xl">{l.description}</p>
+                    ) : null}
+                  </button>
 
-                    {/* Inline action row at bottom of expanded card */}
-                    <div className="flex flex-wrap items-center gap-2 border-t pt-3">
-                      <Button size="sm" variant="default" disabled={busy || pending} onClick={() => convertToDraft(l.id)}>
-                        <MailPlus className="mr-1.5 h-3.5 w-3.5" /> Create draft outreach
+                  {/* Row actions — right side */}
+                  <div className="ea-row-actions flex shrink-0 items-center gap-1">
+                    <Button size="sm" variant="ghost" title="View full details"
+                      onClick={() => setDetailLead(l)}>
+                      <Eye className="h-3.5 w-3.5 mr-1" /> View
+                    </Button>
+                    <Button size="sm" variant="default" disabled={busy || pending}
+                      title="Create outreach draft" onClick={() => convertToDraft(l.id)}>
+                      <MailPlus className="h-3.5 w-3.5 mr-1" /> Draft
+                    </Button>
+                    {showSaveButton ? (
+                      <Button size="sm" variant="outline" disabled={busy || pending}
+                        title="Save for later" onClick={() => setStatus(l.id, 'saved')}>
+                        <Bookmark className="h-3.5 w-3.5" />
                       </Button>
-                      {showSaveButton ? (
-                        <Button size="sm" variant="outline" disabled={busy || pending} onClick={() => setStatus(l.id, 'saved')}>
-                          <Bookmark className="mr-1.5 h-3.5 w-3.5" /> Save lead
-                        </Button>
-                      ) : null}
-                      <Button size="sm" variant="outline" disabled={busy || pending} onClick={() => setStatus(l.id, 'applied')}>
-                        <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" /> Mark applied
-                      </Button>
-                      <Button size="sm" variant="ghost" disabled={busy || pending} onClick={() => setStatus(l.id, 'ignored')}
-                        className="text-muted-foreground">
-                        <XCircle className="mr-1.5 h-3.5 w-3.5" /> Ignore
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => setExpandedId(null)} className="ml-auto">
-                        <ChevronUp className="mr-1 h-3.5 w-3.5" /> Collapse
-                      </Button>
-                    </div>
+                    ) : null}
+                    <Button size="sm" variant="ghost" disabled={busy || pending}
+                      onClick={() => setStatus(l.id, 'applied')}>Applied</Button>
+                    <Button size="sm" variant="ghost" disabled={busy || pending}
+                      onClick={() => setStatus(l.id, 'ignored')}>Ignore</Button>
+                    {l.link ? (
+                      <a href={l.link} target="_blank" rel="noreferrer"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground ea-transition"
+                        title="Open original listing">
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </a>
+                    ) : null}
                   </div>
-                ) : null}
-              </div>
-            )
-          })}
+                </li>
+              )
+            })}
+          </ul>
         </div>
       )}
+
+      {/* Full-detail dialog — opens when a lead row is clicked */}
+      {detailLead ? (
+        <JobDetailDialog
+          lead={detailLead}
+          src={sourceById.get(detailLead.sourceId)}
+          open={Boolean(detailLead)}
+          onClose={() => setDetailLead(null)}
+          onDraft={convertToDraft}
+          onStatus={setStatus}
+          busy={busy || pending}
+        />
+      ) : null}
     </div>
   )
 }
