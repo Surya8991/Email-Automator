@@ -1,5 +1,5 @@
 'use client'
-import { useMemo, useState, useTransition } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import {
@@ -724,8 +724,10 @@ function LeadsTable({
   const [sourceFilter, setSourceFilter] = useState<number | null>(null)
   const [companyFilter, setCompanyFilter] = useState('')
   const [locationFilter, setLocationFilter] = useState('')
+  const [sort, setSort] = useState<'newest' | 'oldest' | 'company' | 'salary'>('newest')
   const [selected, setSelected] = useState<Set<number>>(new Set())
-  const [expandedId, setExpandedId] = useState<number | null>(null)
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 100
 
   const companies = useMemo(() =>
     [...new Set(leads.map((l) => l.company).filter(Boolean))].sort(), [leads])
@@ -739,15 +741,24 @@ function LeadsTable({
     if (sourceFilter != null) out = out.filter((l) => l.sourceId === sourceFilter)
     if (companyFilter) out = out.filter((l) => l.company === companyFilter)
     if (locationFilter) out = out.filter((l) => l.location === locationFilter)
-    if (!needle) return out
-    return out.filter((l) => (
+    if (needle) out = out.filter((l) => (
       l.title.toLowerCase().includes(needle) ||
       l.company.toLowerCase().includes(needle) ||
       l.location.toLowerCase().includes(needle) ||
       l.salary.toLowerCase().includes(needle) ||
       l.description.toLowerCase().includes(needle)
     ))
-  }, [leads, q, sourceFilter, companyFilter, locationFilter])
+    const sorted = [...out]
+    if (sort === 'oldest') sorted.reverse()
+    else if (sort === 'company') sorted.sort((a, b) => a.company.localeCompare(b.company))
+    else if (sort === 'salary') sorted.sort((a, b) => b.salary.localeCompare(a.salary))
+    return sorted
+  }, [leads, q, sourceFilter, companyFilter, locationFilter, sort])
+
+  useEffect(() => { setPage(1) }, [q, sourceFilter, companyFilter, locationFilter, sort])
+
+  const pageCount = Math.ceil(filtered.length / PAGE_SIZE)
+  const visible = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
   const sourceById = useMemo(() => new Map(sources.map((s) => [s.id, s])), [sources])
   const allSelected = filtered.length > 0 && filtered.every((l) => selected.has(l.id))
 
@@ -810,6 +821,13 @@ function LeadsTable({
             {locations.map((l) => <option key={l} value={l}>{l}</option>)}
           </select>
         ) : null}
+        <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}
+          className="h-9 rounded-md border bg-background px-2 text-xs" aria-label="Sort by">
+          <option value="newest">Newest first</option>
+          <option value="oldest">Oldest first</option>
+          <option value="company">Company A–Z</option>
+          <option value="salary">Salary</option>
+        </select>
         <span className="text-xs text-muted-foreground">{filtered.length} of {leads.length} {leads.length === 1 ? 'lead' : 'leads'}</span>
         <Button variant="outline" size="sm" asChild className="ml-auto">
           <a href={`/api/jobs/export?status=${status}`} download>
@@ -859,7 +877,7 @@ function LeadsTable({
 
           {/* Lead rows */}
           <ul className="divide-y">
-            {filtered.map((l) => {
+            {visible.map((l) => {
               const src = sourceById.get(l.sourceId)
               return (
                 <li key={l.id} className="group flex items-start gap-3 px-4 py-3 hover:bg-muted/20 ea-transition">
@@ -945,7 +963,9 @@ function LeadsTable({
                         title="Open original listing">
                         <ExternalLink className="h-3.5 w-3.5" />
                       </a>
-                    ) : null}
+                    ) : (
+                      <span className="px-1 text-[10px] text-muted-foreground/60 select-none">(no link)</span>
+                    )}
                   </div>
                 </li>
               )
@@ -953,6 +973,17 @@ function LeadsTable({
           </ul>
         </div>
       )}
+
+      {/* Pagination */}
+      {pageCount > 1 ? (
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <span>Page {page} of {pageCount} ({filtered.length} leads)</span>
+          <div className="flex gap-1">
+            <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Prev</Button>
+            <Button size="sm" variant="outline" disabled={page >= pageCount} onClick={() => setPage((p) => p + 1)}>Next</Button>
+          </div>
+        </div>
+      ) : null}
 
       {/* Full-detail dialog — opens when a lead row is clicked */}
       {detailLead ? (

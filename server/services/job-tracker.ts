@@ -30,6 +30,23 @@ const NAUKRI_TICK_PAGES = 1       // ongoing: 1 page × 100 = 100
 // Manual refresh (tickSourceById) always bypasses this.
 const FETCH_INTERVAL_MS = 12 * 60 * 60 * 1_000 // 12 hours
 
+// Validates and resolves a job URL. Returns '' if the URL is the same as
+// the source board/search page (meaning AI hallucinated the source URL as
+// the per-job link), or if the URL is relative and can't be resolved.
+function sanitiseLink(raw: string, sourceUrl: string): string {
+  if (!raw) return ''
+  let href = raw.trim()
+  if (!href.startsWith('http')) {
+    try { href = new URL(href, sourceUrl).href } catch { return '' }
+  }
+  if (!/^https?:\/\//i.test(href)) return ''
+  try {
+    const a = new URL(href), b = new URL(sourceUrl)
+    if (a.origin === b.origin && a.pathname === b.pathname) return ''
+  } catch { return '' }
+  return href.slice(0, 600)
+}
+
 export async function listSources(userId: string): Promise<JobSource[]> {
   return db.select().from(jobSources).where(eq(jobSources.userId, userId)).orderBy(desc(jobSources.id))
 }
@@ -168,7 +185,7 @@ const JOB_EXTRACT_CHARS = 8_000
 // llama-3.2-1b-preview is Groq's smallest live model — separate quota bucket.
 const JOB_EXTRACT_FALLBACK = 'llama-3.2-1b-preview'
 
-async function aiExtractJobs(userId: string, sourceText: string): Promise<ExtractedJob[]> {
+async function aiExtractJobs(userId: string, sourceText: string, sourceUrl = ''): Promise<ExtractedJob[]> {
   const creds = await getAiFor(userId)
   if (creds.source === 'none') throw new Error('No AI key configured (Settings → AI)')
 
@@ -233,10 +250,10 @@ async function aiExtractJobs(userId: string, sourceText: string): Promise<Extrac
             return {
               title: String(j.title).trim().slice(0, 200),
               company: typeof j.company === 'string' ? j.company.trim().slice(0, 120) : '',
-              link: typeof j.link === 'string' ? j.link.trim().slice(0, 600) : '',
+              link: typeof j.link === 'string' ? sanitiseLink(j.link, sourceUrl) : '',
               location: typeof j.location === 'string' ? j.location.trim().slice(0, 120) : '',
               salary: typeof j.salary === 'string' ? j.salary.trim().slice(0, 120) : '',
-              description: typeof j.description === 'string' ? j.description.trim().slice(0, 400) : '',
+              description: typeof j.description === 'string' ? j.description.trim().slice(0, 2000) : '',
               postedAt,
             }
           })
@@ -308,7 +325,7 @@ async function fetchRss(url: string): Promise<ExtractedJob[]> {
       const link  = extractCdata(item, 'link') || extractCdata(item, 'guid')
       const pubDate = extractCdata(item, 'pubDate') || extractCdata(item, 'dc:date')
       const descHtml = extractCdata(item, 'description')
-      const descText = descHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 400)
+      const descText = descHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 2000)
 
       // Indeed encodes company + location inside description HTML as
       // <b>Company Name</b>: Foo ... <b>Location</b>: Bar, City
@@ -328,7 +345,7 @@ async function fetchRss(url: string): Promise<ExtractedJob[]> {
       let postedAt: Date | null = null
       if (pubDate) { const d = new Date(pubDate); if (!isNaN(d.getTime())) postedAt = d }
 
-      return [{ title: title.slice(0, 200), company, link: link.slice(0, 600), location, salary, description: descText, postedAt }]
+      return [{ title: title.slice(0, 200), company, link: sanitiseLink(link, url), location, salary, description: descText, postedAt }]
     })
   } catch { return [] } finally { clearTimeout(timer) }
 }
@@ -380,10 +397,10 @@ async function fetchRemotive(url: string): Promise<ExtractedJob[]> {
     return (data.jobs ?? []).slice(0, 100).map((j) => ({
       title: String(j.title ?? '').trim().slice(0, 200),
       company: String(j.company_name ?? '').trim().slice(0, 120),
-      link: String(j.url ?? '').trim().slice(0, 600),
+      link: sanitiseLink(String(j.url ?? ''), url),
       location: String(j.candidate_required_location ?? 'Remote').trim().slice(0, 120),
       salary: String(j.salary ?? '').trim().slice(0, 120),
-      description: String(j.description ?? '').replace(/<[^>]+>/g, '').trim().slice(0, 400),
+      description: String(j.description ?? '').replace(/<[^>]+>/g, '').trim().slice(0, 2000),
       postedAt: j.publication_date ? new Date(j.publication_date) : null,
     }))
   } catch { return [] } finally { clearTimeout(timer) }
@@ -417,50 +434,63 @@ async function fetchFounditApi(url: string): Promise<ExtractedJob[]> {
   const parsed = parseFounditSlug(url)
   if (!parsed) return []
   const { keyword, location } = parsed
-  const apiUrl = new URL('https://www.foundit.in/middleware/jobsearch/v1/find')
-  apiUrl.searchParams.set('sort', '1')
-  apiUrl.searchParams.set('rows', '30')
-  apiUrl.searchParams.set('start', '0')
-  apiUrl.searchParams.set('query', keyword)
-  if (location) apiUrl.searchParams.set('location', location)
+  const results: ExtractedJob[] = []
+  const FOUNDIT_PAGE_SIZE = 30
+  const FOUNDIT_MAX_PAGES = 5
 
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 10_000)
-  try {
-    const res = await fetch(apiUrl.toString(), {
-      signal: controller.signal,
-      headers: {
-        'User-Agent': RSS_UA,
-        Accept: 'application/json',
-        Referer: 'https://www.foundit.in/',
-        Origin: 'https://www.foundit.in',
-      },
-    })
-    if (!res.ok) return []
-    const data = (await res.json()) as {
-      jobSearchResponse?: {
-        data?: Array<{
-          title?: string; companyName?: string; jobId?: string | number
-          locations?: string[]; minSal?: number; maxSal?: number
-          jobDescription?: string; modifiedDate?: string
-        }>
+  for (let page = 0; page < FOUNDIT_MAX_PAGES; page++) {
+    const apiUrl = new URL('https://www.foundit.in/middleware/jobsearch/v1/find')
+    apiUrl.searchParams.set('sort', '1')
+    apiUrl.searchParams.set('rows', String(FOUNDIT_PAGE_SIZE))
+    apiUrl.searchParams.set('start', String(page * FOUNDIT_PAGE_SIZE))
+    apiUrl.searchParams.set('query', keyword)
+    if (location) apiUrl.searchParams.set('location', location)
+
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 10_000)
+    try {
+      const res = await fetch(apiUrl.toString(), {
+        signal: controller.signal,
+        headers: {
+          'User-Agent': RSS_UA,
+          Accept: 'application/json',
+          Referer: 'https://www.foundit.in/',
+          Origin: 'https://www.foundit.in',
+        },
+      })
+      if (!res.ok) break
+      const data = (await res.json()) as {
+        jobSearchResponse?: {
+          data?: Array<{
+            title?: string; companyName?: string; jobId?: string | number
+            locations?: string[]; minSal?: number; maxSal?: number
+            jobDescription?: string; modifiedDate?: string
+          }>
+        }
       }
-    }
-    const jobs = data.jobSearchResponse?.data ?? []
-    return jobs.slice(0, 100).map((j) => {
-      const salary = j.minSal && j.maxSal ? `${j.minSal}–${j.maxSal} LPA` : ''
-      const link = j.jobId ? `https://www.foundit.in/job/details/${j.jobId}` : ''
-      return {
-        title: String(j.title ?? '').trim().slice(0, 200),
-        company: String(j.companyName ?? '').trim().slice(0, 120),
-        link: link.slice(0, 600),
-        location: (j.locations ?? []).join(', ').slice(0, 120),
-        salary,
-        description: String(j.jobDescription ?? '').replace(/<[^>]+>/g, '').trim().slice(0, 400),
-        postedAt: j.modifiedDate ? new Date(j.modifiedDate) : null,
+      const jobs = data.jobSearchResponse?.data ?? []
+      if (jobs.length === 0) break
+      for (const j of jobs) {
+        const salary = j.minSal && j.maxSal
+          ? `${j.minSal}–${j.maxSal} LPA`
+          : j.minSal ? `From ${j.minSal} LPA`
+          : j.maxSal ? `Up to ${j.maxSal} LPA`
+          : ''
+        const rawLink = j.jobId ? `https://www.foundit.in/job/details/${j.jobId}` : ''
+        results.push({
+          title: String(j.title ?? '').trim().slice(0, 200),
+          company: String(j.companyName ?? '').trim().slice(0, 120),
+          link: sanitiseLink(rawLink, url),
+          location: (j.locations ?? []).join(', ').slice(0, 120),
+          salary,
+          description: String(j.jobDescription ?? '').replace(/<[^>]+>/g, '').trim().slice(0, 2000),
+          postedAt: j.modifiedDate ? new Date(j.modifiedDate) : null,
+        })
       }
-    })
-  } catch { return [] } finally { clearTimeout(timer) }
+      if (jobs.length < FOUNDIT_PAGE_SIZE) break
+    } catch { break } finally { clearTimeout(timer) }
+  }
+  return results
 }
 
 async function fetchRemoteOk(url: string): Promise<ExtractedJob[]> {
@@ -497,15 +527,15 @@ async function fetchRemoteOk(url: string): Promise<ExtractedJob[]> {
       .map((j) => {
         let postedAt: Date | null = null
         if (j.date) { const d = new Date(j.date); if (!isNaN(d.getTime())) postedAt = d }
-        const salary = j.salary_min && j.salary_max
-          ? `$${Math.round(j.salary_min / 1000)}k–$${Math.round(j.salary_max / 1000)}k`
+        const salary = j.salary_min || j.salary_max
+          ? `$${Math.round((j.salary_min || j.salary_max || 0) / 1000)}k${j.salary_max && j.salary_min ? `–$${Math.round(j.salary_max / 1000)}k` : '+'}`
           : ''
         return {
           title: (j.position ?? '').trim().slice(0, 200),
           company: (j.company ?? '').trim().slice(0, 120),
-          link: (j.url ?? '').trim().slice(0, 600),
+          link: sanitiseLink(j.url ?? '', url),
           location: (j.location ?? '').trim().slice(0, 120),
-          description: (j.description ?? '').replace(/<[^>]+>/g, '').trim().slice(0, 400),
+          description: (j.description ?? '').replace(/<[^>]+>/g, '').trim().slice(0, 2000),
           salary,
           postedAt,
         }
@@ -581,10 +611,10 @@ async function fetchNaukriApi(url: string, pages: number): Promise<ExtractedJob[
         results.push({
           title: (j.title ?? '').trim().slice(0, 200),
           company: (j.companyName ?? '').trim().slice(0, 120),
-          link: (j.jdURL ?? '').trim().slice(0, 600),
+          link: sanitiseLink(j.jdURL ?? '', url),
           location: ph('location').slice(0, 120),
           salary: ph('salary').slice(0, 120),
-          description: (j.jobDescription ?? '').replace(/<[^>]+>/g, '').trim().slice(0, 400),
+          description: (j.jobDescription ?? '').replace(/<[^>]+>/g, '').trim().slice(0, 2000),
           postedAt,
         })
       }
@@ -600,7 +630,7 @@ async function fetchNaukriApi(url: string, pages: number): Promise<ExtractedJob[
 // for Google Jobs indexing. Parsing this is zero-cost, zero-AI, and
 // highly structured — title/company/location/salary are explicit fields.
 
-function extractJsonLd(html: string): ExtractedJob[] {
+function extractJsonLd(html: string, sourceUrl = ''): ExtractedJob[] {
   const results: ExtractedJob[] = []
   const scriptRe = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi
   let m: RegExpExecArray | null
@@ -626,7 +656,7 @@ function extractJsonLd(html: string): ExtractedJob[] {
         if (typeof obj.hiringOrganization === 'object' && obj.hiringOrganization !== null) {
           company = String((obj.hiringOrganization as Record<string, unknown>).name ?? '').trim()
         }
-        const link = String(obj.url ?? obj.sameAs ?? '').trim()
+        const link = sanitiseLink(String(obj.url ?? obj.sameAs ?? ''), sourceUrl)
         let location = ''
         if (typeof obj.jobLocation === 'object' && obj.jobLocation !== null) {
           const loc = obj.jobLocation as Record<string, unknown>
@@ -650,7 +680,7 @@ function extractJsonLd(html: string): ExtractedJob[] {
               : String(v.value ?? '').trim()
           }
         }
-        const description = String(obj.description ?? '').replace(/<[^>]+>/g, '').trim().slice(0, 400)
+        const description = String(obj.description ?? '').replace(/<[^>]+>/g, '').trim().slice(0, 2000)
         const postedStr = String(obj.datePosted ?? '').trim()
         let postedAt: Date | null = null
         if (postedStr) { const d = new Date(postedStr); if (!isNaN(d.getTime())) postedAt = d }
@@ -718,7 +748,7 @@ async function fetchAtsApi(ats: { type: AtsType; company: string }): Promise<Ext
       link: String(j.hostedUrl ?? '').trim().slice(0, 600),
       location: String(j.categories?.location ?? '').trim().slice(0, 120),
       salary: '',
-      description: String(j.descriptionPlain ?? '').trim().slice(0, 400),
+      description: String(j.descriptionPlain ?? '').trim().slice(0, 2000),
       postedAt: j.createdAt ? new Date(j.createdAt) : null,
     }))
   }
@@ -740,7 +770,7 @@ async function fetchAtsApi(ats: { type: AtsType; company: string }): Promise<Ext
       link: String(j.absolute_url ?? '').trim().slice(0, 600),
       location: String(j.offices?.[0]?.name ?? '').trim().slice(0, 120),
       salary: '',
-      description: String(j.content ?? '').replace(/<[^>]+>/g, '').trim().slice(0, 400),
+      description: String(j.content ?? '').replace(/<[^>]+>/g, '').trim().slice(0, 2000),
       postedAt: j.updated_at ? new Date(j.updated_at) : null,
     }))
   }
@@ -756,16 +786,17 @@ async function fetchAtsApi(ats: { type: AtsType; company: string }): Promise<Ext
         jobPostings?: Array<{
           title?: string; locationName?: string; externalLink?: string
           descriptionHtml?: string; publishedDate?: string; teamName?: string
+          compensationTierSummary?: string
         }>
       }
     }
     return (data.jobBoard?.jobPostings ?? []).slice(0, 100).map((j) => ({
       title: String(j.title ?? '').trim().slice(0, 200),
       company,
-      link: String(j.externalLink ?? '').trim().slice(0, 600),
+      link: sanitiseLink(String(j.externalLink ?? ''), ''),
       location: String(j.locationName ?? '').trim().slice(0, 120),
-      salary: '',
-      description: String(j.descriptionHtml ?? '').replace(/<[^>]+>/g, '').trim().slice(0, 400),
+      salary: String(j.compensationTierSummary ?? '').trim().slice(0, 120),
+      description: String(j.descriptionHtml ?? '').replace(/<[^>]+>/g, '').trim().slice(0, 2000),
       postedAt: j.publishedDate ? new Date(j.publishedDate) : null,
     }))
   }
@@ -789,7 +820,7 @@ async function fetchAtsApi(ats: { type: AtsType; company: string }): Promise<Ext
       link: j.ref ? `https://careers.smartrecruiters.com/${company}/${j.ref}` : '',
       location: [j.location?.city, j.location?.country].filter(Boolean).join(', ').slice(0, 120),
       salary: '',
-      description: String(j.department?.label ?? '').trim().slice(0, 400),
+      description: String(j.department?.label ?? '').trim().slice(0, 2000),
       postedAt: j.releasedDate ? new Date(j.releasedDate) : null,
     }))
   }
@@ -811,7 +842,7 @@ async function fetchAtsApi(ats: { type: AtsType; company: string }): Promise<Ext
       link: String(j.url ?? '').trim().slice(0, 600),
       location: String(j.location?.name ?? j.location?.city ?? '').trim().slice(0, 120),
       salary: '',
-      description: String(j.department?.name ?? '').trim().slice(0, 400),
+      description: String(j.department?.name ?? '').trim().slice(0, 2000),
       postedAt: j.published_date ? new Date(j.published_date) : null,
     }))
   }
@@ -836,7 +867,7 @@ async function fetchAtsApi(ats: { type: AtsType; company: string }): Promise<Ext
       link: String(j.url ?? `https://apply.workable.com/${company}/j/${j.id}`).trim().slice(0, 600),
       location: String(j.location?.location_str ?? '').trim().slice(0, 120),
       salary: '',
-      description: String(j.employment_type ?? j.department ?? '').trim().slice(0, 400),
+      description: String(j.employment_type ?? j.department ?? '').trim().slice(0, 2000),
       postedAt: j.published_on ? new Date(j.published_on) : null,
     }))
   }
@@ -859,7 +890,7 @@ async function fetchAtsApi(ats: { type: AtsType; company: string }): Promise<Ext
       link: String(j.job_posting_url ?? '').trim().slice(0, 600),
       location: j.remote ? 'Remote' : String(j.location?.city ?? '').trim().slice(0, 120),
       salary: '',
-      description: String(j.department?.name ?? '').trim().slice(0, 400),
+      description: String(j.department?.name ?? '').trim().slice(0, 2000),
       postedAt: j.updated_at ? new Date(j.updated_at) : null,
     }))
   }
@@ -958,10 +989,10 @@ export async function tickSource(source: JobSource): Promise<{ added: number; st
         }
         // 2. JSON-LD schema.org/JobPosting — covers LinkedIn, Glassdoor,
         //    company career pages that embed Google Jobs markup.
-        jobs = extractJsonLd(fetched.rawHtml)
+        jobs = extractJsonLd(fetched.rawHtml, source.url)
         // 3. AI — last resort when no structured data found.
         if (jobs.length === 0) {
-          jobs = await aiExtractJobs(source.userId, fetched.text)
+          jobs = await aiExtractJobs(source.userId, fetched.text, source.url)
         }
       }
     }
