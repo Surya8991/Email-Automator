@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dialog'
 import {
   addJobSourceAction, deleteJobSourceAction, deleteAllJobSourcesAction,
+  bulkDeleteJobSourcesAction, bulkToggleSourceActiveAction,
   refreshJobSourceAction, setJobLeadStatusAction,
   leadToDraftAction, bulkSetJobLeadStatusAction, toggleJobSourceActiveAction,
   editJobSourceAction, refreshAllForUserAction, validateJobSourceAction,
@@ -169,13 +170,12 @@ function AddSourceDialog() {
   const [label, setLabel] = useState('')
   const [url, setUrl] = useState('')
   const [keywords, setKeywords] = useState('')
-  const [notes, setNotes] = useState('')
   const [pending, start] = useTransition()
   const [validating, setValidating] = useState(false)
   const [validation, setValidation] = useState<ValidationResult | null>(null)
   const [showExamples, setShowExamples] = useState(true)
 
-  function reset() { setLabel(''); setUrl(''); setKeywords(''); setNotes(''); setValidation(null); setShowExamples(true) }
+  function reset() { setLabel(''); setUrl(''); setKeywords(''); setValidation(null); setShowExamples(true) }
 
   function applyExample(ex: typeof SOURCE_EXAMPLES[number]) {
     setUrl(ex.url); setKeywords(ex.keywords); setLabel(ex.label); setValidation(null); setShowExamples(false)
@@ -300,10 +300,6 @@ function AddSourceDialog() {
             <p className="text-[11px] text-muted-foreground">Only listings whose title or company contain at least one keyword are kept. Leave empty to capture everything.</p>
           </div>
 
-          <div className="grid gap-1.5">
-            <Label htmlFor="js-notes">Notes <span className="text-muted-foreground text-[11px]">(optional — for your own reference)</span></Label>
-            <Input id="js-notes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. Best for mid-level IN roles, check weekly" />
-          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
@@ -326,6 +322,7 @@ function SourcesTable({
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
   const [confirmDeleteAll, setConfirmDeleteAll] = useState(false)
   const [selected, setSelected] = useState<Set<number>>(new Set())
+  const [refreshingId, setRefreshingId] = useState<number | null>(null)
 
   const allSelected = sources.length > 0 && sources.every((s) => selected.has(s.id))
 
@@ -349,9 +346,10 @@ function SourcesTable({
   function deleteSelected() {
     const ids = Array.from(selected)
     start(async () => {
-      for (const id of ids) await deleteJobSourceAction(id)
+      const r = await bulkDeleteJobSourcesAction(ids)
       setSelected(new Set())
-      toast.success(`${ids.length} source${ids.length === 1 ? '' : 's'} deleted`)
+      if ('error' in r && r.error) { toast.error(r.error); return }
+      toast.success(`${'deleted' in r ? r.deleted : ids.length} source${ids.length === 1 ? '' : 's'} deleted`)
       router.refresh()
     })
   }
@@ -383,13 +381,17 @@ function SourcesTable({
           <span className="font-medium">{selected.size} selected</span>
           <Button size="sm" variant="outline" disabled={pending}
             onClick={() => start(async () => {
-              for (const id of selected) await toggleJobSourceActiveAction(id, true)
-              setSelected(new Set()); toast.success('Resumed'); router.refresh()
+              const r = await bulkToggleSourceActiveAction(Array.from(selected), true)
+              setSelected(new Set())
+              if ('error' in r && r.error) { toast.error(r.error); return }
+              toast.success('Resumed'); router.refresh()
             })}>Resume selected</Button>
           <Button size="sm" variant="outline" disabled={pending}
             onClick={() => start(async () => {
-              for (const id of selected) await toggleJobSourceActiveAction(id, false)
-              setSelected(new Set()); toast.success('Paused'); router.refresh()
+              const r = await bulkToggleSourceActiveAction(Array.from(selected), false)
+              setSelected(new Set())
+              if ('error' in r && r.error) { toast.error(r.error); return }
+              toast.success('Paused'); router.refresh()
             })}>Pause selected</Button>
           <Button size="sm" variant="ghost" disabled={pending}
             className="text-destructive hover:text-destructive"
@@ -452,17 +454,26 @@ function SourcesTable({
                 <td className="text-xs text-muted-foreground">{s.keywords || <em>(any)</em>}</td>
                 <td className="text-right text-xs font-medium tabular-nums">{s.leadCount}</td>
                 <td className="text-xs">
-                  {s.lastStatus ? (
-                    <span className={`inline-flex items-center gap-1 ${s.lastStatus.startsWith('ok') ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
-                      {s.lastStatus.startsWith('ok') ? <CheckCircle2 className="h-3 w-3 shrink-0" /> : <XCircle className="h-3 w-3 shrink-0" />}
-                      <span className="truncate max-w-[12rem]">{s.lastStatus}</span>
-                    </span>
-                  ) : <span className="italic text-muted-foreground">never run</span>}
+                  {s.lastStatus ? (() => {
+                    const isOk = s.lastStatus.startsWith('ok')
+                    const isHardError = s.lastStatus === 'error'
+                    const colorCls = isOk
+                      ? 'text-emerald-600 dark:text-emerald-400'
+                      : isHardError
+                        ? 'text-red-600 dark:text-red-400'
+                        : 'text-amber-600 dark:text-amber-400'
+                    return (
+                      <span className={`inline-flex items-center gap-1 ${colorCls}`}>
+                        {isOk ? <CheckCircle2 className="h-3 w-3 shrink-0" /> : <XCircle className="h-3 w-3 shrink-0" />}
+                        <span className="truncate max-w-[12rem]">{s.lastStatus}</span>
+                      </span>
+                    )
+                  })() : <span className="italic text-muted-foreground">never run</span>}
                   <div className="mt-0.5 flex items-center gap-1 text-[10px] text-muted-foreground">
                     <Clock className="h-2.5 w-2.5 shrink-0" /> {timeAgo(s.lastFetchedAt)}
                   </div>
                   {s.lastError ? (
-                    <div className="mt-0.5 truncate text-[11px] text-amber-600 dark:text-amber-400 max-w-[18rem]" title={s.lastError}>{s.lastError}</div>
+                    <div className="mt-0.5 truncate text-[11px] text-red-600 dark:text-red-400 max-w-[18rem]" title={s.lastError}>{s.lastError}</div>
                   ) : null}
                 </td>
                 <td>
@@ -485,15 +496,19 @@ function SourcesTable({
                       <Button size="sm" variant="ghost" disabled={pending}
                         onClick={() => setEditing(s)} title="Edit label / URL / keywords"
                       ><Pencil className="h-3.5 w-3.5" /></Button>
-                      <Button size="sm" variant="ghost" disabled={pending}
-                        onClick={() => start(async () => {
-                          const r = await refreshJobSourceAction(s.id)
-                          if ('error' in r && r.error) toast.error(r.error)
-                          else toast.success('added' in r && r.added > 0 ? `+${r.added} new leads` : 'No new leads')
-                          router.refresh()
-                        })}
+                      <Button size="sm" variant="ghost" disabled={pending || refreshingId === s.id}
+                        onClick={() => {
+                          setRefreshingId(s.id)
+                          start(async () => {
+                            const r = await refreshJobSourceAction(s.id)
+                            setRefreshingId(null)
+                            if ('error' in r && r.error) toast.error(r.error)
+                            else toast.success('added' in r && r.added > 0 ? `+${r.added} new leads` : 'No new leads')
+                            router.refresh()
+                          })
+                        }}
                         title="Refresh now"
-                      ><RefreshCw className={`h-3.5 w-3.5 ${pending ? 'animate-spin' : ''}`} /></Button>
+                      ><RefreshCw className={`h-3.5 w-3.5 ${refreshingId === s.id ? 'animate-spin' : ''}`} /></Button>
                       <Button size="sm" variant="ghost" disabled={pending}
                         onClick={() => setConfirmDeleteId(s.id)} title="Delete source"
                       ><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>
@@ -693,7 +708,9 @@ function LeadsTable({
         <div className="rounded-md border bg-card p-10 text-center text-sm text-muted-foreground">
           {leads.length === 0
             ? 'No leads here yet. Refresh a source to pull listings.'
-            : `No leads match "${q}".`}
+            : (q || sourceFilter != null || companyFilter || locationFilter)
+              ? 'No leads match the current filters.'
+              : 'No leads found.'}
         </div>
       ) : (
         <div className="overflow-x-auto rounded-md border">

@@ -123,6 +123,20 @@ export async function deleteAllSources(userId: string): Promise<{ deleted: numbe
   return { deleted: rows.length }
 }
 
+export async function bulkDeleteSources(userId: string, ids: number[]): Promise<{ deleted: number }> {
+  if (ids.length === 0) return { deleted: 0 }
+  const rows = await db.delete(jobSources)
+    .where(and(inArray(jobSources.id, ids), eq(jobSources.userId, userId)))
+    .returning({ id: jobSources.id })
+  return { deleted: rows.length }
+}
+
+export async function bulkSetSourceActive(userId: string, ids: number[], active: boolean): Promise<void> {
+  if (ids.length === 0) return
+  await db.update(jobSources).set({ active })
+    .where(and(inArray(jobSources.id, ids), eq(jobSources.userId, userId)))
+}
+
 export async function setLeadStatus(
   userId: string, id: number, status: 'new' | 'saved' | 'ignored' | 'applied',
 ): Promise<void> {

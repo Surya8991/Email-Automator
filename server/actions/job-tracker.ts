@@ -61,6 +61,26 @@ export async function deleteAllJobSourcesAction() {
   return { ok: true as const, deleted: r.deleted }
 }
 
+export async function bulkDeleteJobSourcesAction(ids: number[]) {
+  const u = await requireUser()
+  if (!ids || ids.length === 0) return { error: 'No sources selected' }
+  if (ids.length > 100) return { error: 'Pick at most 100 sources at a time' }
+  if (!rateLimit(`source-bulk-delete:${u.id}`, 5, 60_000)) return { error: 'Slow down' }
+  const r = await svc.bulkDeleteSources(u.id, ids)
+  revalidatePath('/jobs')
+  return { ok: true as const, deleted: r.deleted }
+}
+
+export async function bulkToggleSourceActiveAction(ids: number[], active: boolean) {
+  const u = await requireUser()
+  if (!ids || ids.length === 0) return { error: 'No sources selected' }
+  if (ids.length > 100) return { error: 'Pick at most 100 at a time' }
+  if (!rateLimit(`source-bulk-toggle:${u.id}`, 10, 60_000)) return { error: 'Slow down' }
+  await svc.bulkSetSourceActive(u.id, ids, active)
+  revalidatePath('/jobs')
+  return { ok: true as const }
+}
+
 export async function refreshJobSourceAction(id: number) {
   const u = await requireUser()
   // Manual refresh is heavier than cron — rate-limit 6/min/user.
