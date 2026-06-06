@@ -24,6 +24,26 @@ const RSS_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KH
 function norm(s: string) { return s.toLowerCase().replace(/\s+/g, ' ').trim() }
 function fingerprint(title: string, company: string) { return `${norm(title)}|${norm(company)}` }
 
+const TRACKING_PARAMS = /^(utm_|fbclid$|gclid$|mc_eid$|mc_cid$|src$|ref$|source$|lever-source$|gh_src$|origin$|trk$)/i
+function sanitiseLink(raw: string, sourceUrl: string): string {
+  if (!raw) return ''
+  let href = raw.trim()
+  if (!href.startsWith('http')) {
+    try { href = new URL(href, sourceUrl).href } catch { return '' }
+  }
+  if (!/^https?:\/\//i.test(href)) return ''
+  try {
+    const a = new URL(href)
+    const b = new URL(sourceUrl)
+    if (a.origin === b.origin && a.pathname === b.pathname) return ''
+    for (const k of Array.from(a.searchParams.keys())) {
+      if (TRACKING_PARAMS.test(k)) a.searchParams.delete(k)
+    }
+    href = a.toString()
+  } catch { return '' }
+  return href.slice(0, 600)
+}
+
 function extractCdata(block: string, tag: string): string {
   const re = new RegExp(`<${tag}[^>]*>(?:<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>|([^<]*))<\\/${tag}>`, 'i')
   const m = block.match(re)
@@ -317,6 +337,7 @@ async function pullSource(src: Source): Promise<{ added: number; status: string 
         if (!kws.some(kw => hay.includes(kw))) continue
       }
       const fp = fingerprint(j.title, j.company ?? '')
+      const cleanLink = sanitiseLink(j.link ?? '', url)
       try {
         // seen_at is NOT NULL with no SQL DEFAULT (only Drizzle $defaultFn).
         // Must supply it in raw SQL or the insert is silently rejected.
@@ -327,7 +348,7 @@ async function pullSource(src: Source): Promise<{ added: number; status: string 
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?)`,
           args: [
             src.userId, src.id, fp,
-            j.title, j.company ?? '', j.link ?? '', j.location ?? '',
+            j.title, j.company ?? '', cleanLink, j.location ?? '',
             j.salary ?? '', j.description ?? '',
             j.postedAt ? j.postedAt.getTime() : null,
             nowMs,

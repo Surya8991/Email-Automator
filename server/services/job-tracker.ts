@@ -10,6 +10,7 @@ import { fetchNaukriApi } from './job-adapters/naukri'
 import { atsSubtype } from './job-adapters/ats'
 import type { RawJob } from './job-adapters/types'
 import { normalizeSalary, normalizeLocation, crossKey, isAggregator } from './normalize'
+import { sanitiseLink } from './job-adapters/utils'
 
 // ── Job tracker service ─────────────────────────────────────────────
 // Per-source fetchers live in ./job-adapters/*.ts; this file holds the
@@ -201,6 +202,10 @@ export async function tickSource(source: JobSource): Promise<{ added: number; st
     for (const j of jobs.slice(0, batchCap)) {
       if (!skipKwFilter && !keywordsMatch(j.title, j.company ?? '', source.keywords)) continue
       const fp = fingerprintOf(j.title, j.company ?? '')
+      // Sanitise the link once — strips tracking params, rejects same-as-source
+      // and non-http URLs, resolves relative URLs against the source URL.
+      // Adapters that already call sanitiseLink() are safely idempotent here.
+      const cleanLink = sanitiseLink(j.link ?? '', source.url)
       // Normalize once per row so we can populate the canonical columns +
       // run the cross-board dedup pass before the per-source insert.
       const sal = normalizeSalary(j.salary ?? '')
@@ -225,7 +230,7 @@ export async function tickSource(source: JobSource): Promise<{ added: number; st
             // (better) source. Fill empties; never overwrite a richer value.
             await db.update(jobLeads).set({
               sourceId: source.id,
-              link:     sql`CASE WHEN link = '' THEN ${j.link ?? ''} ELSE link END`,
+              link:     sql`CASE WHEN link = '' THEN ${cleanLink} ELSE link END`,
               salary:   sql`CASE WHEN salary = '' THEN ${j.salary ?? ''} ELSE salary END`,
               location: sql`CASE WHEN location = '' THEN ${j.location ?? ''} ELSE location END`,
               description: sql`CASE WHEN length(description) < length(${j.description ?? ''}) THEN ${j.description ?? ''} ELSE description END`,
@@ -247,7 +252,7 @@ export async function tickSource(source: JobSource): Promise<{ added: number; st
           fingerprint: fp,
           title: j.title,
           company: j.company ?? '',
-          link: j.link ?? '',
+          link: cleanLink,
           location: j.location ?? '',
           salary: j.salary ?? '',
           description: j.description ?? '',
@@ -261,12 +266,11 @@ export async function tickSource(source: JobSource): Promise<{ added: number; st
       } catch {
         // Unique-index violation = already seen on THIS source. Enrich
         // empty/shorter fields when the re-fetch has better data.
-        const newLink = j.link ?? ''
         const newSalary = j.salary ?? ''
         const newLoc = j.location ?? ''
         const newDesc = j.description ?? ''
         await db.update(jobLeads).set({
-          link:     sql`CASE WHEN link = '' THEN ${newLink} ELSE link END`,
+          link:     sql`CASE WHEN link = '' THEN ${cleanLink} ELSE link END`,
           salary:   sql`CASE WHEN salary = '' THEN ${newSalary} ELSE salary END`,
           location: sql`CASE WHEN location = '' THEN ${newLoc} ELSE location END`,
           description: sql`CASE WHEN length(description) < length(${newDesc}) THEN ${newDesc} ELSE description END`,
