@@ -246,7 +246,7 @@ export const JOB_BOARD_PRESETS: JobBoardPreset[] = [
   {
     id: 'hirist',
     name: 'Hirist',
-    description: 'Tech-only India board. Strong for engineering + product + design.',
+    description: 'Tech-only India board. Note: site has been intermittently down — check results before relying on it.',
     template: 'https://www.hirist.tech/s?q={role}&l={location}',
     needs: { role: true, location: true },
     suggestedKeywords: '{role}',
@@ -290,8 +290,8 @@ export const JOB_BOARD_PRESETS: JobBoardPreset[] = [
   {
     id: 'indeed-in',
     name: 'Indeed India',
-    description: 'Indian variant of Indeed. Uses public RSS feed — broad volume, no scraping needed.',
-    template: 'https://in.indeed.com/rss?q={role}&l={location}',
+    description: 'Indian Indeed search. AI-extracted from HTML — the RSS endpoint is no longer available.',
+    template: 'https://in.indeed.com/jobs?q={role}&l={location}',
     needs: { role: true, location: true },
     suggestedKeywords: '{role}',
     icon: '🔵',
