@@ -1,5 +1,9 @@
 import { getAiFor } from './credentials'
 import { getSetting } from './settings'
+import { getRssUA } from './job-adapters/types'
+
+// Thin wrapper so callers in this file use a descriptive name.
+const getRssUAForFetch = getRssUA
 
 // ── AI generation from arbitrary context (JD, post, URL, free text) ──
 //
@@ -170,7 +174,7 @@ export async function fetchForAi(rawUrl: string): Promise<FetchResult> {
       signal: controller.signal,
       redirect: 'follow',
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+        'User-Agent': getRssUAForFetch(),
         Accept: 'text/html,application/xhtml+xml,application/json,text/plain;q=0.9,*/*;q=0.5',
         'Accept-Language': 'en-US,en;q=0.9',
       },

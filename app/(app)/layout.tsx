@@ -17,6 +17,7 @@ import { verifyCookieValue } from '@/lib/cookies'
 import { OnboardingModal, ONBOARDING_CURRENT_VERSION } from '@/components/onboarding-modal'
 import { currentBroadcast } from '@/server/services/admin-analytics'
 import { ImpersonationBanner } from '@/components/impersonation-banner'
+import { BackToTop } from '@/components/back-to-top'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await auth()
@@ -82,6 +83,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       </div>
       {showOnboarding ? <OnboardingModal initialOpen={true} /> : null}
       <MobileBottomNav />
+      <BackToTop />
       <InstallPrompt />
       <AccentProvider accent={userAccent} />
     </TimezoneProvider>

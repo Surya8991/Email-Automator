@@ -78,7 +78,7 @@ export function JobsClient({
   async function runFetchNew() {
     const { sources: srcs } = await getActiveSourcesAction()
     if (!srcs.length) { toast.info('No active sources'); return }
-    let added = 0, failed = 0
+    let added = 0, failed = 0, skipped = 0
     cancelledRef.current = false
     setProgress({ label: 'Fetch new', phase: 'Starting…', total: srcs.length, done: 0, stat: '+0 new' })
     try {
@@ -87,10 +87,11 @@ export function JobsClient({
         setProgress((p) => p && { ...p, phase: `Fetching "${s.label}"…` })
         const r = await tickSingleSourceAction(s.id, false)
         added += r.added ?? 0
+        skipped += ('skipped' in r && typeof r.skipped === 'number' ? r.skipped : 0)
         if (r.status === 'error' || r.status === 'rate-limited') failed++
-        setProgress((p) => p && { ...p, done: p.done + 1, stat: `+${added} new${failed ? ` · ${failed} failed` : ''}` })
+        setProgress((p) => p && { ...p, done: p.done + 1, stat: `+${added} new${skipped ? ` · ${skipped} stale` : ''}${failed ? ` · ${failed} failed` : ''}` })
       }
-      const msg = `+${added} new lead${added === 1 ? '' : 's'} from ${srcs.length} source${srcs.length === 1 ? '' : 's'}`
+      const msg = `+${added} new lead${added === 1 ? '' : 's'} from ${srcs.length} source${srcs.length === 1 ? '' : 's'}${skipped ? ` · ${skipped} stale skipped` : ''}`
       if (cancelledRef.current) toast.info(`Cancelled — ${msg} so far`)
       else if (failed) toast.warning(`${msg} · ${failed} failed`)
       else toast.success(msg)
@@ -103,7 +104,7 @@ export function JobsClient({
   async function runFullRefresh() {
     const { sources: srcs } = await getActiveSourcesAction()
     if (!srcs.length) { toast.info('No active sources'); return }
-    let added = 0, failed = 0
+    let added = 0, failed = 0, skipped = 0
     cancelledRef.current = false
     setProgress({ label: 'Full refresh', phase: 'Starting…', total: srcs.length, done: 0, stat: '+0 new' })
     try {
@@ -112,10 +113,11 @@ export function JobsClient({
         setProgress((p) => p && { ...p, phase: `Refreshing "${s.label}"…` })
         const r = await tickSingleSourceAction(s.id, true)
         added += r.added ?? 0
+        skipped += ('skipped' in r && typeof r.skipped === 'number' ? r.skipped : 0)
         if (r.status === 'error' || r.status === 'rate-limited') failed++
-        setProgress((p) => p && { ...p, done: p.done + 1, stat: `+${added} new${failed ? ` · ${failed} failed` : ' · enriching…'}` })
+        setProgress((p) => p && { ...p, done: p.done + 1, stat: `+${added} new${skipped ? ` · ${skipped} stale` : ''}${failed ? ` · ${failed} failed` : ' · enriching…'}` })
       }
-      const msg = `Full refresh done · ${srcs.length} sources · +${added} new leads`
+      const msg = `Full refresh done · ${srcs.length} sources · +${added} new leads${skipped ? ` · ${skipped} stale skipped` : ''}`
       if (cancelledRef.current) toast.info(`Cancelled — ${msg} so far`)
       else if (failed) toast.warning(`${msg} · ${failed} failed`)
       else toast.success(`${msg} · existing leads enriched`)
@@ -1230,9 +1232,10 @@ function LeadsTable({
                       setPruneCount(r.count)
                       setPruneAge(days)
                     }}>
-                    &gt; {label} ({leads.filter(l =>
-                      new Date(l.seenAt).getTime() < Date.now() - days * 24 * 60 * 60 * 1_000
-                    ).length} leads)
+                    &gt; {label} ({leads.filter(l => {
+                      const ts = l.postedAt ? new Date(l.postedAt).getTime() : new Date(l.seenAt).getTime()
+                      return ts < Date.now() - days * 24 * 60 * 60 * 1_000
+                    }).length} leads)
                   </button>
                 ))}
               </div>
@@ -1446,6 +1449,18 @@ function LeadsTable({
                 : 'No leads found.'}
         </div>
       ) : (
+        <>
+        {/* Top mini-pagination — only visible when leads span multiple pages */}
+        {pageCount > 1 && (
+          <div className="flex items-center justify-between text-xs text-muted-foreground pb-1">
+            <span>Showing {((page - 1) * PAGE_SIZE) + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length}</span>
+            <div className="flex gap-1">
+              <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>‹</Button>
+              <span className="inline-flex items-center px-2 text-[11px]">{page}/{pageCount}</span>
+              <Button size="sm" variant="outline" disabled={page >= pageCount} onClick={() => setPage((p) => p + 1)}>›</Button>
+            </div>
+          </div>
+        )}
         <div className="rounded-md border overflow-hidden">
           {/* Select-all header row */}
           <div className="flex items-center gap-3 border-b bg-muted/40 px-4 py-2">
@@ -1616,15 +1631,35 @@ function LeadsTable({
             })}
           </ul>
         </div>
+        </>
       )}
 
       {/* Pagination */}
       {pageCount > 1 ? (
-        <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span>Page {page} of {pageCount} ({filtered.length} leads)</span>
-          <div className="flex gap-1">
-            <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Prev</Button>
-            <Button size="sm" variant="outline" disabled={page >= pageCount} onClick={() => setPage((p) => p + 1)}>Next</Button>
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+          <span>Page {page} of {pageCount} &nbsp;·&nbsp; {filtered.length} leads</span>
+          <div className="flex flex-wrap items-center gap-1">
+            <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage(1)}>«</Button>
+            <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>‹ Prev</Button>
+            {/* Page number buttons — show up to 7 around current */}
+            {Array.from({ length: pageCount }, (_, i) => i + 1)
+              .filter((n) => n === 1 || n === pageCount || Math.abs(n - page) <= 2)
+              .reduce<(number | '…')[]>((acc, n) => {
+                const last = acc[acc.length - 1]
+                if (typeof last === 'number' && n - last > 1) acc.push('…')
+                acc.push(n)
+                return acc
+              }, [])
+              .map((n, i) =>
+                n === '…'
+                  ? <span key={`ellipsis-${i}`} className="px-1">…</span>
+                  : <Button key={n} size="sm" variant={n === page ? 'default' : 'outline'}
+                      onClick={() => setPage(n as number)}>
+                      {n}
+                    </Button>
+              )}
+            <Button size="sm" variant="outline" disabled={page >= pageCount} onClick={() => setPage((p) => p + 1)}>Next ›</Button>
+            <Button size="sm" variant="outline" disabled={page >= pageCount} onClick={() => setPage(pageCount)}>»</Button>
           </div>
         </div>
       ) : null}

@@ -159,7 +159,7 @@ function urlAlreadyFiltered(url: string, keywords: string): boolean {
  * stored. Wraps every step in try/catch so partial failures still
  * record `lastStatus` / `lastError` on the source for visibility.
  */
-export async function tickSource(source: JobSource): Promise<{ added: number; status: string; error?: string }> {
+export async function tickSource(source: JobSource): Promise<{ added: number; skipped: number; status: string; error?: string }> {
   const isFirstFetch = !source.lastFetchedAt
   const adapter = findAdapter(source.url)
   const skipKwFilter = (adapter?.skipKeywordFilter ?? false) || urlAlreadyFiltered(source.url, source.keywords)
@@ -183,7 +183,7 @@ export async function tickSource(source: JobSource): Promise<{ added: number; st
         await db.update(jobSources).set({
           lastFetchedAt: Date.now(), lastStatus: 'fetch-failed', lastError: fetched.error.slice(0, 240),
         }).where(eq(jobSources.id, source.id))
-        return { added: 0, status: 'fetch-failed', error: fetched.error }
+        return { added: 0, skipped: 0, status: 'fetch-failed', error: fetched.error }
       }
       // 2. JSON-LD schema.org/JobPosting — covers LinkedIn, Glassdoor,
       //    company career pages embedding Google Jobs markup.
@@ -198,13 +198,13 @@ export async function tickSource(source: JobSource): Promise<{ added: number; st
     const batchCap = isFirstFetch ? jobs.length : MAX_NEW_PER_TICK
     const currentAdapterName = adapter?.name ?? ''
     const currentIsAggregator = isAggregator(currentAdapterName)
-    let added = 0
+    let added = 0, skipped = 0
     // Only ingest leads posted within 15 days — older listings are stale.
     const FIFTEEN_DAYS_AGO = Date.now() - 15 * 24 * 60 * 60 * 1_000
     for (const j of jobs.slice(0, batchCap)) {
       if (!skipKwFilter && !keywordsMatch(j.title, j.company ?? '', source.keywords)) continue
-      // Skip jobs posted more than 2 months ago — stale and unlikely to be accepting.
-      if (j.postedAt && j.postedAt.getTime() < FIFTEEN_DAYS_AGO) continue
+      // Skip jobs posted more than 15 days ago — stale and unlikely to be accepting.
+      if (j.postedAt && j.postedAt.getTime() < FIFTEEN_DAYS_AGO) { skipped++; continue }
       const fp = fingerprintOf(j.title, j.company ?? '')
       // Sanitise the link once — strips tracking params, rejects same-as-source
       // and non-http URLs, resolves relative URLs against the source URL.
@@ -307,13 +307,13 @@ export async function tickSource(source: JobSource): Promise<{ added: number; st
         meta: { source: source.label, new_leads: added },
       }).catch(() => {})
     }
-    return { added, status: 'ok' }
+    return { added, skipped, status: 'ok' }
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'tick failed'
     await db.update(jobSources).set({
       lastFetchedAt: Date.now(), lastStatus: 'error', lastError: msg.slice(0, 240),
     }).where(eq(jobSources.id, source.id))
-    return { added: 0, status: 'error', error: msg }
+    return { added: 0, skipped: 0, status: 'error', error: msg }
   }
 }
 

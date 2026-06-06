@@ -3,7 +3,7 @@
 // Pagination: 5 pages × 30 results = 150 max per fetch.
 
 import type { Adapter, RawJob } from './types'
-import { RSS_UA } from './types'
+import { getRssUA } from './types'
 import { sanitiseLink } from './utils'
 
 function parseFounditSlug(url: string): { keyword: string; location: string } | null {
@@ -41,7 +41,7 @@ export async function fetchFounditApi(url: string): Promise<RawJob[]> {
       const res = await fetch(apiUrl.toString(), {
         signal: controller.signal,
         headers: {
-          'User-Agent': RSS_UA, Accept: 'application/json',
+          'User-Agent': getRssUA(), Accept: 'application/json',
           Referer: 'https://www.foundit.in/', Origin: 'https://www.foundit.in',
         },
       })

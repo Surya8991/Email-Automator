@@ -37,7 +37,29 @@ export interface Adapter {
   skipKeywordFilter?: boolean
 }
 
-// Plausible Chrome UA for boards that block default Node/undici UAs.
-// Used by every adapter that makes outbound HTTP requests.
-export const RSS_UA =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
+// Pool of realistic browser UAs for boards that block default Node/undici UAs.
+// getRssUA() rotates through them per-call so the fetcher looks like different
+// real browser sessions — helps avoid simple round-trip bot fingerprinting on
+// Naukri, Foundit, and other boards that keyed on a single static UA.
+const BROWSER_UAS = [
+  // Chrome 125 – Windows
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+  // Chrome 124 – macOS
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  // Firefox 126 – Windows
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:126.0) Gecko/20100101 Firefox/126.0',
+  // Safari 17 – macOS
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Safari/605.1.15',
+  // Edge 125 – Windows
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36 Edg/125.0.0.0',
+] as const
+
+let _uaIdx = 0
+export function getRssUA(): string {
+  const ua = BROWSER_UAS[_uaIdx % BROWSER_UAS.length] ?? BROWSER_UAS[0]
+  _uaIdx++
+  return ua
+}
+
+/** Static UA kept for back-compat with callers that haven't switched yet. */
+export const RSS_UA = BROWSER_UAS[0]

@@ -3,7 +3,7 @@
 // First fetch pulls 5 pages × 100 = 500 results; ongoing pulls 1 page = 100.
 
 import type { Adapter, RawJob, FetchOpts } from './types'
-import { RSS_UA } from './types'
+import { getRssUA } from './types'
 import { sanitiseLink } from './utils'
 
 const NAUKRI_PER_PAGE = 100
@@ -46,7 +46,7 @@ export async function fetchNaukriApi(url: string, pages: number): Promise<RawJob
         signal: controller.signal,
         headers: {
           appid: '109', systemid: '109',
-          'User-Agent': RSS_UA,
+          'User-Agent': getRssUA(),
           Accept: 'application/json',
           'Accept-Language': 'en-US,en;q=0.9',
           Referer: 'https://www.naukri.com/',

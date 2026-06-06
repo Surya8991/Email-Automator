@@ -1,6 +1,6 @@
 'use server'
 import { z } from 'zod'
-import { and, eq, inArray, lt, ne, sql } from 'drizzle-orm'
+import { and, eq, inArray, ne, sql } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { requireUser } from '@/auth'
 import { db } from '@/server/db/client'
@@ -414,12 +414,15 @@ export async function pruneLeadsByAgeAction(days: number) {
   if (!rateLimit(`prune-age:${u.id}`, 3, 60_000)) return { error: 'Slow down — try again in a minute' }
   const validDays = [7, 14, 30, 60]
   if (!validDays.includes(days)) return { error: 'Invalid age — pick 7, 14, 30, or 60 days' }
-  const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1_000)
+  // Use COALESCE(posted_at, seen_at) so that old leads whose *posted* date
+  // is stale are pruned even if they were ingested recently (e.g. from a
+  // newly-added source whose historical listings pre-date the 15-day gate).
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1_000
   const result = await db.delete(jobLeads)
     .where(and(
       eq(jobLeads.userId, u.id),
       inArray(jobLeads.status, ['new', 'ignored']),
-      lt(jobLeads.seenAt, cutoff),
+      sql`COALESCE(${jobLeads.postedAt}, ${jobLeads.seenAt}) < ${cutoff}`,
     ))
   const deleted = (result as unknown as { rowsAffected?: number }).rowsAffected ?? 0
   revalidatePath('/jobs')
@@ -435,13 +438,13 @@ export async function countLeadsByAgeAction(days: number) {
   if (!rateLimit(`count-age:${u.id}`, 10, 60_000)) return { count: 0 }
   const validDays = [7, 14, 30, 60]
   if (!validDays.includes(days)) return { count: 0 }
-  const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1_000)
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1_000
   const result = await db.select({ n: sql<number>`COUNT(*)` })
     .from(jobLeads)
     .where(and(
       eq(jobLeads.userId, u.id),
       inArray(jobLeads.status, ['new', 'ignored']),
-      lt(jobLeads.seenAt, cutoff),
+      sql`COALESCE(${jobLeads.postedAt}, ${jobLeads.seenAt}) < ${cutoff}`,
     ))
   return { count: Number(result[0]?.n ?? 0) }
 }
@@ -492,7 +495,7 @@ export async function tickSingleSourceAction(sourceId: number, fullMode = false)
   try {
     const r = await svc.tickSource(source)
     revalidatePath('/jobs')
-    return { added: r.added, status: r.status }
+    return { added: r.added, skipped: 'skipped' in r ? r.skipped : 0, status: r.status }
   } catch (e) {
     return { added: 0, status: 'error' as const, error: e instanceof Error ? e.message : 'failed' }
   }
