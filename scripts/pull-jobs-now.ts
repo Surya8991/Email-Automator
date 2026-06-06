@@ -25,6 +25,9 @@ function norm(s: string) { return s.toLowerCase().replace(/\s+/g, ' ').trim() }
 function fingerprint(title: string, company: string) { return `${norm(title)}|${norm(company)}` }
 
 const TRACKING_PARAMS = /^(utm_|fbclid$|gclid$|mc_eid$|mc_cid$|src$|ref$|source$|lever-source$|gh_src$|origin$|trk$)/i
+
+const TWO_MONTHS_AGO = Date.now() - 60 * 24 * 60 * 60 * 1_000
+
 function sanitiseLink(raw: string, sourceUrl: string): string {
   if (!raw) return ''
   let href = raw.trim()
@@ -89,10 +92,15 @@ function extractJsonLd(html: string): Job[] {
 }
 
 function stripHtml(html: string): string {
-  return html
+  if (!html) return ''
+  // Decode entities first so entity-encoded tags (<div> as &lt;div&gt;) are also stripped.
+  let s = html
+    .replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"').replace(/&#x27;/gi, "'").replace(/&#39;/gi, "'")
+    .replace(/&nbsp;/gi, ' ').replace(/&apos;/gi, "'")
+  return s
     .replace(/<!--[\s\S]*?-->/g, '').replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '')
     .replace(/<\/(p|div|li|h\d|br|tr|td)>/gi, '\n').replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
     .replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim()
 }
 
@@ -336,8 +344,11 @@ async function pullSource(src: Source): Promise<{ added: number; status: string 
         const hay = `${j.title} ${j.company ?? ''}`.toLowerCase()
         if (!kws.some(kw => hay.includes(kw))) continue
       }
+      // Skip jobs posted more than 2 months ago — stale.
+      if (j.postedAt && j.postedAt.getTime() < TWO_MONTHS_AGO) continue
       const fp = fingerprint(j.title, j.company ?? '')
       const cleanLink = sanitiseLink(j.link ?? '', url)
+      const cleanDesc = stripHtml(j.description ?? '')
       try {
         // seen_at is NOT NULL with no SQL DEFAULT (only Drizzle $defaultFn).
         // Must supply it in raw SQL or the insert is silently rejected.
@@ -349,7 +360,7 @@ async function pullSource(src: Source): Promise<{ added: number; status: string 
           args: [
             src.userId, src.id, fp,
             j.title, j.company ?? '', cleanLink, j.location ?? '',
-            j.salary ?? '', j.description ?? '',
+            j.salary ?? '', cleanDesc,
             j.postedAt ? j.postedAt.getTime() : null,
             nowMs,
           ],
@@ -361,7 +372,7 @@ async function pullSource(src: Source): Promise<{ added: number; status: string 
     const status = added > 0 ? `ok-${added}-new` : `ok-no-new(${jobs.length}raw)`
     await client.execute({
       sql: 'UPDATE job_sources SET last_status = ?, last_error = ?, last_fetched_at = ? WHERE id = ?',
-      args: [status, '', jobs.length > 0 ? Date.now() : null, src.id],
+      args: [status, '', Date.now(), src.id],
     })
     return { added, status }
   } catch (e) {

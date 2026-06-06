@@ -1,6 +1,30 @@
 // Shared helpers used by multiple adapters.
 
 /**
+ * Decode HTML entities then strip HTML tags, leaving clean plain text.
+ * Handles both raw tags (<div>) and entity-encoded tags (&lt;div&gt;) so
+ * APIs that double-encode their HTML (e.g. Greenhouse descriptionHtml
+ * returned as entity strings) produce readable descriptions.
+ */
+export function stripHtml(raw: string): string {
+  if (!raw) return ''
+  // 1. Decode the most common HTML entities.
+  let s = raw
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#x27;/gi, "'")
+    .replace(/&#39;/gi, "'")
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&apos;/gi, "'")
+  // 2. Strip actual HTML tags that may now be visible after entity-decode.
+  s = s.replace(/<[^>]+>/g, ' ')
+  // 3. Collapse whitespace.
+  return s.replace(/\s+/g, ' ').trim()
+}
+
+/**
  * Tracking-param key regex. Stripped from every sanitised URL so two
  * leads pointing at the same JD through different referral channels
  * dedup cleanly. Keep narrow — we don't want to strip params the JD

@@ -796,7 +796,7 @@ function JobDetailDialog({
           <section>
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Job Description</h3>
             {lead.description ? (
-              <p className="text-sm leading-relaxed whitespace-pre-wrap">{lead.description}</p>
+              <p className="text-sm leading-relaxed whitespace-pre-wrap">{decodeEntities(lead.description)}</p>
             ) : (
               <div className="rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground">
                 No description extracted.{lead.link ? (
@@ -893,6 +893,33 @@ function JobDetailDialog({
 // above X" not for portfolio reporting.
 const CCY_TO_INR: Record<string, number> = { INR: 1, USD: 84, EUR: 90, GBP: 105 }
 
+// ── Marketing role classifier ─────────────────────────────────────────────────
+// Used to split leads into "Marketing / DM" vs "Others" so engineering /
+// ops roles that slip through company-wide ATS feeds don't pollute the view.
+const MARKETING_TITLE_RE = /\b(seo|sem|ppc|cpc|search engine|digital market|performance market|growth market|growth hack|content market|brand market|social media|email market|affiliate|programmatic|google ads|facebook ads|meta ads|paid media|paid social|paid search|demand gen|product market|marketing analyst|marketing manager|marketing executive|marketing specialist|marketing lead|marketing head|marketing director|marketing vp|marketing assoc|campaign manager|campaign execut|media planner|media buyer|media manager|community manager|influencer|pr manager|public relation|communications manager|inbound market|outbound market|marketing ops|marketing operat|martech|seo execut|seo analyst|seo manager|seo specialist|seo lead|seo head|seo strategist|sem manager|sem execut|digital marketer|e-commerce market|ecommerce market|performance execut|marketing data|growth execut|growth analyst|growth associate|growth manager|growth lead|crm market|retention market|lifecycle market|user acqui|acquisition market|conversion rate|cro specialist)/i
+
+export function isMarketingRole(title: string): boolean {
+  return MARKETING_TITLE_RE.test(title)
+}
+
+const SALARY_PRESETS = [
+  { label: 'Any', value: 0 },
+  { label: '5L+', value: 500_000 },
+  { label: '8L+', value: 800_000 },
+  { label: '10L+', value: 1_000_000 },
+  { label: '15L+', value: 1_500_000 },
+  { label: '20L+', value: 2_000_000 },
+]
+
+/** Decode HTML entities in descriptions stored before the stripHtml fix. */
+function decodeEntities(s: string): string {
+  return s
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ').replace(/&apos;/g, "'")
+    .replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
 // ── Leads Table ──────────────────────────────────────────────────────────────
 function LeadsTable({
   leads, sources, pending, showSaveButton, status,
@@ -909,14 +936,18 @@ function LeadsTable({
   const [q, setQ] = useState('')
   const [sourceFilter, setSourceFilter] = useState<number | null>(null)
   const [companyFilter, setCompanyFilter] = useState('')
-  const [locationFilter, setLocationFilter] = useState('')
+  const [normLocFilter, setNormLocFilter] = useState('')   // uses locationNorm (normalized city)
   const [sort, setSort] = useState<'newest' | 'oldest' | 'company' | 'salary'>('newest')
+  // 'all' | 'marketing' | 'other' — splits leads by role category.
+  const [roleFilter, setRoleFilter] = useState<'all' | 'marketing' | 'other'>('all')
   // Remote-scope multi-select chip filter. Empty set = "any" (don't filter).
-  // Populated values come straight from the normalize.ts schema:
-  // 'office' | 'hybrid' | 'remote-in' | 'remote-global'.
   const [remoteScopes, setRemoteScopes] = useState<Set<string>>(new Set())
   // Min-salary filter in INR-equivalent (rough). 0 = no filter.
   const [minSalary, setMinSalary] = useState<number>(0)
+  // Posted-within filter. 'any' = no cutoff.
+  const [postedWithin, setPostedWithin] = useState<'any' | '7d' | '30d' | '60d'>('any')
+  // Show / hide the secondary filter row.
+  const [showFilters, setShowFilters] = useState(false)
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [page, setPage] = useState(1)
   const PAGE_SIZE = 100
@@ -926,17 +957,31 @@ function LeadsTable({
 
   const companies = useMemo(() =>
     [...new Set(leads.map((l) => l.company).filter(Boolean))].sort(), [leads])
-  const locations = useMemo(() =>
-    [...new Set(leads.map((l) => l.location).filter(Boolean))].sort(), [leads])
+  // Normalized city list (deduplicated). Shown as capitalized labels.
+  const normLocations = useMemo(() =>
+    [...new Set(leads.map((l) => l.locationNorm).filter(Boolean))].sort(), [leads])
   const [detailLead, setDetailLead] = useState<LeadRow | null>(null)
+
+  // Count of active secondary filters (for the badge on the Filters toggle).
+  const activeFilterCount =
+    (companyFilter ? 1 : 0) +
+    (normLocFilter ? 1 : 0) +
+    remoteScopes.size +
+    (minSalary > 0 ? 1 : 0) +
+    (postedWithin !== 'any' ? 1 : 0) +
+    (roleFilter !== 'all' ? 1 : 0)
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase()
+    const now = Date.now()
+    const cutoffMs: Record<string, number> = { '7d': 7, '30d': 30, '60d': 60 }
     let out = leads
     if (sourceFilter != null) out = out.filter((l) => l.sourceId === sourceFilter)
     if (companyFilter) out = out.filter((l) => l.company === companyFilter)
-    if (locationFilter) out = out.filter((l) => l.location === locationFilter)
+    if (normLocFilter) out = out.filter((l) => l.locationNorm === normLocFilter)
     if (remoteScopes.size > 0) out = out.filter((l) => remoteScopes.has(l.remoteScope))
+    if (roleFilter === 'marketing') out = out.filter((l) => isMarketingRole(l.title))
+    else if (roleFilter === 'other') out = out.filter((l) => !isMarketingRole(l.title))
     if (minSalary > 0) out = out.filter((l) => {
       if (l.salaryMin == null && l.salaryMax == null) return false
       const periodMul = l.salaryPeriod === 'month' ? 12 : 1
@@ -944,14 +989,20 @@ function LeadsTable({
       const top = Math.max(l.salaryMin ?? 0, l.salaryMax ?? 0) * periodMul * ccyMul
       return top >= minSalary
     })
+    if (postedWithin !== 'any') {
+      const days = cutoffMs[postedWithin] ?? 30
+      const cutoff = now - days * 24 * 60 * 60 * 1_000
+      out = out.filter((l) => l.postedAt && new Date(l.postedAt).getTime() >= cutoff)
+    }
     if (needle) out = out.filter((l) => (
       l.title.toLowerCase().includes(needle) ||
       l.company.toLowerCase().includes(needle) ||
       l.location.toLowerCase().includes(needle) ||
       l.salary.toLowerCase().includes(needle) ||
-      l.description.toLowerCase().includes(needle)
+      decodeEntities(l.description).toLowerCase().includes(needle)
     ))
     const sorted = [...out]
+    // Default: newest first (by seenAt — when we first saw the lead in the DB).
     if (sort === 'newest') sorted.sort((a, b) => +new Date(b.seenAt) - +new Date(a.seenAt))
     else if (sort === 'oldest') sorted.sort((a, b) => +new Date(a.seenAt) - +new Date(b.seenAt))
     else if (sort === 'company') sorted.sort((a, b) => a.company.localeCompare(b.company))
@@ -963,9 +1014,9 @@ function LeadsTable({
       })
     }
     return sorted
-  }, [leads, q, sourceFilter, companyFilter, locationFilter, sort, remoteScopes, minSalary])
+  }, [leads, q, sourceFilter, companyFilter, normLocFilter, sort, remoteScopes, minSalary, postedWithin, roleFilter])
 
-  useEffect(() => { setPage(1) }, [q, sourceFilter, companyFilter, locationFilter, sort, remoteScopes, minSalary])
+  useEffect(() => { setPage(1) }, [q, sourceFilter, companyFilter, normLocFilter, sort, remoteScopes, minSalary, postedWithin, roleFilter])
 
   // Per-crossKey occurrence count → drives the "Seen on N boards" chip.
   // Only counts when crossKey is non-empty (titleless / companyless rows
@@ -1041,9 +1092,32 @@ function LeadsTable({
 
   return (
     <div className="space-y-3">
-      {/* Filter bar */}
+      {/* ── Role-category tabs: Marketing / All / Others ── */}
+      <div className="flex items-center gap-1 border-b pb-2">
+        {([
+          ['all',       'All roles',                leads.length],
+          ['marketing', '📣 Marketing / DM',        leads.filter(l => isMarketingRole(l.title)).length],
+          ['other',     'Others',                   leads.filter(l => !isMarketingRole(l.title)).length],
+        ] as const).map(([key, lbl, cnt]) => (
+          <button key={key} type="button"
+            onClick={() => setRoleFilter(key)}
+            className={`rounded-full px-3 py-1 text-xs font-medium ea-transition border ${roleFilter === key ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground hover:bg-muted border-transparent'}`}>
+            {lbl} <span className={`ml-1 rounded-full px-1.5 py-0.5 text-[10px] ${roleFilter === key ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>{cnt}</span>
+          </button>
+        ))}
+        <span className="ml-auto text-xs text-muted-foreground">
+          {filtered.length !== leads.length ? <><strong>{filtered.length}</strong> of {leads.length}</> : <><strong>{leads.length}</strong> {leads.length === 1 ? 'lead' : 'leads'}</>}
+        </span>
+        <Button variant="outline" size="sm" asChild>
+          <a href={`/api/jobs/export?status=${status}`} download>
+            <Download className="mr-1 h-3.5 w-3.5" /> CSV
+          </a>
+        </Button>
+      </div>
+
+      {/* ── Row 1: primary filters ── */}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative max-w-sm flex-1">
+        <div className="relative max-w-xs flex-1">
           <Search className="pointer-events-none absolute left-2 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
           <Input value={q} onChange={(e) => setQ(e.target.value)}
             placeholder="Search title, company, location, JD…" className="pl-8 h-9 text-sm" />
@@ -1055,72 +1129,117 @@ function LeadsTable({
             {sources.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
         ) : null}
-        {companies.length > 1 ? (
-          <select value={companyFilter} onChange={(e) => setCompanyFilter(e.target.value)}
-            className="h-9 rounded-md border bg-background px-2 text-xs" aria-label="Filter by company">
-            <option value="">All companies</option>
-            {companies.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
-        ) : null}
-        {locations.length > 1 ? (
-          <select value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)}
-            className="h-9 rounded-md border bg-background px-2 text-xs" aria-label="Filter by location">
-            <option value="">All locations</option>
-            {locations.map((l) => <option key={l} value={l}>{l}</option>)}
-          </select>
-        ) : null}
         <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}
           className="h-9 rounded-md border bg-background px-2 text-xs" aria-label="Sort by">
           <option value="newest">Newest first</option>
           <option value="oldest">Oldest first</option>
           <option value="company">Company A–Z</option>
-          <option value="salary">Salary</option>
+          <option value="salary">Salary ↓</option>
         </select>
-        {/* Remote-scope chip filter. Multi-select; clicking again toggles off. */}
-        <div className="flex items-center gap-1" role="group" aria-label="Filter by remote scope">
-          {([
-            ['office',        'Office'],
-            ['hybrid',        'Hybrid'],
-            ['remote-in',     'Remote IN'],
-            ['remote-global', 'Remote'],
-          ] as const).map(([k, label]) => {
-            const on = remoteScopes.has(k)
-            return (
-              <button key={k} type="button"
-                onClick={() => {
-                  const next = new Set(remoteScopes)
-                  if (next.has(k)) next.delete(k); else next.add(k)
-                  setRemoteScopes(next)
-                }}
-                className={`h-7 rounded-full border px-2.5 text-[11px] font-medium ea-transition ${on ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground hover:bg-muted'}`}
-                aria-pressed={on}>
+        {/* Filters toggle — shows badge with count of active secondary filters */}
+        <button type="button"
+          onClick={() => setShowFilters(f => !f)}
+          className={`relative h-9 rounded-md border px-3 text-xs font-medium ea-transition ${showFilters || activeFilterCount > 0 ? 'border-primary bg-primary/5 text-primary' : 'bg-background text-muted-foreground hover:bg-muted'}`}>
+          Filters
+          {activeFilterCount > 0 && (
+            <span className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-primary-foreground">
+              {activeFilterCount}
+            </span>
+          )}
+        </button>
+        {activeFilterCount > 0 && (
+          <button type="button" onClick={() => {
+            setCompanyFilter(''); setNormLocFilter(''); setRemoteScopes(new Set())
+            setMinSalary(0); setPostedWithin('any'); setRoleFilter('all')
+          }} className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground ea-transition">
+            Clear all
+          </button>
+        )}
+      </div>
+
+      {/* ── Row 2: secondary filters (collapsible) ── */}
+      {showFilters && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-md border bg-muted/30 px-3 py-2.5">
+
+          {/* Company filter */}
+          {companies.length > 1 ? (
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-medium text-muted-foreground">Company</span>
+              <select value={companyFilter} onChange={(e) => setCompanyFilter(e.target.value)}
+                className="h-7 rounded-md border bg-background px-2 text-xs" aria-label="Filter by company">
+                <option value="">Any</option>
+                {companies.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+          ) : null}
+
+          {/* Location filter — uses locationNorm (deduplicated normalized cities) */}
+          {normLocations.length > 1 ? (
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-medium text-muted-foreground">City</span>
+              <select value={normLocFilter} onChange={(e) => setNormLocFilter(e.target.value)}
+                className="h-7 rounded-md border bg-background px-2 text-xs" aria-label="Filter by city">
+                <option value="">Any</option>
+                {normLocations.map((loc) => (
+                  <option key={loc} value={loc}>{loc.charAt(0).toUpperCase() + loc.slice(1)}</option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+
+          {/* Remote scope chips */}
+          <div className="flex items-center gap-1">
+            <span className="text-[11px] font-medium text-muted-foreground mr-0.5">Work mode</span>
+            {([
+              ['office',        'Office'],
+              ['hybrid',        'Hybrid'],
+              ['remote-in',     'Remote IN'],
+              ['remote-global', 'Remote'],
+            ] as const).map(([k, label]) => {
+              const on = remoteScopes.has(k)
+              return (
+                <button key={k} type="button"
+                  onClick={() => {
+                    const next = new Set(remoteScopes)
+                    if (next.has(k)) next.delete(k); else next.add(k)
+                    setRemoteScopes(next)
+                  }}
+                  className={`h-6 rounded-full border px-2 text-[10px] font-medium ea-transition ${on ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground hover:bg-muted'}`}
+                  aria-pressed={on}>
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Salary preset buttons */}
+          <div className="flex items-center gap-1">
+            <IndianRupee className="h-3 w-3 text-muted-foreground" />
+            <span className="text-[11px] font-medium text-muted-foreground mr-0.5">Min salary</span>
+            {SALARY_PRESETS.map(({ label, value }) => (
+              <button key={label} type="button"
+                onClick={() => setMinSalary(value)}
+                className={`h-6 rounded-full border px-2 text-[10px] font-medium ea-transition ${minSalary === value ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground hover:bg-muted'}`}>
                 {label}
               </button>
-            )
-          })}
+            ))}
+          </div>
+
+          {/* Posted-within filter */}
+          <div className="flex items-center gap-1.5">
+            <CalendarDays className="h-3 w-3 text-muted-foreground" />
+            <span className="text-[11px] font-medium text-muted-foreground">Posted</span>
+            <select value={postedWithin} onChange={(e) => setPostedWithin(e.target.value as typeof postedWithin)}
+              className="h-7 rounded-md border bg-background px-2 text-xs" aria-label="Posted within">
+              <option value="any">Any time</option>
+              <option value="7d">Last 7 days</option>
+              <option value="30d">Last 30 days</option>
+              <option value="60d">Last 60 days</option>
+            </select>
+          </div>
+
         </div>
-        {/* Min-salary filter. Stays as a number input so the user can type
-            an exact threshold; converts the lead's salaryMin/Max to
-            INR-equivalent yearly before comparing. */}
-        <div className="flex items-center gap-1 text-xs">
-          <IndianRupee className="h-3.5 w-3.5 text-muted-foreground" />
-          <input
-            type="number" min={0} step={100_000}
-            value={minSalary || ''}
-            placeholder="Min /yr"
-            onChange={(e) => setMinSalary(Number(e.target.value) || 0)}
-            className="h-7 w-28 rounded-md border bg-background px-2 text-xs"
-            aria-label="Minimum yearly salary (INR-equivalent)"
-            title="Filter to roles whose top-of-range salary meets or exceeds this annual INR-equivalent threshold."
-          />
-        </div>
-        <span className="text-xs text-muted-foreground">{filtered.length} of {leads.length} {leads.length === 1 ? 'lead' : 'leads'}</span>
-        <Button variant="outline" size="sm" asChild className="ml-auto">
-          <a href={`/api/jobs/export?status=${status}`} download>
-            <Download className="mr-1 h-3.5 w-3.5" /> CSV
-          </a>
-        </Button>
-      </div>
+      )}
 
       {/* Bulk action bar */}
       {selected.size > 0 ? (
@@ -1159,7 +1278,7 @@ function LeadsTable({
         <div className="rounded-md border bg-card p-10 text-center text-sm text-muted-foreground">
           {leads.length === 0
             ? 'No leads here yet. Refresh a source to pull listings.'
-            : (q || sourceFilter != null || companyFilter || locationFilter)
+            : (q || sourceFilter != null || companyFilter || normLocFilter || activeFilterCount > 0)
               ? 'No leads match the current filters.'
               : 'No leads found.'}
         </div>
@@ -1263,7 +1382,7 @@ function LeadsTable({
                     </div>
                     {/* Description snippet */}
                     {l.description ? (
-                      <p className="mt-1.5 text-xs text-muted-foreground line-clamp-2 max-w-2xl">{l.description}</p>
+                      <p className="mt-1.5 text-xs text-muted-foreground line-clamp-2 max-w-2xl">{decodeEntities(l.description)}</p>
                     ) : null}
                   </button>
 

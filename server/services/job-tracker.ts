@@ -10,7 +10,7 @@ import { fetchNaukriApi } from './job-adapters/naukri'
 import { atsSubtype } from './job-adapters/ats'
 import type { RawJob } from './job-adapters/types'
 import { normalizeSalary, normalizeLocation, crossKey, isAggregator } from './normalize'
-import { sanitiseLink } from './job-adapters/utils'
+import { sanitiseLink, stripHtml } from './job-adapters/utils'
 
 // ── Job tracker service ─────────────────────────────────────────────
 // Per-source fetchers live in ./job-adapters/*.ts; this file holds the
@@ -199,8 +199,11 @@ export async function tickSource(source: JobSource): Promise<{ added: number; st
     const currentAdapterName = adapter?.name ?? ''
     const currentIsAggregator = isAggregator(currentAdapterName)
     let added = 0
+    const TWO_MONTHS_AGO = Date.now() - 60 * 24 * 60 * 60 * 1_000
     for (const j of jobs.slice(0, batchCap)) {
       if (!skipKwFilter && !keywordsMatch(j.title, j.company ?? '', source.keywords)) continue
+      // Skip jobs posted more than 2 months ago — stale and unlikely to be accepting.
+      if (j.postedAt && j.postedAt.getTime() < TWO_MONTHS_AGO) continue
       const fp = fingerprintOf(j.title, j.company ?? '')
       // Sanitise the link once — strips tracking params, rejects same-as-source
       // and non-http URLs, resolves relative URLs against the source URL.
@@ -211,6 +214,8 @@ export async function tickSource(source: JobSource): Promise<{ added: number; st
       const sal = normalizeSalary(j.salary ?? '')
       const loc = normalizeLocation(j.location ?? '')
       const ck  = crossKey(j.company ?? '', j.title, loc.norm)
+      // Decode HTML entities + strip tags so descriptions render as plain text.
+      const cleanDesc = stripHtml(j.description ?? '')
 
       // Cross-board dedup: when the same (company,title,location) already
       // exists from another source, decide whether to upgrade or skip.
@@ -233,7 +238,7 @@ export async function tickSource(source: JobSource): Promise<{ added: number; st
               link:     sql`CASE WHEN link = '' THEN ${cleanLink} ELSE link END`,
               salary:   sql`CASE WHEN salary = '' THEN ${j.salary ?? ''} ELSE salary END`,
               location: sql`CASE WHEN location = '' THEN ${j.location ?? ''} ELSE location END`,
-              description: sql`CASE WHEN length(description) < length(${j.description ?? ''}) THEN ${j.description ?? ''} ELSE description END`,
+              description: sql`CASE WHEN length(description) < length(${cleanDesc}) THEN ${cleanDesc} ELSE description END`,
               salaryMin:    sql`CASE WHEN salary_min IS NULL THEN ${sal.min} ELSE salary_min END`,
               salaryMax:    sql`CASE WHEN salary_max IS NULL THEN ${sal.max} ELSE salary_max END`,
               salaryCcy:    sql`CASE WHEN salary_ccy = '' THEN ${sal.ccy} ELSE salary_ccy END`,
@@ -255,7 +260,7 @@ export async function tickSource(source: JobSource): Promise<{ added: number; st
           link: cleanLink,
           location: j.location ?? '',
           salary: j.salary ?? '',
-          description: j.description ?? '',
+          description: cleanDesc,
           postedAt: j.postedAt ?? null,
           salaryMin: sal.min, salaryMax: sal.max,
           salaryCcy: sal.ccy, salaryPeriod: sal.period,
@@ -268,7 +273,7 @@ export async function tickSource(source: JobSource): Promise<{ added: number; st
         // empty/shorter fields when the re-fetch has better data.
         const newSalary = j.salary ?? ''
         const newLoc = j.location ?? ''
-        const newDesc = j.description ?? ''
+        const newDesc = cleanDesc
         await db.update(jobLeads).set({
           link:     sql`CASE WHEN link = '' THEN ${cleanLink} ELSE link END`,
           salary:   sql`CASE WHEN salary = '' THEN ${newSalary} ELSE salary END`,
