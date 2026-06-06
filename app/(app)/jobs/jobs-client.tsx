@@ -61,15 +61,18 @@ export function JobsClient({
     if (!srcs.length) { toast.info('No active sources'); return }
     let added = 0
     setProgress({ label: 'Fetch new', phase: 'Starting…', total: srcs.length, done: 0, stat: '+0 new' })
-    for (const s of srcs) {
-      setProgress((p) => p && { ...p, phase: `Fetching "${s.label}"…` })
-      const r = await tickSingleSourceAction(s.id, false)
-      added += r.added ?? 0
-      setProgress((p) => p && { ...p, done: p.done + 1, stat: `+${added} new` })
+    try {
+      for (const s of srcs) {
+        setProgress((p) => p && { ...p, phase: `Fetching "${s.label}"…` })
+        const r = await tickSingleSourceAction(s.id, false)
+        added += r.added ?? 0
+        setProgress((p) => p && { ...p, done: p.done + 1, stat: `+${added} new` })
+      }
+      toast.success(`+${added} new lead${added === 1 ? '' : 's'} from ${srcs.length} source${srcs.length === 1 ? '' : 's'}`)
+      router.refresh()
+    } finally {
+      setProgress(null)
     }
-    setProgress(null)
-    toast.success(`+${added} new lead${added === 1 ? '' : 's'} from ${srcs.length} source${srcs.length === 1 ? '' : 's'}`)
-    router.refresh()
   }
 
   async function runFullRefresh() {
@@ -77,15 +80,18 @@ export function JobsClient({
     if (!srcs.length) { toast.info('No active sources'); return }
     let added = 0
     setProgress({ label: 'Full refresh', phase: 'Starting…', total: srcs.length, done: 0, stat: '+0 new' })
-    for (const s of srcs) {
-      setProgress((p) => p && { ...p, phase: `Refreshing "${s.label}"…` })
-      const r = await tickSingleSourceAction(s.id, true)
-      added += r.added ?? 0
-      setProgress((p) => p && { ...p, done: p.done + 1, stat: `+${added} new · enriching…` })
+    try {
+      for (const s of srcs) {
+        setProgress((p) => p && { ...p, phase: `Refreshing "${s.label}"…` })
+        const r = await tickSingleSourceAction(s.id, true)
+        added += r.added ?? 0
+        setProgress((p) => p && { ...p, done: p.done + 1, stat: `+${added} new · enriching…` })
+      }
+      toast.success(`Full refresh done · ${srcs.length} sources · +${added} new leads · existing leads enriched`)
+      router.refresh()
+    } finally {
+      setProgress(null)
     }
-    setProgress(null)
-    toast.success(`Full refresh done · ${srcs.length} sources · +${added} new leads · existing leads enriched`)
-    router.refresh()
   }
 
   async function runFix404s() {
@@ -94,16 +100,19 @@ export function JobsClient({
     const BATCH = 20
     let dead = 0
     setProgress({ label: 'Fix 404s', phase: 'Checking links…', total: leads.length, done: 0, stat: '0 expired' })
-    for (let i = 0; i < leads.length; i += BATCH) {
-      const batch = leads.slice(i, i + BATCH).map((l) => l.id)
-      const r = await checkLinksBatchAction(batch)
-      dead += r.dead
-      setProgress((p) => p && { ...p, done: Math.min(i + BATCH, leads.length), stat: `${dead} expired` })
+    try {
+      for (let i = 0; i < leads.length; i += BATCH) {
+        const batch = leads.slice(i, i + BATCH).map((l) => l.id)
+        const r = await checkLinksBatchAction(batch)
+        dead += r.dead ?? 0
+        setProgress((p) => p && { ...p, done: Math.min(i + BATCH, leads.length), stat: `${dead} expired` })
+      }
+      if (dead === 0) toast.success(`All ${leads.length} links alive`)
+      else toast.warning(`Removed ${dead} expired listing${dead === 1 ? '' : 's'} · ${leads.length} checked`)
+      router.refresh()
+    } finally {
+      setProgress(null)
     }
-    setProgress(null)
-    if (dead === 0) toast.success(`All ${leads.length} links alive`)
-    else toast.warning(`Removed ${dead} expired listing${dead === 1 ? '' : 's'} · ${leads.length} checked`)
-    router.refresh()
   }
 
   return (
@@ -292,7 +301,7 @@ function AddSourceDialog() {
 
   function submit() {
     start(async () => {
-      const r = await addJobSourceAction({ label: label.trim() || url, url, keywords })
+      const r = await addJobSourceAction({ label: label.trim() || url.trim(), url: url.trim(), keywords })
       if ('error' in r && r.error) { toast.error(r.error); return }
       const n = ('added' in r && typeof r.added === 'number') ? r.added : 0
       toast.success(
@@ -592,9 +601,11 @@ function SourcesTable({
                           router.refresh()
                         })}
                         title={s.active ? 'Pause (skip in cron)' : 'Resume'}
+                        aria-label={s.active ? 'Pause source' : 'Resume source'}
                       >{s.active ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}</Button>
                       <Button size="sm" variant="ghost" disabled={pending}
                         onClick={() => setEditing(s)} title="Edit label / URL / keywords"
+                        aria-label="Edit source"
                       ><Pencil className="h-3.5 w-3.5" /></Button>
                       <Button size="sm" variant="ghost" disabled={pending || refreshingId === s.id}
                         onClick={() => {
@@ -608,9 +619,11 @@ function SourcesTable({
                           })
                         }}
                         title="Refresh now"
+                        aria-label="Refresh source now"
                       ><RefreshCw className={`h-3.5 w-3.5 ${refreshingId === s.id ? 'animate-spin' : ''}`} /></Button>
                       <Button size="sm" variant="ghost" disabled={pending}
                         onClick={() => setConfirmDeleteId(s.id)} title="Delete source"
+                        aria-label="Delete source"
                       ><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>
                     </div>
                   )}
@@ -850,7 +863,10 @@ function LeadsTable({
     const sorted = [...out]
     if (sort === 'oldest') sorted.reverse()
     else if (sort === 'company') sorted.sort((a, b) => a.company.localeCompare(b.company))
-    else if (sort === 'salary') sorted.sort((a, b) => b.salary.localeCompare(a.salary))
+    else if (sort === 'salary') {
+      const firstNum = (s: string) => { const m = s.match(/\d+/); return m ? Number(m[0]) : -1 }
+      sorted.sort((a, b) => firstNum(b.salary) - firstNum(a.salary))
+    }
     return sorted
   }, [leads, q, sourceFilter, companyFilter, locationFilter, sort])
 

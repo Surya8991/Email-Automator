@@ -55,6 +55,8 @@ export async function deleteContactAction(id: number) {
 
 export async function deleteContactsBulkAction(ids: number[]) {
   const u = await requireUser()
+  if (!ids || ids.length === 0) return { error: 'No contacts selected' }
+  if (ids.length > 500) return { error: 'Pick at most 500 contacts at a time' }
   await svc.deleteContactsBulk(u.id, ids)
   revalidatePath('/contacts')
   return { ok: true, deleted: ids.length }

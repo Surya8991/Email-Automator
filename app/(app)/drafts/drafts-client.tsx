@@ -88,6 +88,9 @@ export function DraftsClient({
   // Per-row selection, drives the "Send selected" button. Cleared
   // automatically after a send. Visible-row select-all only.
   const [selected, setSelected] = useState<Set<number>>(new Set())
+  const [discardSelectedOpen, setDiscardSelectedOpen] = useState(false)
+  const [discardAllOpen, setDiscardAllOpen] = useState(false)
+  const [discardAllPhrase, setDiscardAllPhrase] = useState('')
 
   return (
     <div>
@@ -110,30 +113,14 @@ export function DraftsClient({
           </>
         ) : null}
         {selected.size > 0 ? (
-          <Button variant="destructive" disabled={pending} onClick={() => start(async () => {
-            const ids = Array.from(selected)
-            if (!confirm(`Discard ${ids.length} selected draft(s)? Sent emails are untouched.`)) return
-            const r = await deleteSelectedDraftsAction(ids)
-            if ('error' in r && r.error) { toast.error(r.error); return }
-            if ('deleted' in r) toast.success(`Discarded ${r.deleted} draft${r.deleted === 1 ? '' : 's'}`)
-            setSelected(new Set())
-            router.refresh()
-          })}>
+          <Button variant="destructive" disabled={pending} onClick={() => setDiscardSelectedOpen(true)}>
             <Trash2 className="mr-1.5 h-4 w-4" /> Discard selected ({selected.size})
           </Button>
         ) : null}
         {rows.length > 0 ? (
           <Button variant="ghost" disabled={pending}
             className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-            onClick={() => start(async () => {
-              if (!confirm(`Discard ALL ${rows.length} pending drafts? Sent emails are untouched.`)) return
-              const phrase = prompt('Type DISCARD ALL to confirm:')
-              if (phrase !== 'DISCARD ALL') { toast('Cancelled'); return }
-              const r = await deleteAllDraftsAction()
-              if ('deleted' in r) toast.success(`Discarded ${r.deleted} draft${r.deleted === 1 ? '' : 's'}`)
-              setSelected(new Set())
-              router.refresh()
-            })}>
+            onClick={() => setDiscardAllOpen(true)}>
             <Trash2 className="mr-1.5 h-4 w-4" /> Discard all
           </Button>
         ) : null}
@@ -146,6 +133,46 @@ export function DraftsClient({
           </div>
         ) : null}
       </div>
+
+      {/* Discard-selected confirmation banner — replaces browser confirm() */}
+      {discardSelectedOpen ? (
+        <div className="flex flex-wrap items-center gap-3 border-b border-destructive/30 bg-destructive/5 px-4 py-3 text-sm">
+          <span className="font-medium text-destructive">Discard {selected.size} selected draft{selected.size === 1 ? '' : 's'}? Sent emails are untouched.</span>
+          <Button size="sm" variant="destructive" disabled={pending} onClick={() => start(async () => {
+            const ids = Array.from(selected)
+            const r = await deleteSelectedDraftsAction(ids)
+            if ('error' in r && r.error) { toast.error(r.error); return }
+            if ('deleted' in r) toast.success(`Discarded ${r.deleted} draft${r.deleted === 1 ? '' : 's'}`)
+            setSelected(new Set())
+            setDiscardSelectedOpen(false)
+            router.refresh()
+          })}>Yes, discard</Button>
+          <Button size="sm" variant="ghost" onClick={() => setDiscardSelectedOpen(false)}>Cancel</Button>
+        </div>
+      ) : null}
+
+      {/* Discard-all confirmation banner — replaces browser confirm()+prompt() */}
+      {discardAllOpen ? (
+        <div className="flex flex-wrap items-center gap-3 border-b border-destructive/30 bg-destructive/5 px-4 py-3 text-sm">
+          <span className="font-medium text-destructive">Discard all {rows.length} pending drafts? This cannot be undone.</span>
+          <Input
+            value={discardAllPhrase}
+            onChange={(e) => setDiscardAllPhrase(e.target.value)}
+            placeholder="Type DISCARD ALL to confirm"
+            className="h-7 w-52 text-xs"
+          />
+          <Button size="sm" variant="destructive" disabled={pending || discardAllPhrase !== 'DISCARD ALL'}
+            onClick={() => start(async () => {
+              const r = await deleteAllDraftsAction()
+              if ('deleted' in r) toast.success(`Discarded ${r.deleted} draft${r.deleted === 1 ? '' : 's'}`)
+              setSelected(new Set())
+              setDiscardAllOpen(false)
+              setDiscardAllPhrase('')
+              router.refresh()
+            })}>Discard all</Button>
+          <Button size="sm" variant="ghost" onClick={() => { setDiscardAllOpen(false); setDiscardAllPhrase('') }}>Cancel</Button>
+        </div>
+      ) : null}
 
       {rows.length > 0 ? (
         <div className="flex flex-wrap items-center gap-3 border-b bg-muted/30 px-4 py-3">

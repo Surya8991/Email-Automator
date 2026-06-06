@@ -129,8 +129,10 @@ export async function sendDraftAction(id: number, opts: { force?: boolean } = {}
   // Duplicate-send guard. Look up the draft's recipient, check whether
   // they were already sent to in the last 7 days. If yes and !force,
   // return a warning so the UI can confirm. force=true bypasses.
-  const allPending = await drafts.listDrafts(u.id, 1, 200)
-  const target = allPending.rows.find((d) => d.id === id)
+  const [target] = await db.select({ id: draftsTable.id, toEmail: draftsTable.toEmail })
+    .from(draftsTable)
+    .where(and(eq(draftsTable.id, id), eq(draftsTable.userId, u.id)))
+    .limit(1)
   if (target && !opts.force) {
     const recent = await drafts.lastSentTo(u.id, target.toEmail, 7)
     if (recent) {

@@ -342,6 +342,7 @@ export const jobLeads = sqliteTable('job_leads', {
   byUser:        index('job_leads_user_idx').on(t.userId, t.status, t.seenAt),
   uqFingerprint: uniqueIndex('job_leads_fingerprint_idx').on(t.sourceId, t.fingerprint),
   bySource:      index('job_leads_source_idx').on(t.sourceId),
+  byUserSource:  index('job_leads_user_source_idx').on(t.userId, t.sourceId),
 }))
 
 export type JobSource = typeof jobSources.$inferSelect

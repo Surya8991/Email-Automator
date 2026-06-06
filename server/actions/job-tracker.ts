@@ -221,6 +221,14 @@ export async function leadToDraftAction(id: number) {
     .where(and(eq(jobLeads.id, id), eq(jobLeads.userId, u.id)))
   if (!lead) return { error: 'Lead not found' }
   try {
+    // Dedup guard: if a contact already exists for this listing URL, a draft
+    // was already created — return early instead of creating a duplicate.
+    if (lead.link) {
+      const [dup] = await db.select({ id: contactsTbl.id }).from(contactsTbl)
+        .where(and(eq(contactsTbl.userId, u.id), eq(contactsTbl.sourceUrl, lead.link)))
+        .limit(1)
+      if (dup) return { error: 'An outreach draft already exists for this listing.' }
+    }
     // Insert a placeholder contact for analytics / dedupe. Empty email
     // is intentional — the user fills it in on the contact detail.
     const inserted = await db.insert(contactsTbl).values({
@@ -237,21 +245,23 @@ export async function leadToDraftAction(id: number) {
     const contactId = inserted[0]!.id
     const subject = `Application: ${lead.title}${lead.company ? ` at ${lead.company}` : ''}`
     // Build a richer outreach email using whatever fields the lead has.
+    // All AI-extracted values are HTML-escaped to prevent stored XSS.
+    const safeLink = /^https?:\/\//i.test(lead.link ?? '') ? lead.link : ''
     const metaLines: string[] = []
-    if (lead.company)  metaLines.push(`<strong>Company:</strong> ${lead.company}`)
-    if (lead.location) metaLines.push(`<strong>Location:</strong> ${lead.location}`)
-    if (lead.salary)   metaLines.push(`<strong>Salary:</strong> ${lead.salary}`)
-    if (lead.link)     metaLines.push(`<strong>Listing:</strong> <a href="${lead.link}">${lead.link}</a>`)
+    if (lead.company)  metaLines.push(`<strong>Company:</strong> ${escHtml(lead.company)}`)
+    if (lead.location) metaLines.push(`<strong>Location:</strong> ${escHtml(lead.location)}`)
+    if (lead.salary)   metaLines.push(`<strong>Salary:</strong> ${escHtml(lead.salary)}`)
+    if (safeLink)      metaLines.push(`<strong>Listing:</strong> <a href="${escHtml(safeLink)}">${escHtml(safeLink)}</a>`)
     const descSnippet = lead.description
-      ? `<blockquote style="border-left:3px solid #ccc;padding-left:1em;margin:0.5em 0;color:#555;font-size:0.9em">${lead.description.slice(0, 300)}${lead.description.length > 300 ? '…' : ''}</blockquote>`
+      ? `<blockquote style="border-left:3px solid #ccc;padding-left:1em;margin:0.5em 0;color:#555;font-size:0.9em">${escHtml(lead.description.slice(0, 300))}${lead.description.length > 300 ? '…' : ''}</blockquote>`
       : ''
     const metaBlock = metaLines.length
       ? `<p style="font-size:0.85em;color:#666">${metaLines.join(' &nbsp;·&nbsp; ')}</p>`
       : ''
     const body =
       `<p>Hi {{name}},</p>` +
-      `<p>I came across the <strong>${lead.title}</strong>${lead.company ? ` position at <strong>${lead.company}</strong>` : ' role'}` +
-      `${lead.location ? ` in ${lead.location}` : ''} and I'm very interested in applying.</p>` +
+      `<p>I came across the <strong>${escHtml(lead.title)}</strong>${lead.company ? ` position at <strong>${escHtml(lead.company)}</strong>` : ' role'}` +
+      `${lead.location ? ` in ${escHtml(lead.location)}` : ''} and I'm very interested in applying.</p>` +
       `${descSnippet}` +
       `${metaBlock}` +
       `<p>I'd love to learn more about the role and share how my background aligns with what you're looking for. Would you be open to a quick chat?</p>` +
@@ -278,11 +288,38 @@ export async function leadToDraftAction(id: number) {
  *
  * Does NOT save anything to the DB. Rate-limited to 5/min/user.
  */
+// ── Dead-link detection helpers ──────────────────────────────────────────────
+// Shared by checkDeadLinksAction (monolithic) and checkLinksBatchAction
+// (per-batch, used by the client progress orchestration).
+const DEAD_STATUS  = new Set([404, 410, 400])
+const DEAD_PATTERN = /(\/404|not.found|job.not.available|position.closed|listing.expired|no.longer.available|job.filled|job.closed)/i
+const CHECK_UA     = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36'
+
+async function isDead(url: string): Promise<boolean> {
+  // SSRF guard: reject private IPs, localhost, and non-http(s) schemes.
+  if (!validateUrlForFetch(url).ok) return false
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 6_000)
+  try {
+    const r = await fetch(url, {
+      method: 'HEAD', signal: ctrl.signal,
+      headers: { 'User-Agent': CHECK_UA },
+      // manual = do not follow redirects to potentially-internal IPs
+      redirect: 'manual',
+    }).catch(() => null)
+    if (!r) return false
+    // 3xx with manual redirect = assume alive (we can't safely follow further)
+    if (r.status >= 300 && r.status < 400) return false
+    if (DEAD_STATUS.has(r.status)) return true
+    if (DEAD_PATTERN.test(r.url)) return true
+    return false
+  } catch { return false }
+  finally { clearTimeout(timer) }
+}
+
 /**
  * Check all active (new/saved) leads' links for 404s and auto-ignore dead ones.
  * Processes in batches of 20 with a 6 s timeout per request.
- * Follows redirects and also checks if the final URL contains typical
- * "job not found" patterns used by Naukri, Foundit, and ATS boards.
  */
 export async function checkDeadLinksAction() {
   const u = await requireUser()
@@ -298,32 +335,6 @@ export async function checkDeadLinksAction() {
 
   if (leads.length === 0) return { ok: true as const, dead: 0, checked: 0 }
 
-  const DEAD_STATUS  = new Set([404, 410, 400])
-  // URL fragments/paths that job boards put in their "job not found" redirect
-  const DEAD_PATTERN = /(\/404|not.found|job.not.available|position.closed|listing.expired|no.longer.available|job.filled|job.closed)/i
-  const CHECK_UA     = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36'
-
-  async function isDead(url: string): Promise<boolean> {
-    const ctrl = new AbortController()
-    const timer = setTimeout(() => ctrl.abort(), 6_000)
-    try {
-      // Try HEAD first (no body download). Some servers reject HEAD → catch and skip.
-      const r = await fetch(url, {
-        method: 'HEAD', signal: ctrl.signal,
-        headers: { 'User-Agent': CHECK_UA }, redirect: 'follow',
-      }).catch(() => null)
-      if (r) {
-        if (DEAD_STATUS.has(r.status)) return true
-        if (DEAD_PATTERN.test(r.url)) return true
-        // 200 on the original URL = alive
-        return false
-      }
-      return false
-    } catch { return false }
-    finally { clearTimeout(timer) }
-  }
-
-  // Process in batches of 20 concurrent requests
   const deadIds: number[] = []
   const BATCH = 20
   for (let i = 0; i < leads.length; i += BATCH) {
@@ -343,6 +354,13 @@ export async function checkDeadLinksAction() {
 
   revalidatePath('/jobs')
   return { ok: true as const, dead: deadIds.length, checked: leads.length }
+}
+
+// Inline HTML escaper for AI-extracted job fields used in email templates.
+// Prevents stored XSS when the draft htmlBody is later rendered in a browser.
+function escHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 }
 
 // ── Per-step actions used by client-side progress orchestration ──────────────
@@ -403,28 +421,13 @@ export async function getLeadsWithLinksAction() {
 export async function checkLinksBatchAction(leadIds: number[]) {
   const u = await requireUser()
   if (!leadIds.length) return { dead: 0 }
+  // Hard cap per call — prevents the client from sending an unbounded payload.
+  if (leadIds.length > 50) return { error: 'Batch too large — max 50 IDs' }
+  if (!rateLimit(`dead-batch:${u.id}`, 60, 60_000)) return { error: 'Too many checks — slow down' }
 
   const leads = await db.select({ id: jobLeads.id, link: jobLeads.link })
     .from(jobLeads)
     .where(and(eq(jobLeads.userId, u.id), inArray(jobLeads.id, leadIds)))
-
-  const DEAD_STATUS  = new Set([404, 410, 400])
-  const DEAD_PATTERN = /(\/404|not.found|job.not.available|position.closed|listing.expired|no.longer.available|job.filled|job.closed)/i
-  const CHECK_UA     = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36'
-
-  async function isDead(url: string): Promise<boolean> {
-    const ctrl = new AbortController()
-    const timer = setTimeout(() => ctrl.abort(), 6_000)
-    try {
-      const r = await fetch(url, {
-        method: 'HEAD', signal: ctrl.signal,
-        headers: { 'User-Agent': CHECK_UA }, redirect: 'follow',
-      }).catch(() => null)
-      if (r && (DEAD_STATUS.has(r.status) || DEAD_PATTERN.test(r.url))) return true
-      return false
-    } catch { return false }
-    finally { clearTimeout(timer) }
-  }
 
   const deadIds: number[] = []
   await Promise.all(leads.map(async (l) => {
