@@ -34,9 +34,13 @@ export async function addJobSourceAction(input: z.infer<typeof AddSchema>) {
     return { error: `URL rejected: ${sanity.error}` }
   }
   try {
-    await svc.createSource(u.id, parsed.data.label || parsed.data.url, parsed.data.url, parsed.data.keywords ?? '')
+    const source = await svc.createSource(u.id, parsed.data.label || parsed.data.url, parsed.data.url, parsed.data.keywords ?? '')
+    // Immediately fetch the new source so the user sees jobs right away
+    // instead of waiting for the next cron tick (up to 12 h away).
+    // We await so the UI can show "X jobs found" in the success toast.
+    const tick = await svc.tickSource(source).catch(() => ({ added: 0, status: 'error' }))
     revalidatePath('/jobs')
-    return { ok: true as const }
+    return { ok: true as const, added: tick.added }
   } catch (e) {
     return actionError(e, 'Add failed')
   }

@@ -107,7 +107,7 @@ function isPrivateIp(host: string): boolean {
   return false
 }
 
-export type FetchResult = { ok: true; text: string; truncated: boolean } | { ok: false; error: string }
+export type FetchResult = { ok: true; text: string; rawHtml: string; truncated: boolean } | { ok: false; error: string }
 
 /**
  * Cheap URL shape + SSRF validator. Returns the cleaned URL (with
@@ -206,7 +206,9 @@ export async function fetchForAi(rawUrl: string): Promise<FetchResult> {
     for (const c of chunks) { buf.set(c, off); off += c.byteLength }
     const raw = new TextDecoder('utf-8').decode(buf)
     const text = stripHtml(raw).slice(0, 30_000)
-    return { ok: true, text, truncated }
+    // rawHtml is capped at 200 KB — more than enough for any JSON-LD
+    // scripts (always in <head>) while avoiding huge in-memory strings.
+    return { ok: true, text, rawHtml: raw.slice(0, 200_000), truncated }
   } catch (e) {
     if (e instanceof Error && e.name === 'AbortError') return { ok: false, error: 'Timed out' }
     return { ok: false, error: e instanceof Error ? e.message.slice(0, 200) : 'Fetch failed' }

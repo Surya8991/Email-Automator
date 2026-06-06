@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm'
 import { db } from '@/server/db/client'
 import { jobSources, jobLeads, type JobSource, type JobLead } from '@/server/db/schema'
 import { fetchForAi } from './ai-generate'
@@ -26,6 +26,9 @@ const MAX_NEW_PER_TICK = 50       // ongoing non-Naukri cap per tick
 const NAUKRI_PER_PAGE = 100       // results per Naukri API page (their max)
 const NAUKRI_FIRST_PAGES = 5      // first fetch: 5 pages × 100 = 500
 const NAUKRI_TICK_PAGES = 1       // ongoing: 1 page × 100 = 100
+// Sources are skipped by tickAll if fetched within this window.
+// Manual refresh (tickSourceById) always bypasses this.
+const FETCH_INTERVAL_MS = 12 * 60 * 60 * 1_000 // 12 hours
 
 export async function listSources(userId: string): Promise<JobSource[]> {
   return db.select().from(jobSources).where(eq(jobSources.userId, userId)).orderBy(desc(jobSources.id))
@@ -443,6 +446,198 @@ async function fetchNaukriApi(url: string, pages: number): Promise<ExtractedJob[
   return results
 }
 
+// ── JSON-LD structured data extractor ───────────────────────────────
+// Most modern job boards (LinkedIn, Glassdoor, company pages) embed
+// schema.org JobPosting objects in <script type="application/ld+json">
+// for Google Jobs indexing. Parsing this is zero-cost, zero-AI, and
+// highly structured — title/company/location/salary are explicit fields.
+
+function extractJsonLd(html: string): ExtractedJob[] {
+  const results: ExtractedJob[] = []
+  const scriptRe = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi
+  let m: RegExpExecArray | null
+  while ((m = scriptRe.exec(html)) !== null) {
+    try {
+      const data = JSON.parse((m[1] ?? '').trim()) as unknown
+      const items: unknown[] = Array.isArray(data)
+        ? data
+        : (data as Record<string, unknown>)['@graph']
+          ? ((data as Record<string, unknown>)['@graph'] as unknown[])
+          : [data]
+      for (const item of items) {
+        if (typeof item !== 'object' || item === null) continue
+        const obj = item as Record<string, unknown>
+        const type = obj['@type']
+        const isJobPosting =
+          type === 'JobPosting' ||
+          (Array.isArray(type) && (type as string[]).includes('JobPosting'))
+        if (!isJobPosting) continue
+        const title = String(obj.title ?? obj.name ?? '').trim()
+        if (!title) continue
+        let company = ''
+        if (typeof obj.hiringOrganization === 'object' && obj.hiringOrganization !== null) {
+          company = String((obj.hiringOrganization as Record<string, unknown>).name ?? '').trim()
+        }
+        const link = String(obj.url ?? obj.sameAs ?? '').trim()
+        let location = ''
+        if (typeof obj.jobLocation === 'object' && obj.jobLocation !== null) {
+          const loc = obj.jobLocation as Record<string, unknown>
+          if (typeof loc.address === 'object' && loc.address !== null) {
+            const addr = loc.address as Record<string, unknown>
+            location = String(addr.addressLocality ?? addr.addressRegion ?? addr.addressCountry ?? '').trim()
+          } else {
+            location = String(loc.name ?? '').trim()
+          }
+        } else if (typeof obj.jobLocation === 'string') {
+          location = obj.jobLocation
+        }
+        let salary = ''
+        if (typeof obj.baseSalary === 'object' && obj.baseSalary !== null) {
+          const sal = obj.baseSalary as Record<string, unknown>
+          const cur = String(sal.currency ?? '').trim()
+          if (typeof sal.value === 'object' && sal.value !== null) {
+            const v = sal.value as Record<string, unknown>
+            salary = v.minValue && v.maxValue
+              ? `${v.minValue}–${v.maxValue} ${cur}`.trim()
+              : String(v.value ?? '').trim()
+          }
+        }
+        const description = String(obj.description ?? '').replace(/<[^>]+>/g, '').trim().slice(0, 400)
+        const postedStr = String(obj.datePosted ?? '').trim()
+        let postedAt: Date | null = null
+        if (postedStr) { const d = new Date(postedStr); if (!isNaN(d.getTime())) postedAt = d }
+        results.push({
+          title: title.slice(0, 200), company: company.slice(0, 120),
+          link: link.slice(0, 600), location: location.slice(0, 120),
+          salary: salary.slice(0, 120), description, postedAt,
+        })
+      }
+    } catch { /* malformed JSON or wrong shape — skip */ }
+  }
+  return results
+}
+
+// ── ATS (Applicant Tracking System) API fetchers ─────────────────────
+// Lever, Greenhouse, Ashby, and SmartRecruiters all expose public
+// unauthenticated JSON APIs used by their own embed widgets. These are
+// far more reliable than HTML scraping or AI extraction because:
+//   • Structured fields — title, company, location, salary, link
+//   • No bot blocking (they're public APIs, not pages)
+//   • Zero AI tokens consumed
+
+type AtsType = 'lever' | 'greenhouse' | 'ashby' | 'smartrecruiters'
+function detectAts(url: string): { type: AtsType; company: string } | null {
+  try {
+    const u = new URL(url)
+    const host = u.hostname.toLowerCase()
+    const seg = u.pathname.replace(/^\/|\/$/g, '').split('/')[0] ?? ''
+    if (!seg) return null
+    if (host === 'jobs.lever.co' || host === 'lever.co') return { type: 'lever', company: seg }
+    if (host === 'boards.greenhouse.io' || host === 'job-boards.greenhouse.io') return { type: 'greenhouse', company: seg }
+    if (host === 'jobs.ashbyhq.com') return { type: 'ashby', company: seg }
+    if (host === 'careers.smartrecruiters.com') return { type: 'smartrecruiters', company: seg }
+  } catch { /* invalid URL */ }
+  return null
+}
+
+async function fetchAtsApi(ats: { type: AtsType; company: string }): Promise<ExtractedJob[]> {
+  const { type, company } = ats
+  const c = encodeURIComponent(company)
+
+  if (type === 'lever') {
+    const res = await fetch(`https://api.lever.co/v0/postings/${c}?mode=json`, {
+      headers: { 'User-Agent': RSS_UA, Accept: 'application/json' },
+    }).catch(() => null)
+    if (!res?.ok) return []
+    const data = (await res.json()) as Array<{
+      text?: string; hostedUrl?: string; descriptionPlain?: string; createdAt?: number
+      categories?: { location?: string; team?: string }
+    }>
+    return data.slice(0, 100).map((j) => ({
+      title: String(j.text ?? '').trim().slice(0, 200),
+      company,
+      link: String(j.hostedUrl ?? '').trim().slice(0, 600),
+      location: String(j.categories?.location ?? '').trim().slice(0, 120),
+      salary: '',
+      description: String(j.descriptionPlain ?? '').trim().slice(0, 400),
+      postedAt: j.createdAt ? new Date(j.createdAt) : null,
+    }))
+  }
+
+  if (type === 'greenhouse') {
+    const res = await fetch(`https://boards-api.greenhouse.io/v1/boards/${c}/jobs?content=true`, {
+      headers: { 'User-Agent': RSS_UA, Accept: 'application/json' },
+    }).catch(() => null)
+    if (!res?.ok) return []
+    const data = (await res.json()) as {
+      jobs?: Array<{
+        title?: string; absolute_url?: string; updated_at?: string; content?: string
+        offices?: Array<{ name?: string }>
+      }>
+    }
+    return (data.jobs ?? []).slice(0, 100).map((j) => ({
+      title: String(j.title ?? '').trim().slice(0, 200),
+      company,
+      link: String(j.absolute_url ?? '').trim().slice(0, 600),
+      location: String(j.offices?.[0]?.name ?? '').trim().slice(0, 120),
+      salary: '',
+      description: String(j.content ?? '').replace(/<[^>]+>/g, '').trim().slice(0, 400),
+      postedAt: j.updated_at ? new Date(j.updated_at) : null,
+    }))
+  }
+
+  if (type === 'ashby') {
+    const res = await fetch(
+      `https://api.ashbyhq.com/posting-public/v1/job-board?organizationHostedJobsPageName=${c}`,
+      { headers: { 'User-Agent': RSS_UA, Accept: 'application/json' } },
+    ).catch(() => null)
+    if (!res?.ok) return []
+    const data = (await res.json()) as {
+      jobBoard?: {
+        jobPostings?: Array<{
+          title?: string; locationName?: string; externalLink?: string
+          descriptionHtml?: string; publishedDate?: string; teamName?: string
+        }>
+      }
+    }
+    return (data.jobBoard?.jobPostings ?? []).slice(0, 100).map((j) => ({
+      title: String(j.title ?? '').trim().slice(0, 200),
+      company,
+      link: String(j.externalLink ?? '').trim().slice(0, 600),
+      location: String(j.locationName ?? '').trim().slice(0, 120),
+      salary: '',
+      description: String(j.descriptionHtml ?? '').replace(/<[^>]+>/g, '').trim().slice(0, 400),
+      postedAt: j.publishedDate ? new Date(j.publishedDate) : null,
+    }))
+  }
+
+  if (type === 'smartrecruiters') {
+    const res = await fetch(
+      `https://api.smartrecruiters.com/v1/companies/${c}/postings?limit=100&status=PUBLIC`,
+      { headers: { 'User-Agent': RSS_UA, Accept: 'application/json' } },
+    ).catch(() => null)
+    if (!res?.ok) return []
+    const data = (await res.json()) as {
+      content?: Array<{
+        name?: string; ref?: string; releasedDate?: string
+        location?: { city?: string; country?: string }
+        department?: { label?: string }
+      }>
+    }
+    return (data.content ?? []).slice(0, 100).map((j) => ({
+      title: String(j.name ?? '').trim().slice(0, 200),
+      company,
+      link: j.ref ? `https://careers.smartrecruiters.com/${company}/${j.ref}` : '',
+      location: [j.location?.city, j.location?.country].filter(Boolean).join(', ').slice(0, 120),
+      salary: '',
+      description: String(j.department?.label ?? '').trim().slice(0, 400),
+      postedAt: j.releasedDate ? new Date(j.releasedDate) : null,
+    }))
+  }
+
+  return []
+}
+
 /**
  * Stable fingerprint for dedupe. Title + company, lowercased + trimmed.
  * Two listings with the same title but different company are treated
@@ -495,7 +690,7 @@ export async function tickSource(source: JobSource): Promise<{ added: number; st
   const skipKwFilter = isNaukri || isRss || isRemoteOk || urlAlreadyFiltered
 
   try {
-    let jobs: ExtractedJob[]
+    let jobs: ExtractedJob[] = []
 
     if (isNaukri) {
       // Bypass HTML — use Naukri's internal JSON search API.
@@ -507,15 +702,35 @@ export async function tickSource(source: JobSource): Promise<{ added: number; st
       // Remote OK public JSON API.
       jobs = await fetchRemoteOk(source.url)
     } else {
-      // Generic: HTTP fetch → strip HTML → AI extraction.
-      const fetched = await fetchForAi(source.url)
-      if (!fetched.ok) {
-        await db.update(jobSources).set({
-          lastFetchedAt: Date.now(), lastStatus: 'fetch-failed', lastError: fetched.error.slice(0, 240),
-        }).where(eq(jobSources.id, source.id))
-        return { added: 0, status: 'fetch-failed', error: fetched.error }
+      // Generic source — try structured methods before falling back to AI.
+      // Priority: ATS public API → JSON-LD in HTML → AI extraction.
+
+      // 1. ATS API (Lever / Greenhouse / Ashby / SmartRecruiters)
+      //    Structured JSON, zero AI tokens, no bot blocking.
+      const ats = detectAts(source.url)
+      if (ats) {
+        jobs = await fetchAtsApi(ats)
       }
-      jobs = await aiExtractJobs(source.userId, fetched.text)
+
+      if (jobs.length === 0) {
+        // 2 + 3. Fetch HTML then try JSON-LD first, AI as last resort.
+        const fetched = await fetchForAi(source.url)
+        if (!fetched.ok) {
+          await db.update(jobSources).set({
+            lastFetchedAt: Date.now(), lastStatus: 'fetch-failed', lastError: fetched.error.slice(0, 240),
+          }).where(eq(jobSources.id, source.id))
+          return { added: 0, status: 'fetch-failed', error: fetched.error }
+        }
+
+        // 2. JSON-LD schema.org/JobPosting — free, instant, covers most
+        //    modern boards (LinkedIn, Glassdoor, company career pages).
+        jobs = extractJsonLd(fetched.rawHtml)
+
+        // 3. AI extraction — last resort for boards without structured data.
+        if (jobs.length === 0) {
+          jobs = await aiExtractJobs(source.userId, fetched.text)
+        }
+      }
     }
 
     // First fetch: take everything extracted. Ongoing: cap per tick.
@@ -572,16 +787,21 @@ export async function tickSource(source: JobSource): Promise<{ added: number; st
 }
 
 /**
- * Run one tick across every active source for every user. Designed
- * to be called from the /api/cron/job-tracker endpoint (gated by
- * CRON_SECRET) every ~hour.
+ * Run one tick across every active source for every user. Called from
+ * the /api/cron/job-tracker endpoint every ~hour. Skips sources that
+ * were successfully fetched within FETCH_INTERVAL_MS (12 h) so each
+ * source is refreshed at most twice a day regardless of cron frequency.
  *
- * Bounded by the per-source MAX_NEW_PER_TICK + a global LIMIT here so
- * a single cron invocation can't drag forever on a Vercel function.
+ * Manual refresh (tickSourceById / refreshAllForUserAction) bypasses
+ * this cooldown — the user explicitly asked for a fresh pull.
  */
 export async function tickAll(limit = 40): Promise<{ scanned: number; addedTotal: number }> {
+  const cutoff = Date.now() - FETCH_INTERVAL_MS
   const sources = await db.select().from(jobSources)
-    .where(eq(jobSources.active, true))
+    .where(and(
+      eq(jobSources.active, true),
+      or(isNull(jobSources.lastFetchedAt), lt(jobSources.lastFetchedAt, cutoff)),
+    ))
     .limit(limit)
   let addedTotal = 0
   for (const s of sources) {

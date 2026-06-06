@@ -193,7 +193,12 @@ function AddSourceDialog() {
     start(async () => {
       const r = await addJobSourceAction({ label: label.trim() || url, url, keywords })
       if ('error' in r && r.error) { toast.error(r.error); return }
-      toast.success('Source added — the cron will pull jobs on the next hourly tick.')
+      const n = ('added' in r && typeof r.added === 'number') ? r.added : 0
+      toast.success(
+        n > 0
+          ? `Source added — ${n} job${n === 1 ? '' : 's'} pulled immediately.`
+          : 'Source added — jobs will appear after the first fetch.'
+      )
       setOpen(false); reset(); router.refresh()
     })
   }
