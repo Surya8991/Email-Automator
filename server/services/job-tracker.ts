@@ -211,8 +211,12 @@ export async function tickSource(source: JobSource): Promise<{ added: number; st
       return { added: 0, status: 'fetch-failed', error: fetched.error }
     }
     const jobs = await aiExtractJobs(source.userId, fetched.text)
+    // First-ever fetch: pull everything the AI found (no per-tick cap).
+    // Subsequent ticks: cap at MAX_NEW_PER_TICK to avoid long-running fns.
+    const isFirstFetch = !source.lastFetchedAt
+    const batchCap = isFirstFetch ? jobs.length : MAX_NEW_PER_TICK
     let added = 0
-    for (const j of jobs.slice(0, MAX_NEW_PER_TICK)) {
+    for (const j of jobs.slice(0, batchCap)) {
       if (!keywordsMatch(j.title, j.company ?? '', source.keywords)) continue
       const fp = fingerprintOf(j.title, j.company ?? '')
       try {
