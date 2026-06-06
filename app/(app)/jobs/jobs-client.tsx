@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import {
   Plus, RefreshCw, Trash2, ExternalLink, Bookmark, Briefcase, CheckCircle2, XCircle, Building2,
   Search, Download, MailPlus, Pause, Play, Pencil, RefreshCcw, Archive, Clock,
-  MapPin, IndianRupee, CalendarDays, Tag, Eye, AlertTriangle, Zap, RotateCcw,
+  MapPin, IndianRupee, CalendarDays, Tag, Eye, AlertTriangle, Zap, RotateCcw, ChevronDown,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -23,6 +23,7 @@ import {
   getActiveSourcesAction, tickSingleSourceAction,
   getLeadsWithLinksAction, checkLinksBatchAction,
   deleteJobLeadAction, bulkDeleteJobLeadsAction,
+  pruneLeadsByAgeAction, countLeadsByAgeAction,
 } from '@/server/actions/job-tracker'
 import { JobPresetPicker } from './preset-picker'
 
@@ -937,7 +938,11 @@ function LeadsTable({
   const [sourceFilter, setSourceFilter] = useState<number | null>(null)
   const [companyFilter, setCompanyFilter] = useState('')
   const [normLocFilter, setNormLocFilter] = useState('')   // uses locationNorm (normalized city)
-  const [sort, setSort] = useState<'newest' | 'oldest' | 'company' | 'salary'>('newest')
+  // 'marketing-first' = marketing/DM roles pinned to top, then by newest.
+  // Default for the New tab (where triage happens) so DM roles are always visible.
+  const [sort, setSort] = useState<'marketing-first' | 'newest' | 'oldest' | 'company' | 'salary'>(
+    status === 'new' ? 'marketing-first' : 'newest'
+  )
   // 'all' | 'marketing' | 'other' — splits leads by role category.
   const [roleFilter, setRoleFilter] = useState<'all' | 'marketing' | 'other'>('all')
   // Remote-scope multi-select chip filter. Empty set = "any" (don't filter).
@@ -954,6 +959,11 @@ function LeadsTable({
   // Per-row + bulk delete confirmation state (no browser confirm()).
   const [confirmDeleteLeadId, setConfirmDeleteLeadId] = useState<number | null>(null)
   const [confirmDeleteBulk, setConfirmDeleteBulk] = useState(false)
+  // Delete-by-age: null = hidden, number = days selected, awaiting confirm.
+  const [pruneAge, setPruneAge] = useState<number | null>(null)
+  const [pruneCount, setPruneCount] = useState<number | null>(null)
+  const [pruneMenuOpen, setPruneMenuOpen] = useState(false)
+  const [pruning, setPruning] = useState(false)
 
   const companies = useMemo(() =>
     [...new Set(leads.map((l) => l.company).filter(Boolean))].sort(), [leads])
@@ -1002,11 +1012,21 @@ function LeadsTable({
       decodeEntities(l.description).toLowerCase().includes(needle)
     ))
     const sorted = [...out]
-    // Default: newest first (by seenAt — when we first saw the lead in the DB).
-    if (sort === 'newest') sorted.sort((a, b) => +new Date(b.seenAt) - +new Date(a.seenAt))
-    else if (sort === 'oldest') sorted.sort((a, b) => +new Date(a.seenAt) - +new Date(b.seenAt))
-    else if (sort === 'company') sorted.sort((a, b) => a.company.localeCompare(b.company))
-    else if (sort === 'salary') {
+    if (sort === 'marketing-first') {
+      // Marketing/DM roles pinned to top (newest within group), then others (newest).
+      sorted.sort((a, b) => {
+        const am = isMarketingRole(a.title) ? 0 : 1
+        const bm = isMarketingRole(b.title) ? 0 : 1
+        if (am !== bm) return am - bm
+        return +new Date(b.seenAt) - +new Date(a.seenAt)
+      })
+    } else if (sort === 'newest') {
+      sorted.sort((a, b) => +new Date(b.seenAt) - +new Date(a.seenAt))
+    } else if (sort === 'oldest') {
+      sorted.sort((a, b) => +new Date(a.seenAt) - +new Date(b.seenAt))
+    } else if (sort === 'company') {
+      sorted.sort((a, b) => a.company.localeCompare(b.company))
+    } else if (sort === 'salary') {
       sorted.sort((a, b) => {
         const aVal = Math.max(a.salaryMin ?? -1, a.salaryMax ?? -1)
         const bVal = Math.max(b.salaryMin ?? -1, b.salaryMax ?? -1)
@@ -1017,6 +1037,16 @@ function LeadsTable({
   }, [leads, q, sourceFilter, companyFilter, normLocFilter, sort, remoteScopes, minSalary, postedWithin, roleFilter])
 
   useEffect(() => { setPage(1) }, [q, sourceFilter, companyFilter, normLocFilter, sort, remoteScopes, minSalary, postedWithin, roleFilter])
+  // Close the prune dropdown when clicking outside it.
+  useEffect(() => {
+    if (!pruneMenuOpen) return
+    function handler(e: MouseEvent) {
+      const target = e.target as HTMLElement
+      if (!target.closest('[data-prune-menu]')) setPruneMenuOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [pruneMenuOpen])
 
   // Per-crossKey occurrence count → drives the "Seen on N boards" chip.
   // Only counts when crossKey is non-empty (titleless / companyless rows
@@ -1108,12 +1138,78 @@ function LeadsTable({
         <span className="ml-auto text-xs text-muted-foreground">
           {filtered.length !== leads.length ? <><strong>{filtered.length}</strong> of {leads.length}</> : <><strong>{leads.length}</strong> {leads.length === 1 ? 'lead' : 'leads'}</>}
         </span>
+        {/* Delete-by-age dropdown — only shows for new/ignored where pruning makes sense */}
+        {(status === 'new' || status === 'ignored') && leads.length > 0 ? (
+          <div className="relative" data-prune-menu>
+            <button
+              type="button"
+              disabled={pruning}
+              onClick={() => setPruneMenuOpen((v) => !v)}
+              className="flex items-center gap-1 h-7 rounded-md border border-destructive/30 bg-destructive/5 px-2 text-[11px] font-medium text-destructive hover:bg-destructive/10 ea-transition disabled:opacity-40"
+              title="Delete new/ignored leads older than a chosen age"
+            >
+              <Trash2 className="h-3 w-3" />
+              Delete older than…
+              <ChevronDown className="h-3 w-3" />
+            </button>
+            {pruneMenuOpen ? (
+              <div className="absolute right-0 top-8 z-50 min-w-[160px] rounded-md border bg-popover shadow-lg py-1 text-xs">
+                {([
+                  [7,  '7 days'],
+                  [14, '2 weeks'],
+                  [30, '1 month'],
+                  [60, '2 months'],
+                ] as [number, string][]).map(([days, label]) => (
+                  <button key={days} type="button"
+                    className="w-full px-3 py-1.5 text-left hover:bg-muted ea-transition text-destructive"
+                    onClick={async () => {
+                      setPruneMenuOpen(false)
+                      const r = await countLeadsByAgeAction(days)
+                      setPruneCount(r.count)
+                      setPruneAge(days)
+                    }}>
+                    &gt; {label} ({leads.filter(l =>
+                      new Date(l.seenAt).getTime() < Date.now() - days * 24 * 60 * 60 * 1_000
+                    ).length} leads)
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
         <Button variant="outline" size="sm" asChild>
           <a href={`/api/jobs/export?status=${status}`} download>
             <Download className="mr-1 h-3.5 w-3.5" /> CSV
           </a>
         </Button>
       </div>
+
+      {/* Delete-by-age confirmation banner */}
+      {pruneAge !== null ? (
+        <div className="flex flex-wrap items-center gap-3 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-sm">
+          <Trash2 className="h-4 w-4 shrink-0 text-destructive" />
+          <span className="font-medium text-destructive">
+            Delete {pruneCount !== null ? `~${pruneCount}` : '…'} new/ignored leads older than {
+              pruneAge === 7 ? '7 days' : pruneAge === 14 ? '2 weeks' : pruneAge === 30 ? '1 month' : '2 months'
+            }? This cannot be undone.
+          </span>
+          <span className="text-[11px] text-muted-foreground">Saved and Applied leads are not affected.</span>
+          <Button size="sm" variant="destructive" disabled={pruning}
+            onClick={async () => {
+              setPruning(true)
+              const r = await pruneLeadsByAgeAction(pruneAge)
+              setPruning(false)
+              setPruneAge(null); setPruneCount(null)
+              if ('error' in r && r.error) { toast.error(r.error); return }
+              toast.success(`Deleted ${'deleted' in r ? r.deleted : '?'} leads older than ${pruneAge}d`)
+              router.refresh()
+            }}>
+            {pruning ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : 'Yes, delete'}
+          </Button>
+          <Button size="sm" variant="ghost" disabled={pruning}
+            onClick={() => { setPruneAge(null); setPruneCount(null) }}>Cancel</Button>
+        </div>
+      ) : null}
 
       {/* ── Row 1: primary filters ── */}
       <div className="flex flex-wrap items-center gap-2">
@@ -1131,6 +1227,7 @@ function LeadsTable({
         ) : null}
         <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}
           className="h-9 rounded-md border bg-background px-2 text-xs" aria-label="Sort by">
+          <option value="marketing-first">📣 Marketing first</option>
           <option value="newest">Newest first</option>
           <option value="oldest">Oldest first</option>
           <option value="company">Company A–Z</option>
@@ -1330,8 +1427,13 @@ function LeadsTable({
                     className="min-w-0 flex-1 text-left"
                     onClick={() => setDetailLead(l)}
                   >
-                    {/* Title + cross-board duplicate badge */}
+                    {/* Title + role badge + cross-board duplicate badge */}
                     <div className="font-semibold text-sm leading-snug group-hover:text-primary ea-transition">
+                      {isMarketingRole(l.title) ? (
+                        <span className="mr-1.5 inline-flex items-center rounded-full bg-fuchsia-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-fuchsia-600 dark:text-fuchsia-400">
+                          📣 DM
+                        </span>
+                      ) : null}
                       {l.title}
                       {l.description ? null : (
                         <span className="ml-2 text-[10px] font-normal text-muted-foreground italic">no JD</span>

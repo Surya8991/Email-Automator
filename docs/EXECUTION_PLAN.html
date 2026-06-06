@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Job Tracker — Full Execution Plan</title>
+<style>
+  :root { --green:#22c55e; --amber:#f59e0b; --red:#ef4444; --blue:#3b82f6; --purple:#a855f7; --gray:#6b7280; }
+  body { font-family: system-ui, sans-serif; max-width: 1100px; margin: 0 auto; padding: 2rem; background:#0f172a; color:#e2e8f0; }
+  h1 { font-size:2rem; color:#f8fafc; border-bottom:2px solid #334155; padding-bottom:.5rem; }
+  h2 { font-size:1.25rem; color:#94a3b8; margin-top:2rem; }
+  h3 { font-size:1rem; color:#cbd5e1; margin:.75rem 0 .25rem; }
+  .section { background:#1e293b; border:1px solid #334155; border-radius:.75rem; padding:1.25rem 1.5rem; margin:1rem 0; }
+  .badge { display:inline-block; padding:.15rem .6rem; border-radius:9999px; font-size:.7rem; font-weight:700; text-transform:uppercase; margin-right:.35rem; }
+  .critical { background:#7f1d1d; color:#fca5a5; }
+  .high    { background:#78350f; color:#fcd34d; }
+  .medium  { background:#1e3a5f; color:#93c5fd; }
+  .low     { background:#1a2e1a; color:#86efac; }
+  .done    { background:#14532d; color:#4ade80; }
+  .todo    { background:#1e293b; color:#94a3b8; border:1px solid #334155; }
+  .item { display:flex; align-items:flex-start; gap:.75rem; padding:.5rem 0; border-bottom:1px solid #1e293b; }
+  .item:last-child { border-bottom:none; }
+  .cb { width:1.1rem; height:1.1rem; flex-shrink:0; margin-top:.1rem; }
+  .file { font-family:monospace; font-size:.8rem; background:#0f172a; padding:.1rem .4rem; border-radius:.3rem; color:#7dd3fc; }
+  table { width:100%; border-collapse:collapse; font-size:.85rem; }
+  th { background:#334155; padding:.5rem; text-align:left; }
+  td { padding:.4rem .5rem; border-bottom:1px solid #1e293b; }
+  tr:hover td { background:#1e293b55; }
+  .status-done { color:var(--green); }
+  .status-wip  { color:var(--amber); }
+  .status-todo { color:var(--gray); }
+  summary { cursor:pointer; font-weight:600; color:#94a3b8; }
+  details { margin:.5rem 0; }
+  .count { font-size:2rem; font-weight:800; color:#f8fafc; }
+  .kpi { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:1rem; }
+  .kpi-card { background:#1e293b; border:1px solid #334155; border-radius:.5rem; padding:1rem; text-align:center; }
+  .kpi-label { font-size:.75rem; color:#64748b; margin-top:.25rem; }
+</style>
+</head>
+<body>
+
+<h1>🗂️ Job Tracker — Full Execution Plan</h1>
+<p style="color:#64748b">Created: 2026-06-06 · DO NOT DELETE · Updated as items are completed</p>
+
+<!-- KPIs -->
+<div class="kpi" style="margin:1.5rem 0">
+  <div class="kpi-card"><div class="count">1,911</div><div class="kpi-label">Leads in DB</div></div>
+  <div class="kpi-card"><div class="count">261</div><div class="kpi-label">Active Sources</div></div>
+  <div class="kpi-card"><div class="count" style="color:#22c55e">2,000</div><div class="kpi-label">✅ listLeads limit (was 500)</div></div>
+  <div class="kpi-card"><div class="count" style="color:#22c55e">10k</div><div class="kpi-label">listSources cap (unlimited)</div></div>
+  <div class="kpi-card"><div class="count">12</div><div class="kpi-label">Sections to improve</div></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2>🔴 CRITICAL BUGS — Fix First</h2>
+<div class="section">
+  <table>
+    <thead><tr><th>ID</th><th>Issue</th><th>File</th><th>Fix</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>B1</td>
+        <td><strong>UI cap at 500 leads</strong> — DB has 1,911 but page shows max 500 (listLeads limit=500)</td>
+        <td><span class="file">server/services/job-tracker.ts:106</span></td>
+        <td>Raised to 2000; page.tsx explicit 2000; client pagination 100/page</td>
+        <td class="status-done">✅ DONE</td>
+      </tr>
+      <tr>
+        <td>B2</td>
+        <td><strong>Sources count shows 99 not 261</strong> — Stats bar queries with old limit or stale cache</td>
+        <td><span class="file">app/(app)/jobs/page.tsx</span></td>
+        <td>listSources already has no limit — stale Vercel cache; will fix on next deploy</td>
+        <td class="status-done">✅ VERIFIED — no limit in listSources query</td>
+      </tr>
+      <tr>
+        <td>B3</td>
+        <td><strong>Source filter shows "0 of 422"</strong> — selecting a source with 0 leads shows confusing empty state instead of helpful message</td>
+        <td><span class="file">jobs-client.tsx</span></td>
+        <td>Better empty state: "This source has no leads yet — try Fetch new"</td>
+        <td class="status-todo">☐ TODO</td>
+      </tr>
+      <tr>
+        <td>B4</td>
+        <td><strong>Full refresh blocks; no "cancel" option</strong></td>
+        <td><span class="file">jobs-client.tsx + server actions</span></td>
+        <td>Add cancel/abort signal, or at least a dismiss on the progress bar</td>
+        <td class="status-todo">☐ TODO</td>
+      </tr>
+      <tr>
+        <td>B5</td>
+        <td><strong>Naukri / Foundit / Indeed IN always return 0raw</strong> — blocked without GROQ_API_KEY</td>
+        <td><span class="file">server/services/job-adapters/naukri.ts</span></td>
+        <td>Try alternate Naukri API endpoint with updated cookies headers; add RSS fallback</td>
+        <td class="status-todo">☐ TODO</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2>🟡 HIGH PRIORITY — New Features</h2>
+
+<div class="section">
+  <h3>F1: Delete Leads by Age Buttons ✅ DONE</h3>
+  <span class="badge done">DONE</span>
+  <p>Dropdown button "🗑 Delete older than…" in role tabs bar: <strong>&gt;7 days · &gt;2 weeks · &gt;1 month · &gt;2 months</strong></p>
+  <div class="item"><input type="checkbox" class="cb" checked><div>✅ <code>pruneLeadsByAgeAction(days)</code> + <code>countLeadsByAgeAction(days)</code> — rate-limited 3/min, only deletes new/ignored</div></div>
+  <div class="item"><input type="checkbox" class="cb" checked><div>✅ Dropdown with per-option lead count preview (client-side fast count)</div></div>
+  <div class="item"><input type="checkbox" class="cb" checked><div>✅ Confirm banner with server-side exact count before executing</div></div>
+  <p><strong>Files:</strong> <span class="file">server/actions/job-tracker.ts</span> · <span class="file">jobs-client.tsx</span></p>
+</div>
+
+<div class="section">
+  <h3>NEW: Marketing &amp; DM Priority Sort ✅ DONE</h3>
+  <span class="badge done">DONE</span>
+  <p>Marketing/DM roles pinned to top of the New tab by default.</p>
+  <div class="item"><input type="checkbox" class="cb" checked><div>✅ Added <code>marketing-first</code> sort option — marketing roles first (newest within group), then others (newest)</div></div>
+  <div class="item"><input type="checkbox" class="cb" checked><div>✅ Default sort on New tab is now <code>marketing-first</code> instead of <code>newest</code></div></div>
+  <div class="item"><input type="checkbox" class="cb" checked><div>✅ 📣 DM badge on each marketing lead card title</div></div>
+  <div class="item"><input type="checkbox" class="cb" checked><div>✅ listLeads limit raised 500 → 2000; page.tsx uses explicit 2000 for all statuses</div></div>
+</div>
+
+<div class="section">
+  <h3>F2: Smart Fetch Logic (Fetch New → Auto-retry failed)</h3>
+  <span class="badge high">HIGH</span>
+  <p>Current: "Fetch new" skips sources fetched <12h ago. "Full refresh" resets all timestamps.</p>
+  <p>New: <strong>Smart Fetch</strong> = Fetch New (pass 1, all unfetched) → when done, auto-trigger pass 2 that retries sources that returned errors or 0raw this tick.</p>
+  <div class="item"><input type="checkbox" class="cb"><div>Add <code>tickSmartAction()</code>: runs tickAll normally, then re-runs failed/0raw sources once more</div></div>
+  <div class="item"><input type="checkbox" class="cb"><div>UI: replace "Fetch new" + "Full refresh" with "Smart Fetch" primary button + "Force re-fetch all" (full refresh stays as secondary)</div></div>
+  <div class="item"><input type="checkbox" class="cb"><div>Progress bar shows two phases: "Pass 1: N/M sources" → "Pass 2 (retry): N/M sources"</div></div>
+</div>
+
+<div class="section">
+  <h3>F3: Fuzzy Deduplication of Similar Leads</h3>
+  <span class="badge high">HIGH</span>
+  <p>Beyond SHA cross_key, detect near-duplicate leads: same role slightly differently titled at same company.</p>
+  <div class="item"><input type="checkbox" class="cb"><div>Add <code>deduplicateSimilarLeadsAction(userId)</code>: finds leads with same company + normalizedTitle similarity >85% → keeps the one with most info (link, desc, salary)</div></div>
+  <div class="item"><input type="checkbox" class="cb"><div>Add "Run dedup" button in Sources tab header (admin-gated, shows count before running)</div></div>
+  <div class="item"><input type="checkbox" class="cb"><div>Auto-dedup on every cron tick for new rows</div></div>
+  <div class="item"><input type="checkbox" class="cb"><div>Mark soft-dupes with a "Duplicate" chip instead of auto-deleting (safer)</div></div>
+</div>
+
+<div class="section">
+  <h3>F4: Job Application Helper Features (per tab)</h3>
+  <span class="badge high">HIGH</span>
+  <details>
+    <summary>New Tab improvements</summary>
+    <div class="item"><input type="checkbox" class="cb"><div>"Apply Now" button → opens link + auto-creates Draft outreach email in one click</div></div>
+    <div class="item"><input type="checkbox" class="cb"><div>Company quick-facts sidebar in detail dialog: Glassdoor rating, HQ, employee count (via Clearbit logo + Wikipedia)</div></div>
+    <div class="item"><input type="checkbox" class="cb"><div>Skills gap indicator: highlight keywords in JD that match user's resume keywords</div></div>
+    <div class="item"><input type="checkbox" class="cb"><div>"Save + Track" button → moves to Saved and prompts for expected salary / target date</div></div>
+  </details>
+  <details>
+    <summary>Saved Tab improvements</summary>
+    <div class="item"><input type="checkbox" class="cb"><div>Notes field (textarea, auto-save on blur) — already planned, implement now</div></div>
+    <div class="item"><input type="checkbox" class="cb"><div>Follow-up date pill (amber = due, red = overdue) with date picker</div></div>
+    <div class="item"><input type="checkbox" class="cb"><div>Expected salary input per lead (for negotiation tracking)</div></div>
+    <div class="item"><input type="checkbox" class="cb"><div>Interview prep: "Get prep questions" → Groq generates 5 likely interview questions for the role</div></div>
+  </details>
+  <details>
+    <summary>Archive Tab improvements</summary>
+    <div class="item"><input type="checkbox" class="cb"><div>Split Applied / Ignored sub-tabs with counts</div></div>
+    <div class="item"><input type="checkbox" class="cb"><div>Restore to New / Saved buttons</div></div>
+    <div class="item"><input type="checkbox" class="cb"><div>Show days-since-applied counter</div></div>
+    <div class="item"><input type="checkbox" class="cb"><div>Follow-up reminder: amber flag when applied >14 days ago with no update</div></div>
+  </details>
+  <details>
+    <summary>Sources Tab improvements</summary>
+    <div class="item"><input type="checkbox" class="cb"><div>Adapter badge per source row (Greenhouse / Lever / Ashby / Naukri / RSS / AI)</div></div>
+    <div class="item"><input type="checkbox" class="cb"><div>Last fetch status chip + error tooltip</div></div>
+    <div class="item"><input type="checkbox" class="cb"><div>Per-source lead count with a small sparkline</div></div>
+    <div class="item"><input type="checkbox" class="cb"><div>Group sources by type: [India] vs [Remote] vs job boards</div></div>
+    <div class="item"><input type="checkbox" class="cb"><div>"Run dedup" button (admin)</div></div>
+  </details>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2>🔵 MEDIUM — UX Improvements</h2>
+
+<div class="section">
+  <h3>U1: Lead Card UI Improvements</h3>
+  <span class="badge medium">MEDIUM</span>
+  <div class="item"><input type="checkbox" class="cb"><div>Company logo via Clearbit CDN: <code>https://logo.clearbit.com/{domain}</code> — fallback to initials avatar</div></div>
+  <div class="item"><input type="checkbox" class="cb"><div>Color-coded seniority badge (Intern=gray, Junior=blue, Mid=green, Senior=amber, Lead+=red)</div></div>
+  <div class="item"><input type="checkbox" class="cb"><div>Posted-ago relative time: "2 days ago" instead of raw date</div></div>
+  <div class="item"><input type="checkbox" class="cb"><div>Show salary in ₹ equivalent when USD/EUR/GBP (with flag)</div></div>
+  <div class="item"><input type="checkbox" class="cb"><div>Cross-board "Seen on N sources" chip on card (already computed, ensure visible)</div></div>
+  <div class="item"><input type="checkbox" class="cb"><div>Keyboard shortcut: J/K to navigate leads, Enter to open detail, S to save, I to ignore</div></div>
+</div>
+
+<div class="section">
+  <h3>U2: Filter Bar Improvements</h3>
+  <span class="badge medium">MEDIUM</span>
+  <div class="item"><input type="checkbox" class="cb"><div>Role tabs (Marketing/All/Others) live counts update as other filters change</div></div>
+  <div class="item"><input type="checkbox" class="cb"><div>Source filter: group by [India] / [Remote] / Job boards</div></div>
+  <div class="item"><input type="checkbox" class="cb"><div>Seniority chips: Intern / Junior / Mid / Senior / Lead+ (client-side from title)</div></div>
+  <div class="item"><input type="checkbox" class="cb"><div>Quick-filter preset chips: "Remote IN only", "With salary", "Posted this week"</div></div>
+</div>
+
+<div class="section">
+  <h3>U3: Stats Bar Fix</h3>
+  <span class="badge medium">MEDIUM</span>
+  <div class="item"><input type="checkbox" class="cb"><div>Fix "sources 99" → should show 261 (query has limit or counts inactive)</div></div>
+  <div class="item"><input type="checkbox" class="cb"><div>Add "marketing roles" count to stats bar</div></div>
+  <div class="item"><input type="checkbox" class="cb"><div>Add last-fetch timestamp: "Last updated 2h ago"</div></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2>🔒 SECURITY / CODE REVIEW</h2>
+
+<div class="section">
+  <table>
+    <thead><tr><th>ID</th><th>Issue</th><th>Severity</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr><td>S1</td><td>SSRF: external URLs in job links not validated against allowlist before HEAD-check</td><td><span class="badge high">HIGH</span></td><td>Ensure isPublicHttpUrl() blocks private IPs (10.x, 192.168.x, 127.x, metadata endpoints)</td></tr>
+      <tr><td>S2</td><td>Rate limits on server actions are in-memory (lost on cold start/scale-out)</td><td><span class="badge medium">MEDIUM</span></td><td>Move rate limit counters to KV (Vercel KV or upstash) or use edge middleware</td></tr>
+      <tr><td>S3</td><td>Admin migrate endpoint could be triggered by any admin — no idempotency check</td><td><span class="badge low">LOW</span></td><td>Check migration journal state before running; return "already up-to-date" clearly</td></tr>
+      <tr><td>S4</td><td>Description field renders user-supplied HTML via dangerouslySetInnerHTML risk (currently uses text, but ensure no future regression)</td><td><span class="badge medium">MEDIUM</span></td><td>Enforce plaintext-only in stripHtml; add DOMPurify for any future rich-text feature</td></tr>
+      <tr><td>S5</td><td>Job links in detail dialog use target="_blank" without rel="noopener noreferrer"</td><td><span class="badge low">LOW</span></td><td>Add rel="noopener noreferrer" to all external links</td></tr>
+      <tr><td>S6</td><td>Turso auth token visible in .claude/launch.json — should be in .env only</td><td><span class="badge high">HIGH</span></td><td>Remove token from launch.json; use env var reference instead</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2>📚 DOCS TO UPDATE</h2>
+
+<div class="section">
+  <table>
+    <thead><tr><th>File</th><th>What to update</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td><span class="file">README.md</span></td><td>261 sources, new filter features, delete-by-age, smart fetch, dedup</td><td class="status-todo">☐</td></tr>
+      <tr><td><span class="file">AGENTS.md</span></td><td>New source groups [India]/[Remote], add-more-sources.ts script, backfill-normalize.ts</td><td class="status-todo">☐</td></tr>
+      <tr><td><span class="file">FEATURES.md</span></td><td>Mark new shipped features; add role-category tabs, salary presets, posted-within filter</td><td class="status-todo">☐</td></tr>
+      <tr><td><span class="file">DEPLOYMENT.md</span></td><td>Note that listLeads limit raised; new npm scripts (add-more-sources, backfill-normalize)</td><td class="status-todo">☐</td></tr>
+      <tr><td><span class="file">FUTURE_FEATURES.html</span></td><td>Mark shipped items; add fuzzy dedup, smart fetch, delete-by-age to roadmap</td><td class="status-todo">☐</td></tr>
+      <tr><td><span class="file">OPERATOR_TODO.html</span></td><td>New scripts for adding sources, 261 sources note, Vercel env vars check</td><td class="status-todo">☐</td></tr>
+      <tr><td><span class="file">docs/todo.md</span></td><td>Move completed items to Done; add new pending items from this plan</td><td class="status-todo">☐</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2>⚙️ IMPLEMENTATION ORDER</h2>
+
+<div class="section">
+  <ol style="line-height:2">
+    <li><strong>[DONE]</strong> Create this HTML plan file</li>
+    <li>Fix B1: raise listLeads limit 500 → 2000 + check listSources limit (B2)</li>
+    <li>Add F1: Delete leads by age (7d / 2w / 1m / 2m) — server action + UI</li>
+    <li>Add U1: Company logos via Clearbit, seniority badges, relative time, salary conversion</li>
+    <li>Add U3: Fix stats bar counts</li>
+    <li>Fix S5: rel="noopener noreferrer" on all external links</li>
+    <li>Fix S6: Remove Turso token from launch.json</li>
+    <li>Add F3: Fuzzy dedup server action + "Run dedup" button</li>
+    <li>Add F2: Smart fetch logic (2-pass)</li>
+    <li>Add F4: Archive sub-tabs (Applied / Ignored), notes, follow-up dates</li>
+    <li>Add U2: Seniority chips, source grouping in filter</li>
+    <li>Update all docs (README, AGENTS, FEATURES, FUTURE_FEATURES, OPERATOR_TODO)</li>
+    <li>Run db:migrate, type-check, build, commit, push</li>
+  </ol>
+</div>
+
+<footer style="margin-top:3rem; color:#334155; font-size:.8rem; border-top:1px solid #1e293b; padding-top:1rem">
+  Generated 2026-06-06 · Job Tracker Full Overhaul Session · DO NOT DELETE THIS FILE
+</footer>
+</body>
+</html>

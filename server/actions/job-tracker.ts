@@ -1,6 +1,6 @@
 'use server'
 import { z } from 'zod'
-import { and, eq, inArray, ne } from 'drizzle-orm'
+import { and, eq, inArray, lt, ne, sql } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { requireUser } from '@/auth'
 import { db } from '@/server/db/client'
@@ -402,6 +402,47 @@ export async function checkDeadLinksAction() {
 
   revalidatePath('/jobs')
   return { ok: true as const, dead: deadIds.length, checked: leads.length }
+}
+
+/**
+ * Delete new/ignored leads older than `days` days (7 / 14 / 30 / 60).
+ * Only affects new + ignored — saved and applied leads are never auto-pruned.
+ * Rate-limited to 3 calls/min to prevent accidental rapid-fire.
+ */
+export async function pruneLeadsByAgeAction(days: number) {
+  const u = await requireUser()
+  if (!rateLimit(`prune-age:${u.id}`, 3, 60_000)) return { error: 'Slow down — try again in a minute' }
+  const validDays = [7, 14, 30, 60]
+  if (!validDays.includes(days)) return { error: 'Invalid age — pick 7, 14, 30, or 60 days' }
+  const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1_000)
+  const result = await db.delete(jobLeads)
+    .where(and(
+      eq(jobLeads.userId, u.id),
+      inArray(jobLeads.status, ['new', 'ignored']),
+      lt(jobLeads.seenAt, cutoff),
+    ))
+  const deleted = (result as unknown as { rowsAffected?: number }).rowsAffected ?? 0
+  revalidatePath('/jobs')
+  return { ok: true as const, deleted }
+}
+
+/**
+ * Count new/ignored leads older than `days` days — used to show preview
+ * before the user confirms deletion ("This will delete ~N leads").
+ */
+export async function countLeadsByAgeAction(days: number) {
+  const u = await requireUser()
+  const validDays = [7, 14, 30, 60]
+  if (!validDays.includes(days)) return { count: 0 }
+  const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1_000)
+  const result = await db.select({ n: sql<number>`COUNT(*)` })
+    .from(jobLeads)
+    .where(and(
+      eq(jobLeads.userId, u.id),
+      inArray(jobLeads.status, ['new', 'ignored']),
+      lt(jobLeads.seenAt, cutoff),
+    ))
+  return { count: Number(result[0]?.n ?? 0) }
 }
 
 // Inline HTML escaper for AI-extracted job fields used in email templates.
