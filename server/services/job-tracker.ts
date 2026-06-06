@@ -1073,7 +1073,22 @@ export async function tickSource(source: JobSource): Promise<{ added: number; st
  * Manual refresh (tickSourceById / refreshAllForUserAction) bypasses
  * this cooldown — the user explicitly asked for a fresh pull.
  */
-export async function tickAll(limit = 40): Promise<{ scanned: number; addedTotal: number; errors: number }> {
+/**
+ * Delete new/ignored leads older than 30 days across all users.
+ * Saved and applied leads are kept — the user has explicitly acted on those.
+ * Called by tickAll on every cron tick so the table stays trim automatically.
+ */
+export async function pruneOldLeads(): Promise<number> {
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+  const result = await db.delete(jobLeads)
+    .where(and(
+      inArray(jobLeads.status, ['new', 'ignored']),
+      lt(jobLeads.seenAt, cutoff),
+    ))
+  return (result as unknown as { rowsAffected?: number }).rowsAffected ?? 0
+}
+
+export async function tickAll(limit = 40): Promise<{ scanned: number; addedTotal: number; errors: number; pruned: number }> {
   const cutoff = Date.now() - FETCH_INTERVAL_MS
   const sources = await db.select().from(jobSources)
     .where(and(
@@ -1094,7 +1109,10 @@ export async function tickAll(limit = 40): Promise<{ scanned: number; addedTotal
       console.error(`[tickAll] uncaught from source ${s.id}:`, e)
     }
   }
-  return { scanned: sources.length, addedTotal, errors }
+  // Prune stale leads after each cron tick. Silently swallow errors so a
+  // failed prune never blocks source fetches from being recorded.
+  const pruned = await pruneOldLeads().catch(() => 0)
+  return { scanned: sources.length, addedTotal, errors, pruned }
 }
 
 /**
