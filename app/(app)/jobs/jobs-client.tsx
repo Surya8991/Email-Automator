@@ -19,7 +19,7 @@ import {
   bulkDeleteJobSourcesAction, bulkToggleSourceActiveAction,
   refreshJobSourceAction, setJobLeadStatusAction,
   leadToDraftAction, bulkSetJobLeadStatusAction, toggleJobSourceActiveAction,
-  editJobSourceAction, refreshAllForUserAction, validateJobSourceAction,
+  editJobSourceAction, refreshAllForUserAction, fullRefreshAllAction, validateJobSourceAction,
 } from '@/server/actions/job-tracker'
 import { JobPresetPicker } from './preset-picker'
 
@@ -58,18 +58,33 @@ export function JobsClient({
         />
         <div className="flex items-center gap-2">
           {sources.length > 0 ? (
-            <Button
-              variant="outline" size="sm" disabled={pending}
-              onClick={() => start(async () => {
-                const r = await refreshAllForUserAction()
-                if ('error' in r && r.error) { toast.error(r.error); return }
-                if ('addedTotal' in r) toast.success(`Scanned ${r.scanned}, +${r.addedTotal} new`)
-                router.refresh()
-              })}
-              title="Refresh every active source now"
-            >
-              <RefreshCcw className={`mr-1.5 h-3.5 w-3.5 ${pending ? 'animate-spin' : ''}`} /> Refresh all
-            </Button>
+            <>
+              <Button
+                variant="outline" size="sm" disabled={pending}
+                onClick={() => start(async () => {
+                  const r = await refreshAllForUserAction()
+                  if ('error' in r && r.error) { toast.error(r.error); return }
+                  if ('addedTotal' in r) toast.success(`Scanned ${r.scanned}, +${r.addedTotal} new`)
+                  router.refresh()
+                })}
+                title="Refresh every active source now"
+              >
+                <RefreshCcw className={`mr-1.5 h-3.5 w-3.5 ${pending ? 'animate-spin' : ''}`} /> Refresh all
+              </Button>
+              <Button
+                variant="default" size="sm" disabled={pending}
+                onClick={() => start(async () => {
+                  toast.info('Full refresh started — this may take a minute...')
+                  const r = await fullRefreshAllAction()
+                  if ('error' in r && r.error) { toast.error(r.error); return }
+                  if ('addedTotal' in r) toast.success(`Full refresh done — scanned ${r.scanned} sources, +${r.addedTotal} new leads (existing leads enriched)`)
+                  router.refresh()
+                })}
+                title="Re-fetch all sources with first-fetch budget (500 results from Naukri). Enriches existing leads with fuller descriptions, salary, and links."
+              >
+                <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${pending ? 'animate-spin' : ''}`} /> Full refresh
+              </Button>
+            </>
           ) : null}
           <JobPresetPicker />
           <AddSourceDialog />

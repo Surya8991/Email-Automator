@@ -179,6 +179,32 @@ export async function refreshAllForUserAction() {
 }
 
 /**
+ * Full refresh: resets all source timestamps to force first-fetch page
+ * budget (500 Naukri results instead of 100), then re-fetches every active
+ * source. Existing leads get their description/salary/link enriched with
+ * the fuller data; new leads are inserted as usual.
+ */
+export async function fullRefreshAllAction() {
+  const u = await requireUser()
+  if (!rateLimit(`full-refresh:${u.id}`, 1, 5 * 60_000)) return { error: 'Full refresh is rate-limited to once every 5 minutes' }
+  try {
+    await svc.resetSourceTimestamps(u.id)
+    const sources = await svc.listSources(u.id)
+    let addedTotal = 0, enriched = 0, scanned = 0
+    for (const s of sources) {
+      if (!s.active) continue
+      const r = await svc.tickSource(s)
+      addedTotal += r.added
+      scanned++
+    }
+    revalidatePath('/jobs')
+    return { ok: true as const, scanned, addedTotal, enriched }
+  } catch (e) {
+    return actionError(e, 'Full refresh failed')
+  }
+}
+
+/**
  * Convert a job lead into a contact + draft outreach. The user gets
  * a pre-filled draft they can edit and send, plus the company recorded
  * as a contact so future analytics aggregate correctly.

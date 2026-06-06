@@ -1020,7 +1020,21 @@ export async function tickSource(source: JobSource): Promise<{ added: number; st
         })
         added++
       } catch {
-        // Unique-index violation = already seen this lead. Skip.
+        // Unique-index violation = already seen this lead.
+        // Enrich empty/shorter fields when the re-fetch has better data
+        // (e.g. description was previously truncated at 400 chars).
+        const newLink = j.link ?? ''
+        const newSalary = j.salary ?? ''
+        const newLoc = j.location ?? ''
+        const newDesc = j.description ?? ''
+        if (newLink || newSalary || newLoc || newDesc) {
+          await db.update(jobLeads).set({
+            link:     sql`CASE WHEN link = '' THEN ${newLink} ELSE link END`,
+            salary:   sql`CASE WHEN salary = '' THEN ${newSalary} ELSE salary END`,
+            location: sql`CASE WHEN location = '' THEN ${newLoc} ELSE location END`,
+            description: sql`CASE WHEN length(description) < length(${newDesc}) THEN ${newDesc} ELSE description END`,
+          }).where(and(eq(jobLeads.sourceId, source.id), eq(jobLeads.fingerprint, fp)))
+        }
       }
     }
     // Only stamp lastFetchedAt when the source actually returned raw
@@ -1092,6 +1106,18 @@ export async function tickSourceById(userId: string, sourceId: number): Promise<
     .where(and(eq(jobSources.id, sourceId), eq(jobSources.userId, userId)))
   if (!s) return { added: 0, status: 'not-found' }
   return tickSource(s)
+}
+
+/**
+ * Reset lastFetchedAt to null on all active sources for a user so the
+ * next tickSource treats them as first-fetch (larger page budget).
+ * Used by the "Full refresh" action to re-pull + enrich existing leads.
+ */
+export async function resetSourceTimestamps(userId: string): Promise<number> {
+  const result = await db.update(jobSources)
+    .set({ lastFetchedAt: null })
+    .where(and(eq(jobSources.userId, userId), eq(jobSources.active, true)))
+  return (result as unknown as { rowsAffected?: number }).rowsAffected ?? 0
 }
 
 export { fingerprintOf, keywordsMatch, aiExtractJobs as aiExtractJobsPublic, fetchNaukriApi as fetchNaukriApiPublic }
