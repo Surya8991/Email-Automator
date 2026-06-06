@@ -197,6 +197,149 @@ async function aiExtractJobs(userId: string, sourceText: string): Promise<Extrac
   } catch { return [] }
 }
 
+// ── RSS feed parser ──────────────────────────────────────────────────
+// Indeed (and many other boards) block HTML scraping but expose public
+// RSS 2.0 feeds. We parse them with a regex extractor — no DOM/DOMParser
+// available in the edge/server runtime.
+//
+// Indeed RSS format:
+//   https://www.indeed.com/rss?q={role}&l={location}
+//   https://in.indeed.com/rss?q={role}&l={location}
+//
+// TimesJobs and other boards also emit standard RSS so this path covers
+// any URL that returns XML with <item> blocks.
+
+const RSS_UA = 'Mozilla/5.0 (compatible; JobTrackerBot/1.0; +https://emailautomator.app)'
+
+function isRssUrl(url: string): boolean {
+  try {
+    const u = new URL(url)
+    return (
+      u.pathname.endsWith('/rss') ||
+      u.pathname.endsWith('/feed') ||
+      u.pathname.endsWith('.xml') ||
+      u.pathname.endsWith('/rss.xml') ||
+      u.searchParams.has('format') ||
+      /indeed\.com\/rss/i.test(url) ||
+      /timesjobs\.com\/.*rss/i.test(url)
+    )
+  } catch { return false }
+}
+
+function extractCdata(block: string, tag: string): string {
+  const re = new RegExp(
+    `<${tag}[^>]*>(?:<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>|([^<]*))<\\/${tag}>`,
+    'i',
+  )
+  const m = block.match(re)
+  return ((m?.[1] ?? m?.[2]) || '').trim()
+}
+
+async function fetchRss(url: string): Promise<ExtractedJob[]> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 12_000)
+  try {
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': RSS_UA,
+        Accept: 'application/rss+xml, application/xml, text/xml, */*',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+    })
+    if (!res.ok) return []
+    const xml = await res.text()
+    const itemBlocks = xml.match(/<item[\s>][\s\S]*?<\/item>/gi) ?? []
+    return itemBlocks.slice(0, 150).flatMap((item) => {
+      const title = extractCdata(item, 'title')
+      if (!title) return []
+      const link  = extractCdata(item, 'link') || extractCdata(item, 'guid')
+      const pubDate = extractCdata(item, 'pubDate') || extractCdata(item, 'dc:date')
+      const descHtml = extractCdata(item, 'description')
+      const descText = descHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 400)
+
+      // Indeed encodes company + location inside description HTML as
+      // <b>Company Name</b>: Foo ... <b>Location</b>: Bar, City
+      let company = extractCdata(item, 'author') || extractCdata(item, 'dc:creator') || ''
+      let location = ''
+      if (!company) {
+        const cm = descHtml.match(/company[^:]*:\s*<\/b>\s*([^<\n]+)/i) ?? descHtml.match(/<b>([^<]+)<\/b>\s*<br/i)
+        if (cm?.[1]) company = cm[1].trim().slice(0, 120)
+      }
+      const lm = descHtml.match(/location[^:]*:\s*<\/b>\s*([^<\n]+)/i) ?? descHtml.match(/\blocation\b[:\s]+([^<\n,]+)/i)
+      if (lm?.[1]) location = lm[1].trim().slice(0, 120)
+
+      // Salary if present
+      const sm = descHtml.match(/salary[^:]*:\s*<\/b>\s*([^<\n]+)/i)
+      const salary = sm?.[1] ? sm[1].trim().slice(0, 120) : ''
+
+      let postedAt: Date | null = null
+      if (pubDate) { const d = new Date(pubDate); if (!isNaN(d.getTime())) postedAt = d }
+
+      return [{ title: title.slice(0, 200), company, link: link.slice(0, 600), location, salary, description: descText, postedAt }]
+    })
+  } catch { return [] } finally { clearTimeout(timer) }
+}
+
+// ── Remote OK JSON API ───────────────────────────────────────────────
+// remoteok.com/api returns a public JSON array. The first element is a
+// legal notice object (skipped). Each job has title, company, location,
+// description, salary, date, and a url field.
+
+function isRemoteOkUrl(url: string): boolean {
+  return /remoteok\.com/i.test(url)
+}
+
+async function fetchRemoteOk(url: string): Promise<ExtractedJob[]> {
+  // Build the API URL from the human-readable URL.
+  // remoteok.com/remote-seo-jobs → /api?tags=seo
+  // remoteok.com/api?tags=seo  → pass through
+  let apiUrl: string
+  try {
+    const u = new URL(url)
+    if (u.pathname.startsWith('/api')) {
+      apiUrl = url
+    } else {
+      const m = u.pathname.match(/\/remote-(.+?)-jobs/)
+      const tags = m?.[1] ? m[1].replace(/-/g, '+') : ''
+      apiUrl = `https://remoteok.com/api${tags ? `?tags=${encodeURIComponent(tags)}` : ''}`
+    }
+  } catch { return [] }
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 10_000)
+  try {
+    const res = await fetch(apiUrl, {
+      signal: controller.signal,
+      headers: { 'User-Agent': RSS_UA, Accept: 'application/json' },
+    })
+    if (!res.ok) return []
+    const data = (await res.json()) as Array<{
+      position?: string; company?: string; url?: string; location?: string
+      description?: string; salary_min?: number; salary_max?: number; date?: string
+    }>
+    return data
+      .filter((j) => typeof j.position === 'string' && j.position.trim())
+      .slice(0, 100)
+      .map((j) => {
+        let postedAt: Date | null = null
+        if (j.date) { const d = new Date(j.date); if (!isNaN(d.getTime())) postedAt = d }
+        const salary = j.salary_min && j.salary_max
+          ? `$${Math.round(j.salary_min / 1000)}k–$${Math.round(j.salary_max / 1000)}k`
+          : ''
+        return {
+          title: (j.position ?? '').trim().slice(0, 200),
+          company: (j.company ?? '').trim().slice(0, 120),
+          link: (j.url ?? '').trim().slice(0, 600),
+          location: (j.location ?? '').trim().slice(0, 120),
+          description: (j.description ?? '').replace(/<[^>]+>/g, '').trim().slice(0, 400),
+          salary,
+          postedAt,
+        }
+      })
+  } catch { return [] } finally { clearTimeout(timer) }
+}
+
 // ── Naukri direct API ────────────────────────────────────────────────
 // Naukri is JS-rendered so plain HTML fetch returns an empty shell.
 // Their internal search API returns structured JSON without auth.
@@ -301,15 +444,26 @@ function keywordsMatch(title: string, company: string, keywords: string): boolea
  */
 export async function tickSource(source: JobSource): Promise<{ added: number; status: string; error?: string }> {
   const isFirstFetch = !source.lastFetchedAt
-  const isNaukri = /naukri\.com/i.test(source.url)
+  const isNaukri     = /naukri\.com/i.test(source.url)
+  const isRss        = isRssUrl(source.url)
+  const isRemoteOk   = isRemoteOkUrl(source.url)
+  // Sources whose search API already filters by keyword — skip post-fetch keywordsMatch.
+  const skipKwFilter = isNaukri || isRss || isRemoteOk
 
   try {
     let jobs: ExtractedJob[]
 
     if (isNaukri) {
-      // Bypass HTML fetch + AI — use Naukri's JSON search API directly.
+      // Bypass HTML — use Naukri's internal JSON search API.
       jobs = await fetchNaukriApi(source.url, isFirstFetch ? NAUKRI_FIRST_PAGES : NAUKRI_TICK_PAGES)
+    } else if (isRss) {
+      // RSS / Atom feed (Indeed, TimesJobs, etc.). Standard XML, no auth.
+      jobs = await fetchRss(source.url)
+    } else if (isRemoteOk) {
+      // Remote OK public JSON API.
+      jobs = await fetchRemoteOk(source.url)
     } else {
+      // Generic: HTTP fetch → strip HTML → AI extraction.
       const fetched = await fetchForAi(source.url)
       if (!fetched.ok) {
         await db.update(jobSources).set({
@@ -324,12 +478,10 @@ export async function tickSource(source: JobSource): Promise<{ added: number; st
     const batchCap = isFirstFetch ? jobs.length : MAX_NEW_PER_TICK
     let added = 0
     for (const j of jobs.slice(0, batchCap)) {
-      // Naukri: the API search already filters by keyword from the URL slug
-      // (e.g. "performance-marketing-jobs-in-bangalore"). Applying the
-      // keyword filter again removes valid results whose titles don't
-      // literally contain the search term (e.g. "Digital Marketing Lead"
-      // in a Performance Marketing search). Skip it for Naukri.
-      if (!isNaukri && !keywordsMatch(j.title, j.company ?? '', source.keywords)) continue
+      // For keyword-targeted fetchers (Naukri API, RSS, Remote OK) the
+      // source already searched for the right role — skip the post-fetch
+      // keyword filter so broadly-titled but relevant jobs aren't dropped.
+      if (!skipKwFilter && !keywordsMatch(j.title, j.company ?? '', source.keywords)) continue
       const fp = fingerprintOf(j.title, j.company ?? '')
       try {
         await db.insert(jobLeads).values({

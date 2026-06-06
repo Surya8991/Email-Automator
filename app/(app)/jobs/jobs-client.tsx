@@ -110,6 +110,58 @@ type ValidationResult = {
   sample: Array<{ title: string; company: string; location: string; salary: string }>
 }
 
+const SOURCE_EXAMPLES = [
+  {
+    label: 'Naukri — SEO Bangalore',
+    url: 'https://www.naukri.com/seo-jobs-in-bangalore',
+    keywords: 'SEO',
+    note: 'Naukri JSON API — structured, 500 jobs on first fetch',
+    tag: 'Naukri',
+  },
+  {
+    label: 'Naukri — Performance Marketing Hyderabad',
+    url: 'https://www.naukri.com/performance-marketing-jobs-in-hyderabad',
+    keywords: 'Performance Marketing',
+    note: 'Change city slug: -jobs-in-mumbai, -jobs-in-chennai, etc.',
+    tag: 'Naukri',
+  },
+  {
+    label: 'Indeed India — Paid Media Bangalore (RSS)',
+    url: 'https://in.indeed.com/rss?q=paid+media&l=Bangalore',
+    keywords: '',
+    note: 'RSS feed — no bot blocking, real-time postings',
+    tag: 'Indeed',
+  },
+  {
+    label: 'Indeed India — Digital Marketing Mumbai (RSS)',
+    url: 'https://in.indeed.com/rss?q=digital+marketing&l=Mumbai',
+    keywords: '',
+    note: 'Swap q= and l= for any role + city',
+    tag: 'Indeed',
+  },
+  {
+    label: 'Wellfound — Growth India',
+    url: 'https://wellfound.com/jobs?role=growth&location=india',
+    keywords: 'Growth, Marketing',
+    note: 'Startup equity roles — AI-extracted from HTML',
+    tag: 'Startup',
+  },
+  {
+    label: 'Remote OK — SEO (JSON API)',
+    url: 'https://remoteok.com/api?tags=seo',
+    keywords: '',
+    note: 'Public JSON API — global remote roles, fast',
+    tag: 'Remote',
+  },
+  {
+    label: 'Greenhouse company board',
+    url: 'https://boards.greenhouse.io/notion',
+    keywords: 'Marketing, Content, SEO',
+    note: 'Replace /notion with any company slug',
+    tag: 'Company',
+  },
+]
+
 function AddSourceDialog() {
   const router = useRouter()
   const [open, setOpen] = useState(false)
@@ -120,8 +172,13 @@ function AddSourceDialog() {
   const [pending, start] = useTransition()
   const [validating, setValidating] = useState(false)
   const [validation, setValidation] = useState<ValidationResult | null>(null)
+  const [showExamples, setShowExamples] = useState(true)
 
-  function reset() { setLabel(''); setUrl(''); setKeywords(''); setNotes(''); setValidation(null) }
+  function reset() { setLabel(''); setUrl(''); setKeywords(''); setNotes(''); setValidation(null); setShowExamples(true) }
+
+  function applyExample(ex: typeof SOURCE_EXAMPLES[number]) {
+    setUrl(ex.url); setKeywords(ex.keywords); setLabel(ex.label); setValidation(null); setShowExamples(false)
+  }
 
   async function testSource() {
     if (!url.trim()) { toast.error('Enter a URL first'); return }
@@ -129,7 +186,7 @@ function AddSourceDialog() {
     const r = await validateJobSourceAction(url.trim(), keywords.trim())
     setValidating(false)
     if ('error' in r && r.error) { setValidation({ ok: false, total: 0, error: r.error, sample: [] }); return }
-    if ('ok' in r) setValidation({ ok: true, total: r.total, sample: r.sample, error: undefined })
+    if ('ok' in r) setValidation({ ok: true, total: r.total ?? 0, sample: r.sample ?? [], error: undefined })
   }
 
   function submit() {
@@ -154,6 +211,36 @@ function AddSourceDialog() {
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
+          {/* Examples panel */}
+          <div className="rounded-md border bg-muted/30">
+            <button
+              type="button"
+              onClick={() => setShowExamples((v) => !v)}
+              className="flex w-full items-center justify-between px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground ea-transition"
+            >
+              <span>Examples — click any to pre-fill</span>
+              <span className="text-[10px]">{showExamples ? '▲ hide' : '▼ show'}</span>
+            </button>
+            {showExamples ? (
+              <div className="grid gap-1.5 px-3 pb-3 sm:grid-cols-2">
+                {SOURCE_EXAMPLES.map((ex) => (
+                  <button
+                    key={ex.url} type="button" onClick={() => applyExample(ex)}
+                    className="flex flex-col items-start rounded-md border bg-background px-2.5 py-2 text-left ea-transition hover:border-primary/40 hover:bg-accent/20"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span className="inline-flex items-center rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-primary">
+                        {ex.tag}
+                      </span>
+                      <span className="truncate text-xs font-medium">{ex.label}</span>
+                    </div>
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">{ex.note}</p>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
           <div className="grid gap-1.5">
             <Label htmlFor="js-url">Board / careers URL <span className="text-destructive">*</span></Label>
             <div className="flex gap-2">

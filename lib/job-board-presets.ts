@@ -55,8 +55,8 @@ export const JOB_BOARD_PRESETS: JobBoardPreset[] = [
   {
     id: 'indeed',
     name: 'Indeed',
-    description: 'Aggregator across many sources. Heaviest volume.',
-    template: 'https://www.indeed.com/jobs?q={role}&l={location}',
+    description: 'Aggregator across many sources. Uses public RSS feed — no scraping needed.',
+    template: 'https://www.indeed.com/rss?q={role}&l={location}',
     needs: { role: true, location: true },
     suggestedKeywords: '{role}',
     icon: '🔵',
@@ -290,8 +290,8 @@ export const JOB_BOARD_PRESETS: JobBoardPreset[] = [
   {
     id: 'indeed-in',
     name: 'Indeed India',
-    description: 'Indian variant of Indeed. Volume-heavy, broad role coverage.',
-    template: 'https://in.indeed.com/jobs?q={role}&l={location}',
+    description: 'Indian variant of Indeed. Uses public RSS feed — broad volume, no scraping needed.',
+    template: 'https://in.indeed.com/rss?q={role}&l={location}',
     needs: { role: true, location: true },
     suggestedKeywords: '{role}',
     icon: '🔵',
@@ -380,8 +380,8 @@ export const JOB_BOARD_PRESETS: JobBoardPreset[] = [
   {
     id: 'remoteok',
     name: 'Remote OK',
-    description: 'Remote-only listings, tag-driven.',
-    template: 'https://remoteok.com/remote-{role}-jobs',
+    description: 'Remote-only listings. Uses their public JSON API — structured and fast.',
+    template: 'https://remoteok.com/api?tags={role}',
     needs: { role: true, location: false },
     suggestedKeywords: '{role}, remote',
     icon: '🌐',
@@ -506,8 +506,9 @@ export function buildPresetUrl(
     // Shine, Remote OK, We Work Remotely) need spaces converted to
     // hyphens before URL-encoding. Param-style boards (?search=…&loc=…)
     // get plain URL-encoded spaces, which all major boards accept.
-    const HYPHEN_ROLE = new Set(['naukri', 'shine', 'remoteok', 'weworkremotely'])
-    const HYPHEN_LOC  = new Set(['naukri', 'shine'])
+    // remoteok now uses ?tags= param so no longer needs hyphen-encoding.
+    const HYPHEN_ROLE = new Set(['naukri', 'naukrigulf', 'shine', 'weworkremotely'])
+    const HYPHEN_LOC  = new Set(['naukri', 'naukrigulf', 'shine'])
     url = url
       .replace('{role}', encodeURIComponent(cleanRole.replace(/\s+/g, HYPHEN_ROLE.has(preset.id) ? '-' : ' ')))
       .replace('{location}', encodeURIComponent(cleanLoc.replace(/\s+/g, HYPHEN_LOC.has(preset.id) ? '-' : ' ')))
