@@ -1,4 +1,5 @@
 'use client'
+import DOMPurify from 'dompurify'
 import { useState, useTransition } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
@@ -31,6 +32,13 @@ import { SendConfirmDialog } from './send-confirm-dialog'
 import { SpamCheckChip } from '@/components/spam-check-chip'
 
 const PAGE_SIZE_OPTIONS = [50, 100, 500, 1000]
+
+// DOMPurify requires window/document, so we guard for SSR.
+// suppressHydrationWarning on the render site handles the client/server mismatch.
+function purify(html: string): string {
+  if (typeof window === 'undefined') return html
+  return DOMPurify.sanitize(html)
+}
 
 interface DraftsClientProps {
   rows: DraftRow[]
@@ -287,8 +295,9 @@ export function DraftsClient({
                       </summary>
                       <div className="mt-2 max-h-64 overflow-auto rounded-md border bg-muted/40 p-3 text-xs">
                         <div className="prose prose-sm dark:prose-invert max-w-none"
+                          suppressHydrationWarning
                           // eslint-disable-next-line react/no-danger
-                          dangerouslySetInnerHTML={{ __html: d.htmlBody }} />
+                          dangerouslySetInnerHTML={{ __html: purify(d.htmlBody) }} />
                       </div>
                     </details>
                   )}
