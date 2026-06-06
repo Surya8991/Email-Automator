@@ -46,10 +46,10 @@ export default async function JobsPage() {
   }
   const [sources, leadsNew, leadsSaved, leadsApplied, leadsIgnored, leadCounts] = await Promise.all([
     trackSchema(listSources(u.id),          [] as JobSource[], 'listSources'),
-    trackSchema(listLeads(u.id, 'new',     2000), [] as JobLead[], 'listLeads(new)'),
-    trackSchema(listLeads(u.id, 'saved',   2000), [] as JobLead[], 'listLeads(saved)'),
-    trackSchema(listLeads(u.id, 'applied', 2000), [] as JobLead[], 'listLeads(applied)'),
-    trackSchema(listLeads(u.id, 'ignored', 2000), [] as JobLead[], 'listLeads(ignored)'),
+    trackSchema(listLeads(u.id, 'new',     5000), [] as JobLead[], 'listLeads(new)'),
+    trackSchema(listLeads(u.id, 'saved',   5000), [] as JobLead[], 'listLeads(saved)'),
+    trackSchema(listLeads(u.id, 'applied', 5000), [] as JobLead[], 'listLeads(applied)'),
+    trackSchema(listLeads(u.id, 'ignored', 5000), [] as JobLead[], 'listLeads(ignored)'),
     trackSchema(leadCountsBySource(u.id),   new Map<number, number>(), 'leadCountsBySource'),
   ])
   const activeSources = sources.filter((s) => s.active).length
