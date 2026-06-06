@@ -320,6 +320,61 @@ export const JOB_BOARD_PRESETS: JobBoardPreset[] = [
     category: 'india',
     bestFor: 'IN salary visibility',
   },
+  {
+    id: 'internshala',
+    name: 'Internshala Jobs',
+    description: 'India\'s biggest campus-to-mid-level platform. Strong digital marketing and tech roles.',
+    template: 'https://internshala.com/jobs/{role}-jobs/',
+    needs: { role: true, location: false },
+    suggestedKeywords: '{role}',
+    icon: '🎒',
+    category: 'india',
+    bestFor: 'Campus / fresher IN',
+  },
+  {
+    id: 'workindia',
+    name: 'WorkIndia',
+    description: 'Mobile-first, high-volume India board. Strong in entry-mid digital and field roles.',
+    template: 'https://www.workindia.in/search/job?title={role}&city={location}',
+    needs: { role: true, location: true },
+    suggestedKeywords: '{role}',
+    icon: '📲',
+    category: 'india',
+    bestFor: 'Entry / field IN',
+  },
+  {
+    id: 'linkedin-in',
+    name: 'LinkedIn — India',
+    description: 'LinkedIn Jobs scoped to India. Best for mid-senior corporate and startup roles.',
+    template: 'https://www.linkedin.com/jobs/search/?keywords={role}&location=India&geoId=102713980',
+    needs: { role: true, location: false },
+    suggestedKeywords: '{role}',
+    icon: '🟦',
+    category: 'india',
+    bestFor: 'Mid-senior IN corporate',
+  },
+  {
+    id: 'freshteam',
+    name: 'Freshteam / Freshworks ATS',
+    description: 'Freshworks\' ATS used by thousands of Indian companies. Broad across tech and ops.',
+    template: 'https://recruitcrm.io/apply/{role}',
+    needs: { role: false, location: false },
+    suggestedKeywords: '',
+    icon: '🟩',
+    category: 'india',
+    bestFor: 'Freshworks-hosted companies',
+  },
+  {
+    id: 'naukrigulf',
+    name: 'Naukri Gulf',
+    description: 'Naukri\'s Middle-East platform. Good for GCC/Gulf roles for Indian professionals.',
+    template: 'https://www.naukrigulf.com/{role}-jobs-in-{location}',
+    needs: { role: true, location: true },
+    suggestedKeywords: '{role}',
+    icon: '🌙',
+    category: 'india',
+    bestFor: 'GCC / Gulf roles',
+  },
 
   // ── Remote-first ───────────────────────────────────────────────
   {
@@ -423,7 +478,7 @@ export const PRESET_CATEGORIES: Array<{ id: PresetCategory; label: string; blurb
   // India sits first — most of our active users are India-based, so
   // surface the IN boards by default. The `featured` flag drives the
   // visual "primary" treatment in the picker.
-  { id: 'india',      label: '🇮🇳 India',                    blurb: 'India-focused job boards. Broad coverage across Naukri, Foundit, Shine, TimesJobs, plus tech (Hirist, Instahyre), startups (Cutshort), MBA (iimjobs), mobile-first (Apna), and Indeed/Glassdoor IN.', featured: true },
+  { id: 'india',      label: '🇮🇳 India',                    blurb: 'India-focused job boards: Naukri, Foundit, Shine, TimesJobs, Hirist, Cutshort, Instahyre, iimjobs, Indeed IN, Apna, Glassdoor IN, Internshala, WorkIndia, LinkedIn India, Naukri Gulf.', featured: true },
   { id: 'marketing',  label: 'Marketing, SEO, Paid Media',   blurb: 'Domain-specific boards for SEO, digital, performance, and paid-media roles.' },
   { id: 'aggregator', label: 'General aggregators',          blurb: 'Cross-industry boards with broad coverage and search filters.' },
   { id: 'remote',     label: 'Remote-first',                 blurb: 'Boards that screen for fully-remote or flexible roles.' },
@@ -461,6 +516,15 @@ export function buildPresetUrl(
   const keywords = (preset.suggestedKeywords ?? '').replace('{role}', cleanRole)
   return { url, label, keywords }
 }
+
+/**
+ * Convenience list of preset IDs in the India category. Used by the
+ * "Add all India boards" bulk-add flow in the preset picker — the
+ * caller maps each id → preset → buildPresetUrl for every role.
+ */
+export const INDIA_PRESET_IDS = JOB_BOARD_PRESETS
+  .filter((p) => p.category === 'india' && p.template !== '{role}')
+  .map((p) => p.id)
 
 /**
  * Split a comma-separated role string into individual roles so a

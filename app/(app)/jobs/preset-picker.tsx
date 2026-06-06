@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog'
-import { JOB_BOARD_PRESETS, PRESET_CATEGORIES, buildPresetUrl, splitRoles, type JobBoardPreset } from '@/lib/job-board-presets'
+import { JOB_BOARD_PRESETS, PRESET_CATEGORIES, INDIA_PRESET_IDS, buildPresetUrl, splitRoles, type JobBoardPreset } from '@/lib/job-board-presets'
 import { addJobSourceAction } from '@/server/actions/job-tracker'
 import { cn } from '@/lib/utils'
 
@@ -26,9 +26,15 @@ export function JobPresetPicker() {
   const [role, setRole] = useState('')
   const [location, setLocation] = useState('')
   const [pending, start] = useTransition()
+  // India bulk-add mode
+  const [indiaMode, setIndiaMode] = useState(false)
+  const [indiaRole, setIndiaRole] = useState('')
+  const [indiaLocation, setIndiaLocation] = useState('Bangalore')
+  const [indiaProgress, setIndiaProgress] = useState<{ done: number; total: number } | null>(null)
 
   function reset() {
     setPicked(null); setRole(''); setLocation('')
+    setIndiaMode(false); setIndiaProgress(null)
   }
 
   function submit() {
@@ -81,6 +87,31 @@ export function JobPresetPicker() {
     })
   }
 
+  // India bulk-add: add all India boards for each role in one go
+  function submitIndia() {
+    const roles = splitRoles(indiaRole)
+    if (roles.length === 0) { toast.error('Enter at least one role'); return }
+    const indiaPresets = JOB_BOARD_PRESETS.filter((p) => INDIA_PRESET_IDS.includes(p.id))
+    const pairs: Array<{ preset: JobBoardPreset; role: string }> = []
+    for (const r of roles) for (const p of indiaPresets) pairs.push({ preset: p, role: r })
+    const total = pairs.length
+    setIndiaProgress({ done: 0, total })
+    start(async () => {
+      let ok = 0; const errors: string[] = []
+      for (const { preset, role: r } of pairs) {
+        const { url, label, keywords } = buildPresetUrl(preset, r, indiaLocation)
+        if (!url || url.length < 8) { errors.push(`${r}/${preset.name}: URL too short`); setIndiaProgress({ done: ++ok, total }); continue }
+        const res = await addJobSourceAction({ label, url, keywords })
+        if ('error' in res && res.error) errors.push(`${r}/${preset.name}: ${res.error}`)
+        else ok++
+        setIndiaProgress({ done: ok, total })
+      }
+      toast.success(`Added ${ok} of ${total} India sources.${errors.length ? ` ${errors.length} errors.` : ''}`)
+      if (errors.length) toast.error(errors.slice(0, 3).join(' · ') + (errors.length > 3 ? ` (+${errors.length - 3} more)` : ''))
+      setOpen(false); reset(); router.refresh()
+    })
+  }
+
   return (
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) reset() }}>
       <DialogTrigger asChild>
@@ -90,13 +121,43 @@ export function JobPresetPicker() {
       </DialogTrigger>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Add from a popular board</DialogTitle>
+          <DialogTitle>{indiaMode ? '🇮🇳 Add all India boards' : 'Add from a popular board'}</DialogTitle>
           <DialogDescription>
-            Pick a job board, fill in the role and location, and we&apos;ll generate the URL. The SSRF-defended fetcher still validates whatever URL we end up with.
+            {indiaMode
+              ? `Enter your roles and location — we'll create one source for each of the ${INDIA_PRESET_IDS.length} India boards per role.`
+              : "Pick a job board, fill in the role and location, and we'll generate the URL."}
           </DialogDescription>
         </DialogHeader>
 
-        {!picked ? (
+        {/* India bulk-add mode */}
+        {indiaMode ? (
+          <div className="space-y-3">
+            <div className="grid gap-1.5">
+              <Label htmlFor="india-roles">Roles <span className="text-destructive">*</span></Label>
+              <Input id="india-roles" value={indiaRole} onChange={(e) => setIndiaRole(e.target.value)}
+                placeholder="SEO, Performance Marketing, Paid Media" autoFocus />
+              <p className="text-[11px] text-muted-foreground">
+                Comma-separated. {splitRoles(indiaRole).length > 0 ? (
+                  <span className="font-medium text-foreground">
+                    {splitRoles(indiaRole).length} role{splitRoles(indiaRole).length > 1 ? 's' : ''} × {INDIA_PRESET_IDS.length} boards = {splitRoles(indiaRole).length * INDIA_PRESET_IDS.length} sources
+                  </span>
+                ) : 'We create one source per board per role.'}
+              </p>
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="india-loc">Location</Label>
+              <Input id="india-loc" value={indiaLocation} onChange={(e) => setIndiaLocation(e.target.value)} placeholder="Bangalore" />
+            </div>
+            {indiaProgress ? (
+              <div className="rounded-md border bg-muted/40 p-3 text-sm">
+                Adding sources… {indiaProgress.done} / {indiaProgress.total}
+                <div className="mt-1.5 h-1.5 rounded-full bg-muted overflow-hidden">
+                  <div className="h-full bg-primary transition-all" style={{ width: `${Math.round(indiaProgress.done / indiaProgress.total * 100)}%` }} />
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : !picked ? (
           <div className="space-y-5 max-h-[60vh] overflow-y-auto pr-1">
             {PRESET_CATEGORIES.map((cat) => {
               const inCat = JOB_BOARD_PRESETS.filter((p) => p.category === cat.id)
@@ -114,6 +175,15 @@ export function JobPresetPicker() {
                       </span>
                     ) : null}
                     <span className="text-[11px] text-muted-foreground/70">{inCat.length} {inCat.length === 1 ? 'board' : 'boards'}</span>
+                    {/* Quick-add button for India category */}
+                    {cat.id === 'india' ? (
+                      <button
+                        type="button" onClick={() => setIndiaMode(true)}
+                        className="ml-auto inline-flex items-center gap-1 rounded-full bg-primary/90 px-2.5 py-1 text-[10px] font-semibold text-primary-foreground hover:bg-primary ea-transition"
+                      >
+                        <Zap className="h-2.5 w-2.5" /> Add all {inCat.length} boards at once
+                      </button>
+                    ) : null}
                   </div>
                   <div className="mb-2 text-[11px] text-muted-foreground/80">{cat.blurb}</div>
                   <div className="grid gap-2 sm:grid-cols-2">
@@ -197,8 +267,15 @@ export function JobPresetPicker() {
         )}
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-          {picked ? (
+          <Button variant="outline" onClick={() => { if (indiaMode) { setIndiaMode(false); setIndiaProgress(null) } else setOpen(false) }}>
+            {indiaMode ? 'Back' : 'Cancel'}
+          </Button>
+          {indiaMode ? (
+            <Button onClick={submitIndia} disabled={pending || !indiaRole.trim()}>
+              {pending ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Zap className="mr-1.5 h-4 w-4" />}
+              Add {splitRoles(indiaRole).length > 0 ? `${splitRoles(indiaRole).length * INDIA_PRESET_IDS.length} sources` : 'all India boards'}
+            </Button>
+          ) : picked ? (
             <Button onClick={submit} disabled={pending || !role.trim() || (picked.needs.location && !location.trim())}>
               {pending ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Plus className="mr-1.5 h-4 w-4" />}
               Add source

@@ -324,7 +324,12 @@ export async function tickSource(source: JobSource): Promise<{ added: number; st
     const batchCap = isFirstFetch ? jobs.length : MAX_NEW_PER_TICK
     let added = 0
     for (const j of jobs.slice(0, batchCap)) {
-      if (!keywordsMatch(j.title, j.company ?? '', source.keywords)) continue
+      // Naukri: the API search already filters by keyword from the URL slug
+      // (e.g. "performance-marketing-jobs-in-bangalore"). Applying the
+      // keyword filter again removes valid results whose titles don't
+      // literally contain the search term (e.g. "Digital Marketing Lead"
+      // in a Performance Marketing search). Skip it for Naukri.
+      if (!isNaukri && !keywordsMatch(j.title, j.company ?? '', source.keywords)) continue
       const fp = fingerprintOf(j.title, j.company ?? '')
       try {
         await db.insert(jobLeads).values({
@@ -343,11 +348,16 @@ export async function tickSource(source: JobSource): Promise<{ added: number; st
         // Unique-index violation = already seen this lead. Skip.
       }
     }
-    await db.update(jobSources).set({
-      lastFetchedAt: Date.now(),
-      lastStatus: added > 0 ? `ok-${added}-new` : 'ok-no-new',
+    // Only stamp lastFetchedAt when the source actually returned raw
+    // jobs. If the API/page returned 0 results (likely blocked or
+    // network error), leave lastFetchedAt null so the next tick still
+    // treats this as a first fetch and uses the larger page budget.
+    const updatePayload: Record<string, unknown> = {
+      lastStatus: added > 0 ? `ok-${added}-new` : `ok-no-new(${jobs.length}raw)`,
       lastError: '',
-    }).where(eq(jobSources.id, source.id))
+    }
+    if (jobs.length > 0) updatePayload.lastFetchedAt = Date.now()
+    await db.update(jobSources).set(updatePayload).where(eq(jobSources.id, source.id))
     if (added > 0) {
       await notify(source.userId, 'send.completed', {
         title: `Job tracker: ${added} new ${added === 1 ? 'lead' : 'leads'}`,
