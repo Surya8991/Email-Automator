@@ -15,6 +15,10 @@ async function unauthorized(req: Request): Promise<boolean> {
     // In production, require the secret — failing open lets anyone trigger
     // mass email sends on behalf of all users.
     if (process.env.NODE_ENV === 'production' || process.env.VERCEL) return true
+    // Defense-in-depth: a self-hosted prod that forgot to set NODE_ENV is
+    // still recognisably "prod" if APP_URL points at an https origin. Don't
+    // fail open in that case either.
+    if ((process.env.APP_URL ?? '').toLowerCase().startsWith('https://')) return true
     // Local dev: no secret = open (curl http://localhost:3000/api/cron/tick).
     return false
   }

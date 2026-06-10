@@ -4,6 +4,8 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { Download, Upload, RotateCcw, FileText, X, Copy, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import {
   importContactsAction, resetStatusAction,
   dedupeContactsAction, deleteAllContactsAction, deleteFilteredContactsAction,
@@ -24,6 +26,10 @@ export function ContactsToolbar() {
   // Detailed report from the last import. Shown as a collapsible card so
   // the user can see exactly which rows the parser rejected and why.
   const [report, setReport] = useState<ImportReport | null>(null)
+  // Confirmation dialog for the nuclear "Delete all" action. Requires the
+  // user to type the exact phrase — same gate as before, just accessible.
+  const [confirmDeleteAll, setConfirmDeleteAll] = useState(false)
+  const [confirmPhrase, setConfirmPhrase] = useState('')
 
   // SSE-streamed import progress — surface as a bar under the toolbar
   // once an import is in flight.
@@ -135,19 +141,7 @@ export function ContactsToolbar() {
       <Button variant="ghost" size="sm" disabled={pending}
         className="text-destructive hover:bg-destructive/10 hover:text-destructive"
         title="Delete every contact in your account"
-        onClick={() => {
-          if (!confirm('DELETE EVERY CONTACT in your account? This cannot be undone.')) return
-          const phrase = prompt('Type DELETE ALL to confirm:')
-          if (phrase !== 'DELETE ALL') { setMsg('Cancelled — phrase did not match.'); return }
-          start(async () => {
-            const r = await deleteAllContactsAction()
-            router.refresh()
-            if ('deleted' in r) {
-              toast.success(`Deleted ${r.deleted} contact${r.deleted === 1 ? '' : 's'}.`)
-              setMsg(`Deleted ${r.deleted} contacts.`)
-            }
-          })
-        }}>
+        onClick={() => { setConfirmPhrase(''); setConfirmDeleteAll(true) }}>
         <Trash2 className="mr-1.5 h-4 w-4" /> Delete all
       </Button>
       {msg ? <span className="text-xs text-muted-foreground">{msg}</span> : null}
@@ -194,6 +188,38 @@ export function ContactsToolbar() {
           </ul>
         </details>
       ) : null}
+
+      <Dialog open={confirmDeleteAll} onOpenChange={(o) => { if (!o) { setConfirmDeleteAll(false); setConfirmPhrase('') } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete every contact?</DialogTitle>
+            <DialogDescription>
+              This permanently removes every contact in your account, along with their email history. It cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2">
+            <label htmlFor="delete-phrase" className="text-sm">Type <span className="font-mono font-semibold">DELETE ALL</span> to confirm:</label>
+            <Input id="delete-phrase" value={confirmPhrase} onChange={(e) => setConfirmPhrase(e.target.value)} autoFocus />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => { setConfirmDeleteAll(false); setConfirmPhrase('') }}>Cancel</Button>
+            <Button variant="destructive" disabled={pending || confirmPhrase !== 'DELETE ALL'} onClick={() => {
+              setConfirmDeleteAll(false)
+              const phrase = confirmPhrase
+              setConfirmPhrase('')
+              if (phrase !== 'DELETE ALL') { setMsg('Cancelled — phrase did not match.'); return }
+              start(async () => {
+                const r = await deleteAllContactsAction()
+                router.refresh()
+                if ('deleted' in r) {
+                  toast.success(`Deleted ${r.deleted} contact${r.deleted === 1 ? '' : 's'}.`)
+                  setMsg(`Deleted ${r.deleted} contacts.`)
+                }
+              })
+            }}>Delete all</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

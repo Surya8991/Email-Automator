@@ -69,7 +69,7 @@ export function AuditTable({ rows, adminAll = false }: { rows: Row[]; adminAll?:
         <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)}
           className="h-9 w-auto" title="To date" />
         {fromDate || toDate ? (
-          <button type="button" onClick={() => { setFromDate(''); setToDate('') }}
+          <button type="button" aria-label="Clear date filters" onClick={() => { setFromDate(''); setToDate('') }}
             className="text-xs text-muted-foreground underline hover:text-foreground">
             clear dates
           </button>

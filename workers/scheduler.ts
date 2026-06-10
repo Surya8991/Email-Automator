@@ -19,6 +19,15 @@ async function loop() {
   }
 }
 
+// Surface anything the try/catch in loop() can't reach (module-load errors,
+// promises detached from the loop) so silent crashes are visible in logs.
+process.on('unhandledRejection', (reason) => {
+  log.error({ err: reason }, 'unhandledRejection')
+})
+process.on('uncaughtException', (err) => {
+  log.error({ err }, 'uncaughtException')
+})
+
 log.info({ tickMs: TICK_MS }, 'scheduler started')
-loop()
+void loop()
 setInterval(loop, TICK_MS)

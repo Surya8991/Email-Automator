@@ -1,7 +1,7 @@
 // One-pass scheduler tick. Used by BOTH workers/scheduler.ts (long-running
 // process) and app/api/cron/tick/route.ts (Vercel cron). Keeping a single
 // implementation prevents drift between the two surfaces.
-import { and, eq, sql, lte } from 'drizzle-orm'
+import { and, eq, inArray, sql, lte } from 'drizzle-orm'
 import { db } from '@/server/db/client'
 import {
   emailLog, events, campaignEnrollments, campaignSteps, campaigns, contacts, settings, templates, users,
@@ -12,6 +12,7 @@ import { sendMail } from './mailer'
 import { instrumentHtml } from './tracking'
 import { isBlocked } from './blocklist'
 import { maybePurgeForUser } from './retention'
+import { pickVariantTemplateId } from './variants'
 import { env } from '@/lib/env'
 import { logger } from '@/lib/logger'
 import { formatDate } from '@/lib/utils'
@@ -197,11 +198,35 @@ async function tickForUser(userId: string): Promise<{ sent: number; failed: numb
       .where(and(eq(campaignEnrollments.status, 'active'), lte(campaignEnrollments.nextRunAt, now)))
       .limit(Math.min(BATCH_PER_USER, campaignRemaining))
 
+    // Batch-fetch contacts and steps up front. Per-loop SELECTs (N+1) used to
+    // chew through the Vercel function budget on backlogs of 10+ enrollments;
+    // one IN-query per table keeps the round-trip count constant.
+    const contactIds = Array.from(new Set(enrolled.map((e) => e.contactId).filter((v): v is number => v != null)))
+    const contactRows = contactIds.length
+      ? await db.select().from(contacts).where(inArray(contacts.id, contactIds))
+      : []
+    const contactById = new Map(contactRows.map((c) => [c.id, c]))
+
+    const stepKeys = Array.from(new Set(enrolled.map((e) => `${e.campaignId}:${e.currentStep}`)))
+    const campIds = Array.from(new Set(enrolled.map((e) => e.campaignId)))
+    const orderVals = Array.from(new Set(enrolled.map((e) => e.currentStep)))
+    const stepRows = enrolled.length
+      ? await db.select().from(campaignSteps)
+          .where(and(inArray(campaignSteps.campaignId, campIds), inArray(campaignSteps.order, orderVals)))
+      : []
+    const stepByKey = new Map(stepRows.map((s) => [`${s.campaignId}:${s.order}`, s]))
+    // Drop any step rows whose (campaign, order) pair wasn't actually
+    // requested — the cartesian inArray could return extras for unrelated
+    // (campaign, order) combinations.
+    const requestedKeys = new Set(stepKeys)
+    for (const k of Array.from(stepByKey.keys())) {
+      if (!requestedKeys.has(k)) stepByKey.delete(k)
+    }
+
     for (const enr of enrolled) {
-      const [contact] = await db.select().from(contacts).where(eq(contacts.id, enr.contactId))
+      const contact = enr.contactId != null ? contactById.get(enr.contactId) : undefined
       if (!contact) continue
-      const [step] = await db.select().from(campaignSteps)
-        .where(and(eq(campaignSteps.campaignId, enr.campaignId), eq(campaignSteps.order, enr.currentStep)))
+      const step = stepByKey.get(`${enr.campaignId}:${enr.currentStep}`)
       if (!step) {
         await db.update(campaignEnrollments).set({ status: 'completed' }).where(eq(campaignEnrollments.id, enr.id))
         continue
@@ -216,7 +241,6 @@ async function tickForUser(userId: string): Promise<{ sent: number; failed: numb
       // one for this contact (hash-stable so the same contact always sees
       // the same variant across retries). Falls back to step.templateId
       // when no variants are defined — back-compat for existing campaigns.
-      const { pickVariantTemplateId } = await import('./variants')
       const variantTemplateId = await pickVariantTemplateId(step.id, contact.id)
       const effectiveTemplateId = variantTemplateId ?? step.templateId
       if (!effectiveTemplateId) {

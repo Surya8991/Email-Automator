@@ -1,6 +1,20 @@
 'use client'
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { Pencil, Code, Bold, Italic, List, Link as LinkIcon } from 'lucide-react'
+import DOMPurify from 'dompurify'
+
+// Allow the same shape of HTML the email templates emit (basic formatting,
+// links, lists, images for the open-tracking pixel) but strip <script>,
+// inline event handlers, javascript: URLs, etc.
+const SANITIZE_CONFIG = {
+  ALLOWED_TAGS: ['a','b','br','div','em','i','img','li','ol','p','span','strong','u','ul','h1','h2','h3','h4','blockquote','code','pre','hr'],
+  ALLOWED_ATTR: ['href','title','target','rel','src','alt','width','height','style'],
+  ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
+}
+function sanitizeHtml(dirty: string): string {
+  if (typeof window === 'undefined') return dirty
+  return DOMPurify.sanitize(dirty, SANITIZE_CONFIG)
+}
 
 /**
  * Shared rich-text editor. Edit modes:
@@ -60,7 +74,8 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
       if (mode !== 'rich') return
       const el = richRef.current
       if (!el) return
-      if (el.innerHTML !== value) el.innerHTML = value
+      const safe = sanitizeHtml(value)
+      if (el.innerHTML !== safe) el.innerHTML = safe
     }, [value, mode])
 
     useImperativeHandle(ref, () => ({
@@ -68,7 +83,7 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
       insert(token: string) {
         if (mode === 'rich' && richRef.current) {
           richRef.current.focus()
-          exec('insertHTML', token)
+          exec('insertHTML', sanitizeHtml(token))
           onChange(richRef.current.innerHTML)
         } else if (mode === 'html' && textareaRef.current) {
           const el = textareaRef.current

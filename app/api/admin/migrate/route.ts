@@ -16,18 +16,16 @@
  */
 import path from 'node:path'
 import { requireAdmin } from '@/auth'
-
-let lastRun = 0
-const RATE_MS = 60_000  // 1 per minute
+import { rateLimit } from '@/lib/rate-limit'
 
 export async function POST() {
-  await requireAdmin()
-
-  const now = Date.now()
-  if (now - lastRun < RATE_MS) {
+  const u = await requireAdmin()
+  // Use the shared limiter so multi-instance Vercel deploys actually
+  // enforce 1/min globally (once REDIS_URL is wired). File-scoped state
+  // is per-Lambda and trivially bypassed.
+  if (!rateLimit(`admin-migrate:${u.id}`, 1, 60_000)) {
     return Response.json({ ok: false, error: 'Rate limited — wait 60 s between migration runs' }, { status: 429 })
   }
-  lastRun = now
 
   try {
     const url = process.env.DATABASE_URL ?? './data/tracker.db'

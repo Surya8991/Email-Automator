@@ -408,7 +408,7 @@ function VariantsStrip({
                   {v.label ? <span className="font-semibold">{v.label}:</span> : null}
                   <span>{tname}</span>
                   <span className="text-muted-foreground">· {pctFor(v)}</span>
-                  <button type="button" className="ml-1 text-destructive hover:underline" onClick={() => remove(v.id)} disabled={pending}>×</button>
+                  <button type="button" aria-label={`Remove variant${v.label ? ` ${v.label}` : ''}`} className="ml-1 text-destructive hover:underline" onClick={() => remove(v.id)} disabled={pending}>×</button>
                 </span>
               )
             })}
@@ -417,12 +417,13 @@ function VariantsStrip({
           <span className="text-muted-foreground">none, all enrollments use the step's template</span>
         )}
         <button type="button" className="ml-auto rounded-md border bg-background px-2 py-0.5 hover:bg-muted"
+          aria-expanded={open} aria-controls="variant-add-panel"
           onClick={() => setOpen((o) => !o)}>
           {open ? 'Close' : '+ Add variant'}
         </button>
       </div>
       {open ? (
-        <div className="mt-2 grid items-end gap-2 sm:grid-cols-[1fr_100px_120px_auto]">
+        <div id="variant-add-panel" className="mt-2 grid items-end gap-2 sm:grid-cols-[1fr_100px_120px_auto]">
           <div className="grid gap-1">
             <Label className="text-[10px]">Template</Label>
             <select className="h-8 rounded-md border bg-background px-2 text-xs"

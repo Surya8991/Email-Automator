@@ -339,10 +339,10 @@ export async function pruneOldLeads(): Promise<number> {
   return (result as unknown as { rowsAffected?: number }).rowsAffected ?? 0
 }
 
-export async function tickAll(limit = 40): Promise<{ scanned: number; addedTotal: number; errors: number; pruned: number }> {
+export async function tickAll(limit = 40, concurrency = 4): Promise<{ scanned: number; addedTotal: number; errors: number; pruned: number }> {
   const cutoff = Date.now() - FETCH_INTERVAL_MS
   // Oldest-fetched first (NULL = never-fetched wins) so a noisy tenant
-  // can't starve smaller tenants inside the 40-source cron budget.
+  // can't starve smaller tenants inside the cron source budget.
   const sources = await db.select().from(jobSources)
     .where(and(
       eq(jobSources.active, true),
@@ -350,17 +350,30 @@ export async function tickAll(limit = 40): Promise<{ scanned: number; addedTotal
     ))
     .orderBy(sql`${jobSources.lastFetchedAt} IS NOT NULL, ${jobSources.lastFetchedAt} ASC`)
     .limit(limit)
+
   let addedTotal = 0, errors = 0
-  for (const s of sources) {
-    try {
-      const r = await tickSource(s)
-      addedTotal += r.added
-      if (r.status === 'error') errors++
-    } catch (e) {
-      errors++
-      console.error(`[tickAll] uncaught from source ${s.id}:`, e)
+  // Bounded-concurrency worker pool. Each tickSource is IO-bound (external
+  // HTTP + AI extraction), so running ~4 in parallel cuts wall-clock ~4× and
+  // keeps a 20-source tick well under Vercel's 60s function budget.
+  let cursor = 0
+  async function worker() {
+    while (true) {
+      const i = cursor++
+      if (i >= sources.length) return
+      const s = sources[i]!
+      try {
+        const r = await tickSource(s)
+        addedTotal += r.added
+        if (r.status === 'error') errors++
+      } catch (e) {
+        errors++
+        console.error(`[tickAll] uncaught from source ${s.id}:`, e)
+      }
     }
   }
+  const workers = Array.from({ length: Math.min(concurrency, sources.length) }, () => worker())
+  await Promise.all(workers)
+
   const pruned = await pruneOldLeads().catch(() => 0)
   return { scanned: sources.length, addedTotal, errors, pruned }
 }
